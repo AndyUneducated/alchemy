@@ -1,0 +1,33 @@
+---
+description: Workshops sandbox layout, vibe workflow, and agent defaults
+alwaysApply: true
+---
+
+# Workshops (vibe coding)
+
+## Repo layout
+
+| Path | Use |
+|------|-----|
+| `play/` | Default for new spikes, scripts, disposable demos |
+| `grow/` | Longer-lived mini-apps promoted from `play/` |
+| `stash/` | Paused WIP |
+| `refs/` | Copied reference snippets, not first-class product code |
+| `_archive/` | Retired experiments |
+
+Unless the user names another path, **create new experiments under `play/`**.
+
+## Editing discipline
+
+- **Minimal diffs**: only what the task needs; no drive-by refactors or unrelated files.
+- **Match locals**: naming, imports, types, formatting, and comment density already in touched files.
+- **Docs**: do not add README or other markdown the user did not ask for.
+- **Secrets**: never commit real credentials; use `.env` locally and `.env.example` when a template helps.
+
+## Verification
+
+If the subproject defines checks (`package.json`, `Makefile`, `pyproject.toml`, etc.), run the appropriate lint/test/build after non-trivial edits. If nothing exists, skip.
+
+## Language
+
+Use the same natural language as the user for that turn (中文 ↔ English).
