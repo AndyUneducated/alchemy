@@ -6,7 +6,7 @@ Calls the REST API directly via urllib (no ollama SDK),
 exposing BASE_URL for easy debugging and learning.
 """
 BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.1:8b"
+DEFAULT_MODEL = "qwen2.5:32b"
 
 # OpenAI
 """
