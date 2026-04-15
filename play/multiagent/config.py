@@ -1,4 +1,4 @@
-BACKEND = "ollama"  # "ollama" | "openai" | "anthropic"
+BACKEND = "ollama"  # "ollama" | "openai" | "anthropic" | "gemini"
 
 # Ollama
 """
@@ -6,7 +6,7 @@ Calls the REST API directly via urllib (no ollama SDK),
 exposing BASE_URL for easy debugging and learning.
 """
 BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "mistral:latest"
+DEFAULT_MODEL = "llama3.1:8b"
 
 # OpenAI
 """
@@ -25,10 +25,20 @@ always targets the official Anthropic API, so only key and model are needed.
 ANTHROPIC_API_KEY = ""
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 
+# Gemini
+"""
+Uses the google-genai SDK (official recommended client);
+only key and model are needed.
+"""
+GEMINI_API_KEY = ""
+GEMINI_MODEL = "gemini-2.5-flash"
+
 if BACKEND == "openai":
     DEFAULT_MODEL = OPENAI_MODEL
 elif BACKEND == "anthropic":
     DEFAULT_MODEL = ANTHROPIC_MODEL
+elif BACKEND == "gemini":
+    DEFAULT_MODEL = GEMINI_MODEL
 
 TEMPERATURE = 0.7
 MAX_TOKENS = 512

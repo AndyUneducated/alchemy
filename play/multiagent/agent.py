@@ -8,6 +8,8 @@ if BACKEND == "anthropic":
     import anthropic_client as _client
 elif BACKEND == "openai":
     import openai_client as _client
+elif BACKEND == "gemini":
+    import gemini_client as _client
 else:
     import ollama_client as _client
 
