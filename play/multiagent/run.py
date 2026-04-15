@@ -69,8 +69,11 @@ PHASE_FIELD_MSG = "Error in phase #{idx}: missing required field '{field}'. " \
 PHASE_STAGE_MSG = "Error in phase #{idx}: stage='{val}' is invalid. " \
                   "Must be one of: opening, main, closing."
 
+PHASE_WHO_MSG = "Error in phase #{idx}: who='{val}' is not a valid target. " \
+                "Must be one of: moderator, members, all, or a participant name."
 
-def _validate_phases(phases: list[dict]) -> None:
+
+def _validate_phases(phases: list[dict], agent_names: set[str]) -> None:
     for i, phase in enumerate(phases, 1):
         if "stage" not in phase:
             sys.exit(PHASE_FIELD_MSG.format(idx=i, field="stage"))
@@ -78,6 +81,8 @@ def _validate_phases(phases: list[dict]) -> None:
             sys.exit(PHASE_FIELD_MSG.format(idx=i, field="who"))
         if phase["stage"] not in VALID_STAGES:
             sys.exit(PHASE_STAGE_MSG.format(idx=i, val=phase["stage"]))
+        if phase["who"] not in VALID_WHO and phase["who"] not in agent_names:
+            sys.exit(PHASE_WHO_MSG.format(idx=i, val=phase["who"]))
 
 
 # -- main --------------------------------------------------------------------
@@ -96,7 +101,11 @@ def main() -> None:
     phases = meta.get("phases")
     if not phases:
         sys.exit(PHASES_MISSING_MSG)
-    _validate_phases(phases)
+
+    agent_names = {s["name"] for s in meta.get("members", [])}
+    if "moderator" in meta:
+        agent_names.add(meta["moderator"]["name"])
+    _validate_phases(phases, agent_names)
 
     rounds = args.rounds or meta.get("rounds", 3)
     stream = not args.no_stream

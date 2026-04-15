@@ -4,19 +4,21 @@ import json
 import sys
 import urllib.request
 
-from config import BASE_URL
+from config import BASE_URL, MAX_TOKENS, TEMPERATURE
 
 
-def chat(model: str, messages: list[dict], *, temperature: float = 0.7,
-         max_tokens: int = 512, stream: bool = True) -> str:
+def chat(model: str, *, system_prompt: str = "", messages: list[dict],
+         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
+         stream: bool = True) -> str:
     """Send a chat request to Ollama and return the assistant reply.
 
     When *stream* is True the tokens are printed to stdout as they arrive.
     """
+    full = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages
     url = f"{BASE_URL}/api/chat"
     payload = json.dumps({
         "model": model,
-        "messages": messages,
+        "messages": full,
         "stream": stream,
         "options": {
             "temperature": temperature,
@@ -42,8 +44,11 @@ def chat(model: str, messages: list[dict], *, temperature: float = 0.7,
             if data.get("done"):
                 break
 
+    full = "".join(chunks)
     if stream:
         sys.stdout.write("\n")
-        sys.stdout.flush()
+    else:
+        sys.stdout.write(full + "\n")
+    sys.stdout.flush()
 
-    return "".join(chunks)
+    return full

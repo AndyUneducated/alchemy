@@ -4,24 +4,32 @@ import sys
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY
+from config import ANTHROPIC_API_KEY, MAX_TOKENS, TEMPERATURE
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
-def chat(model: str, messages: list[dict], *, temperature: float = 0.7,
-         max_tokens: int = 512, stream: bool = True) -> str:
+def _merge_consecutive(messages: list[dict]) -> list[dict]:
+    """Merge consecutive messages with the same role for API compatibility."""
+    if not messages:
+        return messages
+    merged = [messages[0]]
+    for msg in messages[1:]:
+        if msg["role"] == merged[-1]["role"]:
+            merged[-1] = {**merged[-1], "content": merged[-1]["content"] + "\n\n" + msg["content"]}
+        else:
+            merged.append(msg)
+    return merged
+
+
+def chat(model: str, *, system_prompt: str = "", messages: list[dict],
+         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
+         stream: bool = True) -> str:
     """Send a chat request to Claude and return the assistant reply.
 
     When *stream* is True the tokens are printed to stdout as they arrive.
     """
-    system_prompt = ""
-    filtered: list[dict] = []
-    for m in messages:
-        if m["role"] == "system":
-            system_prompt = m["content"]
-        else:
-            filtered.append({"role": m["role"], "content": m["content"]})
+    filtered = _merge_consecutive(messages)
 
     if not stream:
         response = _client.messages.create(

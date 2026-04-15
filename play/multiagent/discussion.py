@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from agent import Agent
 
 SEPARATOR = "-" * 60
-VALID_STAGES = ("opening", "main", "closing")
 
 
 def _print_speaker(name: str) -> None:
@@ -20,10 +19,7 @@ def _print_speaker(name: str) -> None:
 def _speak(agent: Agent, history: list[dict], *, stream: bool) -> None:
     _print_speaker(agent.name)
     reply = agent.respond(history, stream=stream)
-    history.append({
-        "role": "assistant",
-        "content": f"[{agent.name}]: {reply}",
-    })
+    history.append({"speaker": agent.name, "content": reply})
 
 
 class Discussion:
@@ -43,7 +39,7 @@ class Discussion:
         members: list[Agent],
         topic: str,
         phases: list[dict],
-        rounds: int = 3,
+        rounds: int,
         stream: bool = True,
         moderator: Agent | None = None,
     ) -> None:
@@ -57,7 +53,7 @@ class Discussion:
 
     def run(self) -> list[dict]:
         self._print_header()
-        self.history.append({"role": "user", "content": self.topic})
+        self.history.append({"type": "topic", "content": self.topic})
 
         opening = [p for p in self.phases if p["stage"] == "opening"]
         main = [p for p in self.phases if p["stage"] == "main"]
@@ -80,7 +76,7 @@ class Discussion:
     def _exec_phase(self, phase: dict) -> None:
         instruction = phase.get("instruction")
         if instruction:
-            self.history.append({"role": "user", "content": instruction})
+            self.history.append({"type": "instruction", "content": instruction})
 
         for agent in self._resolve_who(phase["who"]):
             _speak(agent, self.history, stream=self.stream)

@@ -4,20 +4,22 @@ import sys
 
 from openai import OpenAI
 
-from config import OPENAI_API_KEY, OPENAI_BASE_URL
+from config import MAX_TOKENS, OPENAI_API_KEY, OPENAI_BASE_URL, TEMPERATURE
 
 _client = OpenAI(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
 
 
-def chat(model: str, messages: list[dict], *, temperature: float = 0.7,
-         max_tokens: int = 512, stream: bool = True) -> str:
+def chat(model: str, *, system_prompt: str = "", messages: list[dict],
+         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
+         stream: bool = True) -> str:
     """Send a chat request via any OpenAI-compatible endpoint.
 
     When *stream* is True the tokens are printed to stdout as they arrive.
     """
+    full = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages
     response = _client.chat.completions.create(
         model=model,
-        messages=messages,
+        messages=full,
         temperature=temperature,
         max_tokens=max_tokens,
         stream=stream,
