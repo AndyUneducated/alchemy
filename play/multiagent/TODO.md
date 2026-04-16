@@ -1,26 +1,18 @@
 # TODO — multiagent engine
 
-## P0
-
-### instruction 泄露
-
-`discussion.py` `_exec_phase` 将 instruction 追加到共享 history，导致所有后续 agent 都能看到本不属于自己的指令。例如给 moderator 的"点名追问"指令会被 members 读到，污染其行为。
-
-应改为：instruction 只对当前 phase 的目标 agent 可见，不进入全局 history。
-
 ## P1
 
-### 无轮次感知
+### 无阶段 marker
 
-`discussion.py` 的 `Round N` 仅打印到 stdout，未注入 history。agent 不知道自己在第几轮，无法自适应（如"最后一轮该收敛了"）。
+main 阶段每轮开头有 `Round N/M` 的 history marker，但 opening 和 closing 没有阶段标识。agent 只能靠 instruction 推断自己处于哪个阶段，容易混淆上下文。
 
-应在每轮 main 开始时向 history 注入轮次标记。
+应在 opening/closing 开始时向 history 注入 `<phase>opening</phase>` / `<phase>closing</phase>` marker。
 
-### main instruction 不支持按轮次变化
+### 发言超长无感知
 
-phases 是静态定义的，main 阶段 instruction 每轮完全相同。场景作者无法编排"第 1 轮自由讨论 → 第 2 轮聚焦分歧 → 第 3 轮逼迫表态"的递进节奏。
+prompt 中写了字数约束（如"不超过 150 字"），但模型实际输出 200-300 字时引擎完全无感知。`max_tokens` 只是硬截断，不会在超出 prompt 约束时提示。
 
-可考虑支持 `instructions: [...]` 列表按轮次索引，或支持模板变量如 `{round}/{rounds}`。
+应在 agent 发言后统计字符数，超出阈值时 log warning。阈值可从 prompt 中解析或在 scenario YAML 中显式声明。
 
 ## P2
 
