@@ -16,36 +16,34 @@ def _print_speaker(name: str) -> None:
     sys.stdout.flush()
 
 
-def _speak(agent: Agent, history: list[dict], *, stream: bool) -> None:
-    _print_speaker(agent.name)
-    reply = agent.respond(history, stream=stream)
-    history.append({"speaker": agent.name, "content": reply})
-
-
 class Discussion:
-    """Execute a phase-driven multi-agent discussion.
+    """Execute a multi-agent discussion with opening, main, and closing phases.
 
-    The flow is fully defined by the *phases* list.  Each phase dict has:
-      - stage (required): "opening" | "main" | "closing"
-      - who   (required): "moderator" | "members" | "all" | a specific name
-      - instruction (optional): injected as a user message before speaking
+    *opening* and *closing* phases run once.  *main* phases repeat for
+    *rounds* iterations, resolved per-round via the ``round`` field:
 
-    ``opening`` phases run once, ``main`` phases repeat *rounds* times,
-    ``closing`` phases run once.
+      1. Exact match on ``round: <int>``
+      2. Fallback to ``round: "default"``
+      3. Implicit default — all participants speak, no instruction
     """
 
     def __init__(
         self,
         members: list[Agent],
         topic: str,
-        phases: list[dict],
+        *,
+        opening: list[dict] | None = None,
+        main: list[dict] | None = None,
+        closing: list[dict] | None = None,
         rounds: int,
         stream: bool = True,
         moderator: Agent | None = None,
     ) -> None:
         self.members = members
         self.topic = topic
-        self.phases = phases
+        self.opening = opening or []
+        self.main = main or []
+        self.closing = closing or []
         self.rounds = rounds
         self.stream = stream
         self.moderator = moderator
@@ -55,19 +53,21 @@ class Discussion:
         self._print_header()
         self.history.append({"type": "topic", "content": self.topic})
 
-        opening = [p for p in self.phases if p["stage"] == "opening"]
-        main = [p for p in self.phases if p["stage"] == "main"]
-        closing = [p for p in self.phases if p["stage"] == "closing"]
-
-        for phase in opening:
+        for phase in self.opening:
             self._exec_phase(phase)
 
         for round_num in range(1, self.rounds + 1):
             print(f"\n{SEPARATOR}\n  Round {round_num}\n{SEPARATOR}")
-            for phase in main:
+            self.history.append({"type": "round", "content": f"Round {round_num}/{self.rounds}"})
+            phases = [p for p in self.main if p["round"] == round_num]
+            if not phases:
+                phases = [p for p in self.main if p["round"] == "default"]
+            if not phases:
+                phases = [{"who": "all", "round": "default"}]
+            for phase in phases:
                 self._exec_phase(phase)
 
-        for phase in closing:
+        for phase in self.closing:
             self._exec_phase(phase)
 
         print(f"\n{'=' * 60}\n  End\n{'=' * 60}\n")
@@ -75,11 +75,10 @@ class Discussion:
 
     def _exec_phase(self, phase: dict) -> None:
         instruction = phase.get("instruction")
-        if instruction:
-            self.history.append({"type": "instruction", "content": instruction})
-
         for agent in self._resolve_who(phase["who"]):
-            _speak(agent, self.history, stream=self.stream)
+            _print_speaker(agent.name)
+            reply = agent.respond(self.history, instruction=instruction, stream=self.stream)
+            self.history.append({"speaker": agent.name, "content": reply})
 
     def _resolve_who(self, who: str) -> list[Agent]:
         if who == "members":

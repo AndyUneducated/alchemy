@@ -49,40 +49,54 @@ def _build_agent(spec: dict) -> Agent:
 
 # -- validation --------------------------------------------------------------
 
-VALID_STAGES = {"opening", "main", "closing"}
 VALID_WHO = {"moderator", "members", "all"}
 
-PHASES_MISSING_MSG = """\
-Error: 'phases' is required in the scenario file.
+MAIN_ROUND_MISSING_MSG = (
+    "Error in main phase #{idx}: missing required field 'round'. "
+    "Must be a positive integer or \"default\"."
+)
 
-Each phase needs 'stage' and 'who'. Minimal example:
+MAIN_ROUND_INVALID_MSG = (
+    "Error in main phase #{idx}: round='{val}' is invalid. "
+    "Must be a positive integer or \"default\"."
+)
 
-  phases:
-    - stage: main
-      who: members
+PHASE_WHO_MSG = (
+    "Error in {section} phase #{idx}: who='{val}' is not a valid target. "
+    "Must be one of: moderator, members, all, or a participant name."
+)
 
-See scenarios/ for complete examples."""
-
-PHASE_FIELD_MSG = "Error in phase #{idx}: missing required field '{field}'. " \
-                  "Each phase must have 'stage' and 'who'."
-
-PHASE_STAGE_MSG = "Error in phase #{idx}: stage='{val}' is invalid. " \
-                  "Must be one of: opening, main, closing."
-
-PHASE_WHO_MSG = "Error in phase #{idx}: who='{val}' is not a valid target. " \
-                "Must be one of: moderator, members, all, or a participant name."
+OC_ROUND_MSG = (
+    "Error in {section} phase #{idx}: 'round' is not allowed in {section} phases."
+)
 
 
-def _validate_phases(phases: list[dict], agent_names: set[str]) -> None:
+def _validate_who(who: str, agent_names: set[str], section: str, idx: int) -> None:
+    if who not in VALID_WHO and who not in agent_names:
+        sys.exit(PHASE_WHO_MSG.format(section=section, idx=idx, val=who))
+
+
+def _validate_oc_phases(phases: list[dict], agent_names: set[str], section: str) -> None:
+    """Validate opening or closing phases."""
     for i, phase in enumerate(phases, 1):
-        if "stage" not in phase:
-            sys.exit(PHASE_FIELD_MSG.format(idx=i, field="stage"))
         if "who" not in phase:
-            sys.exit(PHASE_FIELD_MSG.format(idx=i, field="who"))
-        if phase["stage"] not in VALID_STAGES:
-            sys.exit(PHASE_STAGE_MSG.format(idx=i, val=phase["stage"]))
-        if phase["who"] not in VALID_WHO and phase["who"] not in agent_names:
-            sys.exit(PHASE_WHO_MSG.format(idx=i, val=phase["who"]))
+            sys.exit(f"Error in {section} phase #{i}: missing required field 'who'.")
+        _validate_who(phase["who"], agent_names, section, i)
+        if "round" in phase:
+            sys.exit(OC_ROUND_MSG.format(section=section, idx=i))
+
+
+def _validate_main_phases(phases: list[dict], agent_names: set[str]) -> None:
+    """Validate main phases — ``round`` is required."""
+    for i, phase in enumerate(phases, 1):
+        if "who" not in phase:
+            sys.exit(f"Error in main phase #{i}: missing required field 'who'.")
+        _validate_who(phase["who"], agent_names, "main", i)
+        if "round" not in phase:
+            sys.exit(MAIN_ROUND_MISSING_MSG.format(idx=i))
+        r = phase["round"]
+        if r != "default" and not (isinstance(r, int) and r > 0):
+            sys.exit(MAIN_ROUND_INVALID_MSG.format(idx=i, val=r))
 
 
 # -- main --------------------------------------------------------------------
@@ -98,14 +112,17 @@ def main() -> None:
 
     meta, body = load_scenario(args.scenario)
 
-    phases = meta.get("phases")
-    if not phases:
-        sys.exit(PHASES_MISSING_MSG)
-
     agent_names = {s["name"] for s in meta.get("members", [])}
     if "moderator" in meta:
         agent_names.add(meta["moderator"]["name"])
-    _validate_phases(phases, agent_names)
+
+    opening = meta.get("opening", [])
+    main_phases = meta.get("main", [])
+    closing = meta.get("closing", [])
+
+    _validate_oc_phases(opening, agent_names, "opening")
+    _validate_main_phases(main_phases, agent_names)
+    _validate_oc_phases(closing, agent_names, "closing")
 
     rounds = args.rounds or meta.get("rounds", 3)
     stream = not args.no_stream
@@ -115,7 +132,9 @@ def main() -> None:
     Discussion(
         members=members,
         topic=body,
-        phases=phases,
+        opening=opening,
+        main=main_phases,
+        closing=closing,
         rounds=rounds,
         stream=stream,
         moderator=moderator,

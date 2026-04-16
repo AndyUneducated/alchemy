@@ -31,11 +31,19 @@ class Agent:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    def respond(self, history: list[dict], *, stream: bool = True) -> str:
+    def respond(
+        self,
+        history: list[dict],
+        *,
+        instruction: str | None = None,
+        stream: bool = True,
+    ) -> str:
         """Generate a reply given the shared conversation history.
 
         Builds a per-agent view: own past replies become ``assistant``,
         other speakers and system injections become ``user``.
+        An optional *instruction* is appended as the final user message
+        so only this agent sees it (never stored in shared history).
         """
         messages: list[dict] = []
         for entry in history:
@@ -49,6 +57,8 @@ class Agent:
             else:
                 content = f'<message from="{speaker}">\n{entry["content"]}\n</message>'
                 messages.append({"role": "user", "content": content})
+        if instruction:
+            messages.append({"role": "user", "content": f"<instruction>\n{instruction}\n</instruction>"})
         return _client.chat(
             model=self.model,
             system_prompt=self.system_prompt,
