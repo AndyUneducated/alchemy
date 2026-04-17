@@ -14,7 +14,7 @@ import fitz  # pymupdf
 import chromadb
 from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
 
-from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, OLLAMA_URL
+from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, OLLAMA_BASE_URL
 
 from chunker import split_text
 
@@ -70,7 +70,7 @@ def ingest(
 
     print(f"Found {len(docs)} document(s)")
 
-    ef = OllamaEmbeddingFunction(url=OLLAMA_URL, model_name=model)
+    ef = OllamaEmbeddingFunction(url=OLLAMA_BASE_URL, model_name=model)
 
     client = chromadb.PersistentClient(path=output_dir)
     col_name = collection_name or os.path.basename(os.path.normpath(output_dir))

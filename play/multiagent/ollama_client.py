@@ -7,7 +7,7 @@ import sys
 import urllib.request
 from typing import Callable
 
-from config import BASE_URL, MAX_TOKENS, TEMPERATURE
+from config import OLLAMA_BASE_URL, MAX_TOKENS, TEMPERATURE
 
 MAX_TOOL_ROUNDS = 5
 
@@ -29,7 +29,7 @@ def _call(model: str, messages: list[dict], *, temperature: float,
 
     payload = json.dumps(body).encode()
     req = urllib.request.Request(
-        f"{BASE_URL}/api/chat", data=payload,
+        f"{OLLAMA_BASE_URL}/api/chat", data=payload,
         headers={"Content-Type": "application/json"},
     )
 

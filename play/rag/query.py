@@ -12,7 +12,7 @@ from typing import TypedDict
 import chromadb
 from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
 
-from config import EMBED_MODEL, OLLAMA_URL
+from config import EMBED_MODEL, OLLAMA_BASE_URL
 
 
 class SearchResult(TypedDict):
@@ -47,7 +47,7 @@ def search(
     else:
         effective_model = model or EMBED_MODEL
 
-    ef = OllamaEmbeddingFunction(url=OLLAMA_URL, model_name=effective_model)
+    ef = OllamaEmbeddingFunction(url=OLLAMA_BASE_URL, model_name=effective_model)
 
     client = chromadb.PersistentClient(path=vdb_dir)
     collections = client.list_collections()

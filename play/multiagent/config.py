@@ -3,9 +3,9 @@ BACKEND = "ollama"  # "ollama" | "openai" | "anthropic" | "gemini"
 # Ollama
 """
 Calls the REST API directly via urllib (no ollama SDK),
-exposing BASE_URL for easy debugging and learning.
+exposing OLLAMA_BASE_URL for easy debugging and learning.
 """
-BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "qwen2.5:32b"
 
 # OpenAI
