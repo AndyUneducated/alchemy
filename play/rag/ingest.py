@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI tool: read plain-text documents, chunk, embed via Ollama, persist to ChromaDB."""
+"""CLI tool: read documents (txt/md/pdf), chunk, embed via Ollama, persist to ChromaDB."""
 
 from __future__ import annotations
 
@@ -9,18 +9,26 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import fitz  # pymupdf
+
 import chromadb
+from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
 
-from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_BACKEND, EMBED_MODEL
-
-if EMBED_BACKEND == "ollama":
-    from ollama_embedding import OllamaEmbeddingFunction as EmbeddingFunction
-else:
-    sys.exit(f"Unknown EMBED_BACKEND: {EMBED_BACKEND}")
+from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, OLLAMA_URL
 
 from chunker import split_text
 
-SUPPORTED_EXTENSIONS = {".txt", ".md"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
+
+
+def _read_file(path: str) -> str:
+    """Extract text from a file; dispatches on extension."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".pdf":
+        doc = fitz.open(path)
+        return "\n\n".join(page.get_text() for page in doc)
+    with open(path, encoding="utf-8") as f:
+        return f.read()
 
 
 def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
@@ -30,8 +38,7 @@ def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
         if os.path.isfile(path):
             if os.path.splitext(path)[1].lower() not in SUPPORTED_EXTENSIONS:
                 continue
-            with open(path, encoding="utf-8") as f:
-                text = f.read().strip()
+            text = _read_file(path).strip()
             if text:
                 docs.append((os.path.basename(path), text))
         elif os.path.isdir(path):
@@ -40,8 +47,7 @@ def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
                     if os.path.splitext(fname)[1].lower() not in SUPPORTED_EXTENSIONS:
                         continue
                     fpath = os.path.join(root, fname)
-                    with open(fpath, encoding="utf-8") as f:
-                        text = f.read().strip()
+                    text = _read_file(fpath).strip()
                     if text:
                         rel = os.path.relpath(fpath, path)
                         docs.append((rel, text))
@@ -60,11 +66,11 @@ def ingest(
     """Read docs from *doc_paths*, chunk, embed, and persist a ChromaDB VDB."""
     docs = _collect_docs(doc_paths)
     if not docs:
-        sys.exit(f"No .txt/.md files found in: {', '.join(doc_paths)}")
+        sys.exit(f"No supported files found in: {', '.join(doc_paths)}")
 
     print(f"Found {len(docs)} document(s)")
 
-    ef = EmbeddingFunction(model=model)
+    ef = OllamaEmbeddingFunction(url=OLLAMA_URL, model_name=model)
 
     client = chromadb.PersistentClient(path=output_dir)
     col_name = collection_name or os.path.basename(os.path.normpath(output_dir))
@@ -104,7 +110,7 @@ def ingest(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest documents into a ChromaDB VDB")
     parser.add_argument("--docs", required=True, nargs="+",
-                        help="files or directories of .txt/.md documents")
+                        help="files or directories of .txt/.md/.pdf documents")
     parser.add_argument("--output", required=True, help="output VDB directory")
     parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE)
     parser.add_argument("--overlap", type=int, default=CHUNK_OVERLAP)

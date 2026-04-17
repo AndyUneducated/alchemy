@@ -1,8 +1,5 @@
-EMBED_BACKEND = "ollama"  # "ollama" (more backends can be added)
-
-# Ollama
-BASE_URL = "http://localhost:11434"
-EMBED_MODEL = "nomic-embed-text"
+EMBED_MODEL = "qwen3-embedding:8b"
+OLLAMA_URL = "http://localhost:11434"
 
 # Chunking
 CHUNK_SIZE = 512

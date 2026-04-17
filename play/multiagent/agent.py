@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from config import BACKEND, DEFAULT_MODEL, MAX_TOKENS, TEMPERATURE
 
 if BACKEND == "anthropic":
@@ -24,12 +26,16 @@ class Agent:
         model: str = DEFAULT_MODEL,
         temperature: float = TEMPERATURE,
         max_tokens: int = MAX_TOKENS,
+        tools: list[dict] | None = None,
+        tool_handler: Callable[[str, dict], str] | None = None,
     ) -> None:
         self.name = name
         self.system_prompt = system_prompt
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.tools = tools
+        self.tool_handler = tool_handler
 
     def respond(
         self,
@@ -66,4 +72,6 @@ class Agent:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             stream=stream,
+            tools=self.tools,
+            tool_handler=self.tool_handler,
         )
