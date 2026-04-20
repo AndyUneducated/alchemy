@@ -53,8 +53,10 @@ class Discussion:
         self._print_header()
         self.history.append({"type": "topic", "content": self.topic})
 
-        for phase in self.opening:
-            self._exec_phase(phase)
+        if self.opening:
+            self.history.append({"type": "phase", "content": "opening"})
+            for phase in self.opening:
+                self._exec_phase(phase)
 
         for round_num in range(1, self.rounds + 1):
             print(f"\n{SEPARATOR}\n  Round {round_num}\n{SEPARATOR}")
@@ -67,8 +69,10 @@ class Discussion:
             for phase in phases:
                 self._exec_phase(phase)
 
-        for phase in self.closing:
-            self._exec_phase(phase)
+        if self.closing:
+            self.history.append({"type": "phase", "content": "closing"})
+            for phase in self.closing:
+                self._exec_phase(phase)
 
         print(f"\n{'=' * 60}\n  End\n{'=' * 60}\n")
         return self.history
