@@ -93,16 +93,28 @@ class SummaryMemory(ConversationMemory):
     Trigger rule: summarizer fires when the count of unsummarized stale speech
     entries reaches ``max_recent``. Between triggers, stale entries are shown
     verbatim (no info loss).
+
+    The LLM used for summarization is injected at construction time (``client``
+    + ``summary_model`` / ``summary_max_tokens`` / ``summary_temperature``), so
+    this module has no compile-time dependency on any specific backend.
     """
 
     def __init__(
         self,
         max_recent: int,
         *,
+        client,
+        summary_model: str,
+        summary_max_tokens: int,
+        summary_temperature: float,
         summarizer_prompt: str = DEFAULT_SUMMARIZER_PROMPT,
         summarize_instruction: str = DEFAULT_SUMMARIZE_INSTRUCTION,
     ) -> None:
         self.max_recent = max_recent
+        self._client = client  # any module/object exposing a .chat(...) compatible with agent._client
+        self._summary_model = summary_model
+        self._summary_max_tokens = summary_max_tokens
+        self._summary_temperature = summary_temperature
         self._summarizer_prompt = summarizer_prompt
         self._summarize_instruction = summarize_instruction
         self._summary_text: str = ""
@@ -136,11 +148,6 @@ class SummaryMemory(ConversationMemory):
         return _render(result, owner)
 
     def _run_summarizer(self, prefix_entries: list[dict]) -> str:
-        # Lazy imports: agent.py chooses the backend client at import time;
-        # config constants are read fresh so tests can monkeypatch them.
-        from agent import _client
-        from config import SUMMARY_MODEL, SUMMARY_MAX_TOKENS, SUMMARY_TEMPERATURE
-
         messages = _render(prefix_entries, owner="_summarizer")
         if self._summary_text:
             messages.insert(
@@ -156,12 +163,12 @@ class SummaryMemory(ConversationMemory):
                 "content": f"<instruction>\n{self._summarize_instruction}\n</instruction>",
             }
         )
-        return _client.chat(
-            model=SUMMARY_MODEL,
+        return self._client.chat(
+            model=self._summary_model,
             system_prompt=self._summarizer_prompt,
             messages=messages,
-            temperature=SUMMARY_TEMPERATURE,
-            max_tokens=SUMMARY_MAX_TOKENS,
+            temperature=self._summary_temperature,
+            max_tokens=self._summary_max_tokens,
             stream=False,
             tools=None,
         )

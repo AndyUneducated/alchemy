@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import sys
 
 import yaml
 
-from agent import Agent
+from agent import Agent, _client as _backend_client
+from config import SUMMARY_MAX_TOKENS, SUMMARY_MODEL, SUMMARY_TEMPERATURE
 from discussion import Discussion
 from memory import ConversationMemory, FullHistory, SummaryMemory, WindowMemory
 from tools import TOOL_DEFINITIONS, dispatch
@@ -35,12 +37,30 @@ def load_scenario(path: str) -> tuple[dict, str]:
 
 # -- build Agent instances from parsed frontmatter --------------------------
 
-def _build_tool_handler(tool_configs: list[dict]) -> callable:
-    """Create a dispatch wrapper that injects scenario-level defaults (e.g. vdb_dir)."""
+def _build_tool_handler(tool_configs: list[dict], scenario_dir: str) -> callable:
+    """Create a dispatch wrapper that injects scenario-level defaults (e.g. vdb_dir).
+
+    For each tool, any default whose key is listed in the tool's ``_path_params``
+    and whose value is a relative path is resolved against *scenario_dir*,
+    so scenarios become location-independent (any cwd, any invoker path).
+    """
+    path_params_by_tool: dict[str, set[str]] = {
+        td["function"]["name"]: set(td.get("_path_params") or ())
+        for td in TOOL_DEFINITIONS
+    }
+
     defaults: dict[str, dict] = {}
     for tc in tool_configs:
         name = tc["name"]
-        defaults[name] = {k: v for k, v in tc.items() if k != "name"}
+        path_keys = path_params_by_tool.get(name, set())
+        resolved: dict = {}
+        for k, v in tc.items():
+            if k == "name":
+                continue
+            if k in path_keys and isinstance(v, str) and not os.path.isabs(v):
+                v = os.path.abspath(os.path.join(scenario_dir, v))
+            resolved[k] = v
+        defaults[name] = resolved
 
     def handler(name: str, arguments: dict) -> str:
         merged = {**defaults.get(name, {}), **arguments}
@@ -65,15 +85,16 @@ def _resolve_tool_defs(tool_configs: list[dict]) -> list[dict]:
         if name not in defaults_by_name:
             continue
         hidden = defaults_by_name[name]
-        if not hidden:
-            defs.append(td)
-            continue
         td = copy.deepcopy(td)
-        params = td["function"]["parameters"]
-        for key in hidden:
-            params.get("properties", {}).pop(key, None)
-        if "required" in params:
-            params["required"] = [r for r in params["required"] if r not in hidden]
+        # Drop internal hints that are not part of the OpenAI tool schema and
+        # would break JSON serialization (e.g. ``_path_params`` is a set).
+        td.pop("_path_params", None)
+        if hidden:
+            params = td["function"]["parameters"]
+            for key in hidden:
+                params.get("properties", {}).pop(key, None)
+            if "required" in params:
+                params["required"] = [r for r in params["required"] if r not in hidden]
         defs.append(td)
     return defs
 
@@ -88,7 +109,13 @@ def _build_memory(cfg: dict | None) -> ConversationMemory:
     if t == "window":
         return WindowMemory(max_recent=int(cfg["max_recent"]))
     if t == "summary":
-        kwargs: dict = {"max_recent": int(cfg["max_recent"])}
+        kwargs: dict = {
+            "max_recent": int(cfg["max_recent"]),
+            "client": _backend_client,
+            "summary_model": cfg.get("model", SUMMARY_MODEL),
+            "summary_max_tokens": int(cfg.get("max_tokens", SUMMARY_MAX_TOKENS)),
+            "summary_temperature": float(cfg.get("temperature", SUMMARY_TEMPERATURE)),
+        }
         if "summarizer_prompt" in cfg:
             kwargs["summarizer_prompt"] = cfg["summarizer_prompt"]
         if "summarize_instruction" in cfg:
@@ -207,6 +234,7 @@ def main() -> None:
     args = parser.parse_args()
 
     meta, body = load_scenario(args.scenario)
+    scenario_dir = os.path.dirname(os.path.abspath(args.scenario))
 
     agent_names = {s["name"] for s in meta.get("members", [])}
     if "moderator" in meta:
@@ -234,7 +262,7 @@ def main() -> None:
 
     tool_configs = meta.get("tools", [])
     tool_defs = _resolve_tool_defs(tool_configs) if tool_configs else None
-    tool_handler = _build_tool_handler(tool_configs) if tool_configs else None
+    tool_handler = _build_tool_handler(tool_configs, scenario_dir) if tool_configs else None
 
     members = [_build_agent(s, tool_defs=tool_defs, tool_handler=tool_handler,
                             scenario_mem_cfg=scenario_mem_cfg)

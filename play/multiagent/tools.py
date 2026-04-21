@@ -36,6 +36,10 @@ TOOL_DEFINITIONS: list[dict] = [
                 "required": ["query", "vdb_dir"],
             },
         },
+        # Non-OpenAI-standard hint read by run.py: parameter names whose
+        # scenario-level default values are filesystem paths, so run.py should
+        # resolve relative paths against the scenario file's directory.
+        "_path_params": {"vdb_dir"},
     },
 ]
 
@@ -43,6 +47,8 @@ TOOL_HANDLERS: dict[str, Callable[..., str]] = {}
 
 
 def _retrieve_docs(query: str, vdb_dir: str, top_k: int = 3) -> str:
+    # Only pipe stdout (we need the JSON). stderr defaults to parent's stderr,
+    # so any subprocess error (traceback, warnings) flows to the terminal for free.
     result = subprocess.run(
         [
             sys.executable, _QUERY_SCRIPT,
@@ -51,11 +57,11 @@ def _retrieve_docs(query: str, vdb_dir: str, top_k: int = 3) -> str:
             "--top-k", str(top_k),
             "--json",
         ],
-        capture_output=True,
+        stdout=subprocess.PIPE,
         text=True,
     )
     if result.returncode != 0:
-        return json.dumps({"error": result.stderr.strip()})
+        return json.dumps({"error": f"retrieve_docs exited with code {result.returncode}"})
     return result.stdout.strip()
 
 
@@ -66,5 +72,18 @@ def dispatch(name: str, arguments: dict) -> str:
     """Look up *name* in the registry and call the handler with *arguments*."""
     handler = TOOL_HANDLERS.get(name)
     if handler is None:
-        return json.dumps({"error": f"Unknown tool: {name}"})
-    return handler(**arguments)
+        result = json.dumps({"error": f"Unknown tool: {name}"})
+    else:
+        result = handler(**arguments)
+    # Catch-all: any handler that returns {"error": ...} JSON gets a one-line
+    # notice on stderr, so silent failures (e.g. RAG returning a canned error
+    # string the model then covers up) are impossible to miss.
+    try:
+        payload = json.loads(result)
+    except (ValueError, TypeError):
+        payload = None
+    if isinstance(payload, dict) and "error" in payload:
+        first_line = str(payload["error"]).splitlines()[0]
+        print(f"WARNING: tool {name} failed: {first_line}",
+              file=sys.stderr, flush=True)
+    return result

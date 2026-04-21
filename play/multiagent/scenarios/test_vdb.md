@@ -3,7 +3,7 @@ rounds: 2
 
 tools:
   - name: retrieve_docs
-    vdb_dir: ../rag/vdb/test_vdb
+    vdb_dir: ../../rag/vdb/test_vdb
 
 members:
   - name: A
