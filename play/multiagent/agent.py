@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Callable
 
 from config import BACKEND, DEFAULT_MODEL, MAX_TOKENS, TEMPERATURE
+from memory import ConversationMemory, FullHistory
 
 if BACKEND == "anthropic":
     import anthropic_client as _client
@@ -28,6 +29,7 @@ class Agent:
         max_tokens: int = MAX_TOKENS,
         tools: list[dict] | None = None,
         tool_handler: Callable[[str, dict], str] | None = None,
+        memory: ConversationMemory | None = None,
     ) -> None:
         self.name = name
         self.system_prompt = system_prompt
@@ -36,6 +38,7 @@ class Agent:
         self.max_tokens = max_tokens
         self.tools = tools
         self.tool_handler = tool_handler
+        self.memory = memory or FullHistory()
 
     def respond(
         self,
@@ -46,23 +49,11 @@ class Agent:
     ) -> str:
         """Generate a reply given the shared conversation history.
 
-        Builds a per-agent view: own past replies become ``assistant``,
-        other speakers and system injections become ``user``.
+        Delegates history->messages projection to ``self.memory``.
         An optional *instruction* is appended as the final user message
         so only this agent sees it (never stored in shared history).
         """
-        messages: list[dict] = []
-        for entry in history:
-            speaker = entry.get("speaker")
-            if speaker is None:
-                tag = entry.get("type", "topic")
-                content = f"<{tag}>\n{entry['content']}\n</{tag}>"
-                messages.append({"role": "user", "content": content})
-            elif speaker == self.name:
-                messages.append({"role": "assistant", "content": entry["content"]})
-            else:
-                content = f'<message from="{speaker}">\n{entry["content"]}\n</message>'
-                messages.append({"role": "user", "content": content})
+        messages = self.memory.build_messages(history, self.name)
         if instruction:
             messages.append({"role": "user", "content": f"<instruction>\n{instruction}\n</instruction>"})
         return _client.chat(

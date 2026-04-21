@@ -1,38 +1,6 @@
 # TODO — multiagent engine
 
-## 维护项
-
-### 固定发言顺序
-
-members 每轮发言顺序与列表定义顺序相同。先发言者信息最少，后发言者拥有上下文优势，造成结构性不公平。
-
-可考虑每轮随机打乱或轮转发言顺序。
-
 ## 演进方向
-
-### Memory 从 discussion 里拆成独立一层
-
-**问题**：`Agent.respond` 每次把整份 `history` 全量展开成 messages，后续 agent 单次耗时随轮数线性增长。实测 panel 场景（4 成员 + 1 主持 × 3 轮）末段单次发言 111s，相比开场 24s 慢 4.5 倍；整场耗时 1398s，是 vdb_test 的 14 倍。根因是所有 agent 共享一条全量 history。
-
-**方向**：抽 `ConversationMemory` 接口，每个 agent 持有自己的实例，负责把共享 transcript 转成该 agent 的 messages。内置策略至少三种：
-
-- `FullHistory`（当前行为，默认，100% 兼容）
-- `WindowMemory(k)` / `TokenBudgetMemory(n)` — 滚动窗口
-- `SummaryMemory` — 每 N 轮由 moderator 或 summarizer agent 折叠旧消息
-
-延伸：per-agent 私密 scratchpad（如 panel 场景里马千里的"内心动摇"不应让对手看到）。
-
-**行业参考**：
-
-- **LangChain / LangGraph** — `ConversationBufferWindowMemory` / `ConversationSummaryBufferMemory` / `VectorStoreRetrieverMemory`；LangGraph 分 `checkpointer`（短期）+ `BaseStore`（长期）两层
-- **AutoGen** — 每个 agent 自带 `model_context`，多 agent 默认 per-agent memory
-- **CrewAI** — 内置 short-term / long-term / entity 三种 memory
-- **Letta（原 MemGPT）** — OS 式分层记忆，agent 通过 function call 自管分页
-- **Mem0 / Zep** — 独立的 memory 服务层
-- **Generative Agents**（Park et al., Stanford 2023，"Smallville" 论文）— 提出 memory stream + `recency + importance + relevance` 检索打分 + 周期性 reflection，被后续多 agent 框架广泛借鉴
-- **MemGPT 论文**（UC Berkeley 2023）— main context vs archival memory 的分层抽象
-
-概念对齐：working / short-term / long-term；episodic / semantic / procedural；private / shared。
 
 ### Artifact + 显式决策
 
@@ -54,3 +22,20 @@ members 每轮发言顺序与列表定义顺序相同。先发言者信息最少
 
 - 补充常用工具：`web_search`（或走 MCP adapter）、`calc` / `python_exec`（数据类讨论）、`search_history`（长会议里查"第 X 轮谁说过什么"）
 - 在 history 里新增一类条目 `{"speaker": name, "type": "tool_call", "content": ...}`，让后续 agent 能看到"谁查了什么、查到了什么"，也便于 transcript 回放
+
+### 固定发言顺序
+
+**问题**：`who: members` / `who: all` 的 phase 按列表顺序发言，先手信息少、后手吃免费上下文红利。但"公平性"不是全局最优解——`brainstorm` 这类协作场景里顺着上一位说下去是自然流，默认打乱反而破坏流程。
+
+**方向**：给 phase 增加 `order` 字段，默认 `list`（当前行为，100% 兼容），`who` 为单人时忽略。候选策略：
+
+- `list` — 当前顺序
+- `rotate` — 第 k 轮从第 `k mod N` 位开始循环；`N` 轮内每人占每个位置恰好一次；**确定性 + 强公平，优先于 `shuffle`**
+- `shuffle` — 每轮随机；需配 `seed` 才能复现
+- `reverse` — 仅 2 轮辩论有意义
+
+moderator 的插入位置仍由 phase 声明顺序决定，`order` 只作用于 members 子集。
+
+**memory 已落地**：后发言者不再有"免费上下文"优势，这条问题的一半根因被自然消掉，剩下的一半再单独解决。
+
+**更野心的替代方向**：dynamic speaker selection——让 moderator 或专门的 selector agent 根据上一轮内容决定下一位发言者（参考 AutoGen `SelectorGroupChat`）。比 rotate/shuffle 更贴近真实 panel 动态，但触及结构化输出 + `who` 语义变化。建议与 artifact / 投票机制一起做，作为 moderator orchestration 能力的一部分。

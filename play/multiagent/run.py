@@ -11,6 +11,7 @@ import yaml
 
 from agent import Agent
 from discussion import Discussion
+from memory import ConversationMemory, FullHistory, SummaryMemory, WindowMemory
 from tools import TOOL_DEFINITIONS, dispatch
 
 
@@ -77,8 +78,28 @@ def _resolve_tool_defs(tool_configs: list[dict]) -> list[dict]:
     return defs
 
 
+def _build_memory(cfg: dict | None) -> ConversationMemory:
+    """Translate a parsed ``memory`` mapping into a ConversationMemory instance."""
+    if not cfg:
+        return FullHistory()
+    t = cfg["type"]
+    if t == "full":
+        return FullHistory()
+    if t == "window":
+        return WindowMemory(max_recent=int(cfg["max_recent"]))
+    if t == "summary":
+        kwargs: dict = {"max_recent": int(cfg["max_recent"])}
+        if "summarizer_prompt" in cfg:
+            kwargs["summarizer_prompt"] = cfg["summarizer_prompt"]
+        if "summarize_instruction" in cfg:
+            kwargs["summarize_instruction"] = cfg["summarize_instruction"]
+        return SummaryMemory(**kwargs)
+    sys.exit(f"Unknown memory type: {t}")
+
+
 def _build_agent(spec: dict, *, tool_defs: list[dict] | None = None,
-                 tool_handler: callable | None = None) -> Agent:
+                 tool_handler: callable | None = None,
+                 scenario_mem_cfg: dict | None = None) -> Agent:
     kwargs: dict = {}
     if "model" in spec:
         kwargs["model"] = spec["model"]
@@ -89,6 +110,8 @@ def _build_agent(spec: dict, *, tool_defs: list[dict] | None = None,
     if tool_defs:
         kwargs["tools"] = tool_defs
         kwargs["tool_handler"] = tool_handler
+    mem_cfg = spec.get("memory", scenario_mem_cfg)
+    kwargs["memory"] = _build_memory(mem_cfg)
     return Agent(
         name=spec["name"],
         system_prompt=spec["prompt"],
@@ -119,6 +142,17 @@ OC_ROUND_MSG = (
     "Error in {section} phase #{idx}: 'round' is not allowed in {section} phases."
 )
 
+VALID_MEMORY_TYPES = {"full", "window", "summary"}
+
+MEMORY_TYPE_MSG = (
+    "Error in memory config ({section}): type='{val}' is invalid. "
+    "Must be one of: full, window, summary."
+)
+
+MEMORY_MAX_RECENT_MSG = (
+    "Error in memory config ({section}): 'max_recent' must be a positive integer, got {val!r}."
+)
+
 
 def _validate_who(who: str, agent_names: set[str], section: str, idx: int) -> None:
     if who not in VALID_WHO and who not in agent_names:
@@ -133,6 +167,19 @@ def _validate_oc_phases(phases: list[dict], agent_names: set[str], section: str)
         _validate_who(phase["who"], agent_names, section, i)
         if "round" in phase:
             sys.exit(OC_ROUND_MSG.format(section=section, idx=i))
+
+
+def _validate_memory(cfg: dict | None, section: str) -> None:
+    """Validate a parsed ``memory`` mapping. ``None`` means unset (fall back to FullHistory)."""
+    if cfg is None:
+        return
+    t = cfg.get("type")
+    if t not in VALID_MEMORY_TYPES:
+        sys.exit(MEMORY_TYPE_MSG.format(section=section, val=t))
+    if t in ("window", "summary"):
+        mr = cfg.get("max_recent")
+        if not (isinstance(mr, int) and mr > 0):
+            sys.exit(MEMORY_MAX_RECENT_MSG.format(section=section, val=mr))
 
 
 def _validate_main_phases(phases: list[dict], agent_names: set[str]) -> None:
@@ -173,6 +220,15 @@ def main() -> None:
     _validate_main_phases(main_phases, agent_names)
     _validate_oc_phases(closing, agent_names, "closing")
 
+    scenario_mem_cfg = meta.get("memory")
+    _validate_memory(scenario_mem_cfg, "scenario")
+    for s in meta.get("members", []):
+        if "memory" in s:
+            _validate_memory(s["memory"], f"member '{s.get('name')}'")
+    if "moderator" in meta and "memory" in meta["moderator"]:
+        _validate_memory(meta["moderator"]["memory"],
+                         f"moderator '{meta['moderator'].get('name')}'")
+
     rounds = args.rounds or meta.get("rounds", 3)
     stream = not args.no_stream
 
@@ -180,9 +236,12 @@ def main() -> None:
     tool_defs = _resolve_tool_defs(tool_configs) if tool_configs else None
     tool_handler = _build_tool_handler(tool_configs) if tool_configs else None
 
-    members = [_build_agent(s, tool_defs=tool_defs, tool_handler=tool_handler)
+    members = [_build_agent(s, tool_defs=tool_defs, tool_handler=tool_handler,
+                            scenario_mem_cfg=scenario_mem_cfg)
                for s in meta.get("members", [])]
-    moderator = (_build_agent(meta["moderator"], tool_defs=tool_defs, tool_handler=tool_handler)
+    moderator = (_build_agent(meta["moderator"], tool_defs=tool_defs,
+                              tool_handler=tool_handler,
+                              scenario_mem_cfg=scenario_mem_cfg)
                  if "moderator" in meta else None)
 
     Discussion(
