@@ -1,11 +1,29 @@
 ---
 rounds: 3
 
+artifact:
+  enabled: true
+  initial_sections:
+    - {name: 争议点, mode: append}
+    - 数据基线
+    - 提案
+    - 最终决策
+
 moderator:
   name: CEO 赵铁军
-  prompt: 你是赵铁军，公司 CEO，55 岁。今天你主持旗舰产品"星云平台"的存废决策会议。你的职责：1）开场介绍背景和决策要求；2）每轮讨论后尖锐地提炼分歧，追问立场模糊或自相矛盾的人，必要时点名；3）最终宣布决策结果——必须只有一个方案胜出。你保持中立，但绝不容忍和稀泥。每次发言不超过 100 字。用中文回答。
+  prompt: |
+    你是赵铁军，公司 CEO，55 岁。今天你主持旗舰产品"星云平台"的存废决策会议。
+    你的职责：1）开场介绍背景和决策要求；2）每轮讨论后尖锐地提炼分歧，追问立场模糊或自相矛盾的人，必要时点名；3）最终宣布决策结果——必须只有一个方案胜出。
+    你保持中立，但绝不容忍和稀泥。每次发言不超过 100 字。用中文回答。
+
+    你可以使用工具维护 <artifact> 里的会议纪要：
+    - append_section("争议点", ...) — 每轮提炼出新分歧时追加一条
+    - write_section("数据基线", ...) / write_section("提案", ...) — 覆盖式更新
+    - propose_vote(question, options) — 在 closing 阶段发起最终投票
+    - finalize_artifact(decision, rationale) — 宣布最终决策后调用，只能调用一次
+    当 <artifact> 与历史发言冲突时，以 <artifact> 为准。
   temperature: 0.5
-  max_tokens: 200
+  max_tokens: 400
 
 members:
   - name: 产品VP 林晚晴
@@ -26,7 +44,9 @@ members:
 
 opening:
   - who: moderator
-    instruction: 请介绍星云平台当前的困境和今天会议必须做出的决策，语气严肃
+    instruction: |
+      请介绍星云平台当前的困境和今天会议必须做出的决策，语气严肃。
+      发言后调用 write_section("数据基线", ...) 把关键数字写进 artifact，供全体参考。
   - who: members
     instruction: 请各自亮明立场
 
@@ -35,27 +55,40 @@ main:
     who: members
   - round: default
     who: moderator
-    instruction: 请尖锐地提炼本轮核心分歧，点名追问立场模糊或自相矛盾的人
+    instruction: |
+      请尖锐地提炼本轮核心分歧，点名追问立场模糊或自相矛盾的人。
+      发言后调用 append_section("争议点", "- 第 N 轮: <一句话分歧>") 登记本轮分歧。
 
   - round: 2
     who: members
     instruction: 上一轮有人立场动摇了吗？请正面回应——你是否改变了看法？为什么？
   - round: 2
     who: moderator
-    instruction: 直接点名本轮立场最模糊的人，要求给出明确的"保留"或"关停"二选一
+    instruction: |
+      直接点名本轮立场最模糊的人，要求给出明确的"保留"或"关停"二选一。
+      发言后 append_section("争议点", ...) 登记第 2 轮分歧。
 
   - round: 3
     who: members
     instruction: 这是最后一轮正式讨论。如果你愿意妥协，现在提出你的条件；如果你坚持原来的立场，给出最有力的一个理由
   - round: 3
     who: moderator
-    instruction: 总结三轮讨论中各方立场的变化，指出谁动摇了、谁没有
+    instruction: |
+      总结三轮讨论中各方立场的变化，指出谁动摇了、谁没有。
+      发言后把最成熟的整合方案 write_section("提案", ...) 到 artifact（可能已有妥协条件，一并写入）。
 
 closing:
-  - who: all
-    instruction: 最后一次发言机会，每人用一句话亮明最终立场——保留还是关停
   - who: moderator
-    instruction: 根据讨论结果宣布最终决策。必须明确宣布一方胜出，另一方接受结果。给出决策理由
+    instruction: |
+      调用 propose_vote(question="星云平台去留?", options=["保留","关停"]) 发起最终投票，然后用一句话请大家投票。
+  - who: all
+    instruction: |
+      最后一次发言机会，每人用一句话亮明最终立场——保留还是关停。
+      发言后调用 cast_vote(vote_id="v1", option=..., rationale=...) 记录你的投票。
+  - who: moderator
+    instruction: |
+      根据 <artifact> 里的投票结果宣布最终决策。必须明确宣布一方胜出。
+      先 write_section("最终决策", ...) 写下完整决议，再调用 finalize_artifact(decision="保留" 或 "关停", rationale="...") 落定。
 ---
 
 ## 星云平台存废决策

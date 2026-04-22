@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import os
 import sys
 
 import yaml
 
 from agent import Agent, _client as _backend_client
+from artifact import ARTIFACT_TOOL_NAMES, ArtifactStore
 from config import SUMMARY_MAX_TOKENS, SUMMARY_MODEL, SUMMARY_TEMPERATURE
 from discussion import Discussion
 from memory import ConversationMemory, FullHistory, SummaryMemory, WindowMemory
@@ -63,7 +65,11 @@ def _build_tool_handler(tool_configs: list[dict], scenario_dir: str) -> callable
         defaults[name] = resolved
 
     def handler(name: str, arguments: dict) -> str:
-        merged = {**defaults.get(name, {}), **arguments}
+        # Scenario-level defaults win over LLM-supplied args: those keys are
+        # stripped from the tool schema (see _resolve_tool_defs) and the LLM
+        # should never fill them. If it hallucinates one anyway (e.g. supplies
+        # its own ``vdb_dir``), we still honor the scenario path.
+        merged = {**arguments, **defaults.get(name, {})}
         return dispatch(name, merged)
 
     return handler
@@ -180,6 +186,22 @@ MEMORY_MAX_RECENT_MSG = (
     "Error in memory config ({section}): 'max_recent' must be a positive integer, got {val!r}."
 )
 
+VALID_SECTION_MODES = {"replace", "append"}
+
+ARTIFACT_CFG_TYPE_MSG = "Error in artifact config: must be a mapping."
+ARTIFACT_ENABLED_MSG = "Error in artifact config: 'enabled' must be a boolean."
+ARTIFACT_SECTIONS_TYPE_MSG = (
+    "Error in artifact config: 'initial_sections' must be a list."
+)
+ARTIFACT_SECTION_ITEM_MSG = (
+    "Error in artifact config: initial_sections[{idx}] must be a string name "
+    "or a mapping with 'name' (and optional 'mode')."
+)
+ARTIFACT_SECTION_MODE_MSG = (
+    "Error in artifact config: initial_sections[{idx}] mode='{val}' is invalid. "
+    "Must be one of: replace, append."
+)
+
 
 def _validate_who(who: str, agent_names: set[str], section: str, idx: int) -> None:
     if who not in VALID_WHO and who not in agent_names:
@@ -209,6 +231,29 @@ def _validate_memory(cfg: dict | None, section: str) -> None:
             sys.exit(MEMORY_MAX_RECENT_MSG.format(section=section, val=mr))
 
 
+def _validate_artifact(cfg: dict | None) -> None:
+    """Validate an ``artifact`` frontmatter block. ``None`` means unset (disabled)."""
+    if cfg is None:
+        return
+    if not isinstance(cfg, dict):
+        sys.exit(ARTIFACT_CFG_TYPE_MSG)
+    if "enabled" in cfg and not isinstance(cfg["enabled"], bool):
+        sys.exit(ARTIFACT_ENABLED_MSG)
+    sections = cfg.get("initial_sections")
+    if sections is None:
+        return
+    if not isinstance(sections, list):
+        sys.exit(ARTIFACT_SECTIONS_TYPE_MSG)
+    for i, item in enumerate(sections):
+        if isinstance(item, str):
+            continue
+        if not isinstance(item, dict) or "name" not in item or not isinstance(item["name"], str):
+            sys.exit(ARTIFACT_SECTION_ITEM_MSG.format(idx=i))
+        mode = item.get("mode", "replace")
+        if mode not in VALID_SECTION_MODES:
+            sys.exit(ARTIFACT_SECTION_MODE_MSG.format(idx=i, val=mode))
+
+
 def _validate_main_phases(phases: list[dict], agent_names: set[str]) -> None:
     """Validate main phases — ``round`` is required."""
     for i, phase in enumerate(phases, 1):
@@ -231,6 +276,9 @@ def main() -> None:
                         help="override round count from scenario")
     parser.add_argument("--no-stream", action="store_true",
                         help="disable streaming output")
+    parser.add_argument("--save-artifact", metavar="PATH", default=None,
+                        help="after the run, write the final artifact markdown to PATH "
+                             "(only when the scenario has artifact enabled)")
     args = parser.parse_args()
 
     meta, body = load_scenario(args.scenario)
@@ -257,20 +305,49 @@ def main() -> None:
         _validate_memory(meta["moderator"]["memory"],
                          f"moderator '{meta['moderator'].get('name')}'")
 
+    artifact_cfg = meta.get("artifact")
+    _validate_artifact(artifact_cfg)
+
     rounds = args.rounds or meta.get("rounds", 3)
     stream = not args.no_stream
 
     tool_configs = meta.get("tools", [])
-    tool_defs = _resolve_tool_defs(tool_configs) if tool_configs else None
-    tool_handler = _build_tool_handler(tool_configs, scenario_dir) if tool_configs else None
+    base_tool_defs = _resolve_tool_defs(tool_configs) if tool_configs else []
+    base_handler = _build_tool_handler(tool_configs, scenario_dir) if tool_configs else None
 
-    members = [_build_agent(s, tool_defs=tool_defs, tool_handler=tool_handler,
-                            scenario_mem_cfg=scenario_mem_cfg)
-               for s in meta.get("members", [])]
-    moderator = (_build_agent(meta["moderator"], tool_defs=tool_defs,
-                              tool_handler=tool_handler,
-                              scenario_mem_cfg=scenario_mem_cfg)
-                 if "moderator" in meta else None)
+    store: ArtifactStore | None = None
+    if isinstance(artifact_cfg, dict) and artifact_cfg.get("enabled"):
+        store = ArtifactStore(initial_sections=artifact_cfg.get("initial_sections"))
+
+    def _agent_bundle(agent_name: str, role: str):
+        """Compose per-agent (tool_defs, handler) baking in caller name + role."""
+        defs = list(base_tool_defs)
+        if store is not None:
+            defs.extend(store.build_tool_defs(role))
+        if not defs:
+            return None, None
+
+        def handler(name: str, args: dict, *, _caller=agent_name) -> str:
+            if store is not None and name in ARTIFACT_TOOL_NAMES:
+                return store.dispatch(name, args, caller=_caller)
+            if base_handler is None:
+                return json.dumps({"error": f"Unknown tool: {name}"})
+            return base_handler(name, args)
+
+        return defs, handler
+
+    members = []
+    for s in meta.get("members", []):
+        defs, handler = _agent_bundle(s["name"], role="member")
+        members.append(_build_agent(s, tool_defs=defs, tool_handler=handler,
+                                    scenario_mem_cfg=scenario_mem_cfg))
+
+    moderator = None
+    if "moderator" in meta:
+        mspec = meta["moderator"]
+        defs, handler = _agent_bundle(mspec["name"], role="moderator")
+        moderator = _build_agent(mspec, tool_defs=defs, tool_handler=handler,
+                                 scenario_mem_cfg=scenario_mem_cfg)
 
     Discussion(
         members=members,
@@ -281,7 +358,19 @@ def main() -> None:
         rounds=rounds,
         stream=stream,
         moderator=moderator,
+        artifact=store,
     ).run()
+
+    if args.save_artifact:
+        if store is None:
+            print(f"WARNING: --save-artifact ignored: scenario has no artifact enabled",
+                  file=sys.stderr, flush=True)
+        else:
+            out_path = os.path.abspath(args.save_artifact)
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(store.render())
+                f.write("\n")
+            print(f"\n💾 artifact saved → {out_path}", flush=True)
 
 
 if __name__ == "__main__":

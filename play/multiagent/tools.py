@@ -68,6 +68,22 @@ def _retrieve_docs(query: str, vdb_dir: str, top_k: int = 3) -> str:
 TOOL_HANDLERS["retrieve_docs"] = _retrieve_docs
 
 
+def warn_if_error(name: str, result: str) -> None:
+    """Print a one-line stderr notice when *result* is ``{"error": ...}`` JSON.
+
+    Extracted so other dispatchers (e.g. ``ArtifactStore.dispatch``) can share
+    the same silent-failure catch-all used by :func:`dispatch`.
+    """
+    try:
+        payload = json.loads(result)
+    except (ValueError, TypeError):
+        return
+    if isinstance(payload, dict) and "error" in payload:
+        first_line = str(payload["error"]).splitlines()[0]
+        print(f"WARNING: tool {name} failed: {first_line}",
+              file=sys.stderr, flush=True)
+
+
 def dispatch(name: str, arguments: dict) -> str:
     """Look up *name* in the registry and call the handler with *arguments*."""
     handler = TOOL_HANDLERS.get(name)
@@ -75,15 +91,5 @@ def dispatch(name: str, arguments: dict) -> str:
         result = json.dumps({"error": f"Unknown tool: {name}"})
     else:
         result = handler(**arguments)
-    # Catch-all: any handler that returns {"error": ...} JSON gets a one-line
-    # notice on stderr, so silent failures (e.g. RAG returning a canned error
-    # string the model then covers up) are impossible to miss.
-    try:
-        payload = json.loads(result)
-    except (ValueError, TypeError):
-        payload = None
-    if isinstance(payload, dict) and "error" in payload:
-        first_line = str(payload["error"]).splitlines()[0]
-        print(f"WARNING: tool {name} failed: {first_line}",
-              file=sys.stderr, flush=True)
+    warn_if_error(name, result)
     return result

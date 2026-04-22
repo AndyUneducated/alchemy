@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent import Agent
+    from artifact import ArtifactStore
 
 SEPARATOR = "-" * 60
 
@@ -38,6 +39,7 @@ class Discussion:
         rounds: int,
         stream: bool = True,
         moderator: Agent | None = None,
+        artifact: "ArtifactStore | None" = None,
     ) -> None:
         self.members = members
         self.topic = topic
@@ -47,6 +49,7 @@ class Discussion:
         self.rounds = rounds
         self.stream = stream
         self.moderator = moderator
+        self.artifact = artifact
         self.history: list[dict] = []
 
     def run(self) -> list[dict]:
@@ -81,8 +84,16 @@ class Discussion:
         instruction = phase.get("instruction")
         for agent in self._resolve_who(phase["who"]):
             _print_speaker(agent.name)
-            reply = agent.respond(self.history, instruction=instruction, stream=self.stream)
+            view = self.artifact.render() if self.artifact else None
+            reply = agent.respond(
+                self.history,
+                instruction=instruction,
+                stream=self.stream,
+                artifact_view=view,
+            )
             self.history.append({"speaker": agent.name, "content": reply})
+            if self.artifact:
+                self.history.extend(self.artifact.drain_events())
 
     def _resolve_who(self, who: str) -> list[Agent]:
         if who == "members":

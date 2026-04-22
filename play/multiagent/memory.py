@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-PINNED_TYPES: frozenset[str] = frozenset({"topic", "round", "phase"})
+PINNED_TYPES: frozenset[str] = frozenset({"topic", "round", "phase", "artifact_event"})
 """Event types that must never be pruned or folded by any strategy."""
 
 

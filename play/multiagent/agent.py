@@ -46,14 +46,20 @@ class Agent:
         *,
         instruction: str | None = None,
         stream: bool = True,
+        artifact_view: str | None = None,
     ) -> str:
         """Generate a reply given the shared conversation history.
 
         Delegates history->messages projection to ``self.memory``.
         An optional *instruction* is appended as the final user message
         so only this agent sees it (never stored in shared history).
+        An optional *artifact_view* is injected right before the instruction
+        as a ``<artifact>`` block so the agent always sees the latest shared
+        state without having to call ``read_artifact`` first.
         """
         messages = self.memory.build_messages(history, self.name)
+        if artifact_view is not None:
+            messages.append({"role": "user", "content": f"<artifact>\n{artifact_view}\n</artifact>"})
         if instruction:
             messages.append({"role": "user", "content": f"<instruction>\n{instruction}\n</instruction>"})
         return _client.chat(
