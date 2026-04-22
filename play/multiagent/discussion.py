@@ -17,6 +17,14 @@ def _print_speaker(name: str) -> None:
     sys.stdout.flush()
 
 
+def _called_tool(events: list[dict], caller: str, tool: str) -> bool:
+    """True if *events* contains an artifact_event by *caller* calling *tool*."""
+    return any(
+        e.get("tool") == tool and e.get("caller") == caller
+        for e in events
+    )
+
+
 class Discussion:
     """Execute a multi-agent discussion with opening, main, and closing phases.
 
@@ -82,18 +90,56 @@ class Discussion:
 
     def _exec_phase(self, phase: dict) -> None:
         instruction = phase.get("instruction")
+        require_tool = phase.get("require_tool")
+        # default to 1 retry when a tool is required; else 0 (legacy behavior)
+        max_retries = int(phase.get("max_retries", 1 if require_tool else 0))
         for agent in self._resolve_who(phase["who"]):
+            self._run_turn(agent, instruction, require_tool, max_retries)
+
+    def _run_turn(self, agent: "Agent", instruction: str | None,
+                  require_tool: str | None, max_retries: int) -> None:
+        """Run one agent's turn, optionally retrying if require_tool wasn't called.
+
+        The nudge on retry is passed as an ``instruction`` override — it's
+        per-call only and never enters ``self.history``, so other agents don't
+        see the coaching.
+        """
+        current_instruction = instruction
+        for attempt in range(max_retries + 1):
             _print_speaker(agent.name)
             view = self.artifact.render() if self.artifact else None
             reply = agent.respond(
                 self.history,
-                instruction=instruction,
+                instruction=current_instruction,
                 stream=self.stream,
                 artifact_view=view,
             )
             self.history.append({"speaker": agent.name, "content": reply})
+            events: list[dict] = []
             if self.artifact:
-                self.history.extend(self.artifact.drain_events())
+                events = self.artifact.drain_events()
+                self.history.extend(events)
+
+            if not require_tool or _called_tool(events, agent.name, require_tool):
+                return
+
+            if attempt >= max_retries:
+                print(
+                    f"WARNING: {agent.name} skipped required tool "
+                    f"'{require_tool}' after {attempt + 1} attempt(s)",
+                    file=sys.stderr, flush=True,
+                )
+                return
+
+            print(
+                f"🔁 [{agent.name}] retry {attempt + 1}/{max_retries}: "
+                f"missing {require_tool}",
+                flush=True,
+            )
+            current_instruction = (
+                f"你刚才没有调用 `{require_tool}` 工具。"
+                f"请现在补上该调用以完成本轮任务。"
+            )
 
     def _resolve_who(self, who: str) -> list[Agent]:
         if who == "members":

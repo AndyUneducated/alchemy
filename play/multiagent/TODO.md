@@ -11,19 +11,6 @@
 
 ## 工程问题（影响运行）
 
-### P1 — `propose_vote` 权限 & scenario 硬编码 `vote_id`
-
-**现象**（panel）：Round 1 里 member `产品VP 林晚晴` 自己调了 `propose_vote` 生成 `v1`；closing 里 moderator CEO 按 prompt 再次 `propose_vote` 拿到 `v2`。但 `panel.md` closing 指令硬编码 `cast_vote(vote_id="v1", ...)`，导致 `v1`（废票）和 `v2`（真正的最终投票）并存、且 `v2` 缺少两人选票，最终投票统计不可信。
-
-**根因**：
-1. 任何 member 都能调 `propose_vote`，场景作者没料到。
-2. Scenario 硬编码 `vote_id="v1"`，前面一旦已有 vote，id 就错位。
-
-**方向**（任选或都做）：
-- 把 `propose_vote` 加入 `MODERATOR_ONLY_TOOLS`，members 只能 cast 不能 propose。
-- Scenario 指令改成"用最新的 vote_id（由 `read_artifact` 获取）"，不要硬编码 `v1`。
-- 进一步：`finalize` 前校验"所有参与者都投过最新 vote"，否则给 moderator 一个 warning。
-
 ### P1 — `who: all` 让 moderator 每轮抢先发言
 
 **现象**（roundtable / panel）：`roundtable` Round 1 一开场就是主持人，内容却是"感谢张博士的精彩发言"——张博士还没开口。`panel` closing phase 2 同样把 moderator 塞到 members 前面，CEO 连续两轮开场。
@@ -34,36 +21,22 @@
 - 文档加一条约定："main 阶段若有主持人，应用 `who: members` 而不是 `who: all`"；并把 `roundtable.md` 的 main 从 `who: all` 改成 `who: members`。
 - 或引入更显式的 `who: members+moderator_after`。
 
-### P2 — `append_section` 对重复 tool_call 不做幂等
-
-**现象**（panel）：CEO opening 连调两次 `write_section('数据基线')`（相同内容，幂等，无影响）；Round 1 moderator 连调两次 `append_section('争议点')`（不同内容），artifact 里"争议点"塞了两条近乎重复的"第 1 轮: 马千里立场摇摆"。
-
-**根因**：qwen2.5 在一次 assistant turn 内返回 2 个 tool_calls，`ollama_client.chat` 忠实 dispatch。`write_section` 同值重复 → 天然幂等；`append_section` 重复 → 重复追加。
-
-**方向**（优先引擎侧，更稳健）：
-- Artifact handler 里加轻量去重：`append_section` 若与上一条 entry 相同（或内容高度相似）则跳过，返回 `{"skipped": true}`。
-- 辅以 prompt 侧：moderator 系统提示里明确"每轮只 append 一次"。
-
 ### P2 — Phase 退出无校验，成员静默违规
 
 **现象**（panel closing）：指令写"每人发言后调用 `cast_vote(...)`"，但 `产品VP 林晚晴` 和 `CFO 钱正清` 只说话没投票。引擎没有任何报警，artifact 里 `v2` 缺失两张选票。
 
 **根因**：引擎是 fire-and-forget，没有 phase 退出条件检查。
 
-**方向**：加一个轻量 "phase assert"：允许 scenario 声明 `require_tool: cast_vote`，该 phase 的 agent 若没调对应工具，打印一条 warning（不硬失败）。实现成本低，对 workshop 讲解友好。
+**核心目标**：不是"强制 agent 调工具"（LLM 本质上做不到强制），而是**让沉默违规变可见**。对标议会 roll call / linter warning：关键不是逼每个人投票，是"缺席必须在账上"。
 
-### P3 — stdout / stderr 在 `2>&1 | tee` 下偶发颠倒
+**当前实现**（已落地 Level 1 + 2）：
+- scenario 在 phase 里声明 `require_tool: <tool_name>`，可选 `max_retries: N`（默认 1）
+- Phase 结束后扫 `artifact.drain_events()` 的 `tool` / `caller` 字段，判断当前 agent 是否调过要求的工具
+- 未命中 → 追加 nudge instruction "你刚才没有调用 `<tool>`。请现在补上该调用。" 让 agent 再响应一次
+- 重试用尽仍未调 → stderr 打印 `WARNING: <agent> skipped required tool '<tool>' after N attempt(s)`
+- 终端加一行可视化 `🔁 [agent] retry k/N: missing <tool>`，workshop 观众能看到流程
 
-**现象**（test_artifact 日志）：
-
-```
-🗣  [alice]: ➕ [alice] appended to 'notes' (14 chars)
-WARNING: tool write_section failed: section 'notes' is append-only; use append_section
-```
-
-按调用顺序，WARNING（stderr）应在 ➕（stdout）之前。标准的管道缓冲顺序问题，不影响正确性，但演示时容易误导。
-
-**方向**（可选打磨）：统一 `warn_if_error` 走 stdout，或在关键点手动 `sys.stderr.flush(); sys.stdout.flush()`。
+**范围限制**：目前 `require_tool` 只识别 artifact 工具的调用（通过 `artifact.drain_events()` 观测）。non-artifact 工具（如 `retrieve_docs`）尚未被 discussion 层跟踪，属于"Tool 调用可观测" 那条 TODO 的范围。
 
 ---
 

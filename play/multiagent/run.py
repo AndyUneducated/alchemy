@@ -270,6 +270,11 @@ def _validate_main_phases(phases: list[dict], agent_names: set[str]) -> None:
 # -- main --------------------------------------------------------------------
 
 def main() -> None:
+    # Line-buffer both streams so `2>&1 | tee` preserves chronological order
+    # between stdout (speaker text, tool traces) and stderr (WARNINGs).
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(description="Multi-Agent Discussion Engine")
     parser.add_argument("scenario", help="scenario .md file path")
     parser.add_argument("-r", "--rounds", type=int, default=None,

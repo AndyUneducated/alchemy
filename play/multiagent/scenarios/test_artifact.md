@@ -42,6 +42,7 @@ main:
       先调用 read_artifact() 查看 notes 节当前内容并简述，再调用 propose_vote(question="选 A 还是 B?", options=["A","B"])。
   - round: 1
     who: members
+    require_tool: cast_vote
     instruction: |
       调用 cast_vote(vote_id="v1", option="A" 或 "B", rationale="一句话理由")，然后用一句话解释你的选择。
 

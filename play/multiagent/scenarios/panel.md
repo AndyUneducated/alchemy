@@ -82,6 +82,7 @@ closing:
     instruction: |
       调用 propose_vote(question="星云平台去留?", options=["保留","关停"]) 发起最终投票，然后用一句话请大家投票。
   - who: all
+    require_tool: cast_vote
     instruction: |
       最后一次发言机会，每人用一句话亮明最终立场——保留还是关停。
       发言后调用 cast_vote(vote_id="v1", option=..., rationale=...) 记录你的投票。

@@ -36,7 +36,7 @@ ARTIFACT_TOOL_NAMES = frozenset({
     "finalize_artifact",
 })
 
-MODERATOR_ONLY_TOOLS = frozenset({"finalize_artifact"})
+MODERATOR_ONLY_TOOLS = frozenset({"finalize_artifact", "propose_vote"})
 
 
 @dataclass
@@ -162,6 +162,8 @@ def _h_write_section(store: ArtifactStore, args: dict, caller: str) -> str:
     print(f"📝 [{caller}] wrote section '{name}' ({n} chars)", flush=True)
     store._events.append({
         "type": "artifact_event",
+        "tool": "write_section",
+        "caller": caller,
         "content": f"{caller} wrote section '{name}' ({n} chars)",
     })
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
@@ -184,6 +186,8 @@ def _h_append_section(store: ArtifactStore, args: dict, caller: str) -> str:
     print(f"➕ [{caller}] appended to '{name}' ({n} chars)", flush=True)
     store._events.append({
         "type": "artifact_event",
+        "tool": "append_section",
+        "caller": caller,
         "content": f"{caller} appended to '{name}' ({n} chars)",
     })
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
@@ -203,6 +207,8 @@ def _h_propose_vote(store: ArtifactStore, args: dict, caller: str) -> str:
     print(f"🗳  [{caller}] proposed vote {vid}: \"{question}\"", flush=True)
     store._events.append({
         "type": "artifact_event",
+        "tool": "propose_vote",
+        "caller": caller,
         "content": f"{caller} proposed vote {vid}: '{question}'",
     })
     return json.dumps({"vote_id": vid}, ensure_ascii=False)
@@ -223,6 +229,8 @@ def _h_cast_vote(store: ArtifactStore, args: dict, caller: str) -> str:
     print(f"✓ [{caller}] cast {vid} → {option}", flush=True)
     store._events.append({
         "type": "artifact_event",
+        "tool": "cast_vote",
+        "caller": caller,
         "content": f"{caller} cast {vid} → {option}",
     })
     return json.dumps({"ok": True}, ensure_ascii=False)
@@ -243,6 +251,8 @@ def _h_finalize_artifact(store: ArtifactStore, args: dict, caller: str) -> str:
     print(f"🏁 [{caller}] finalized: {decision}", flush=True)
     store._events.append({
         "type": "artifact_event",
+        "tool": "finalize_artifact",
+        "caller": caller,
         "content": f"{caller} finalized: {decision}",
     })
     return json.dumps({"ok": True}, ensure_ascii=False)
@@ -327,7 +337,7 @@ _TOOL_DEFS: list[dict] = [
             "name": "propose_vote",
             "description": (
                 "Register a structured vote. Returns a vote_id that others "
-                "pass to cast_vote."
+                "pass to cast_vote. Moderator only."
             ),
             "parameters": {
                 "type": "object",
