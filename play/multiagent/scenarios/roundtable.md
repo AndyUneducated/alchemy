@@ -23,7 +23,7 @@ opening:
 
 main:
   - round: default
-    who: all
+    who: members
 
 closing:
   - who: moderator

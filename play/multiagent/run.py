@@ -8,6 +8,7 @@ import copy
 import json
 import os
 import sys
+import time
 
 import yaml
 
@@ -16,7 +17,98 @@ from artifact import ARTIFACT_TOOL_NAMES, ArtifactStore
 from config import SUMMARY_MAX_TOKENS, SUMMARY_MODEL, SUMMARY_TEMPERATURE
 from discussion import Discussion
 from memory import ConversationMemory, FullHistory, SummaryMemory, WindowMemory
-from tools import TOOL_DEFINITIONS, dispatch
+from tools import TOOL_DEFINITIONS, dispatch, is_error
+
+
+# -- tool tracer ------------------------------------------------------------
+#
+# Fires from the per-agent tool_handler closure below (single chokepoint for
+# every non-artifact tool call across all four backends). Emits two sinks:
+#
+#   1. stderr one-liner — workshop audience sees the call in real time,
+#      between the speaker label and the model's final text.
+#   2. structured event attached to Discussion.history with visible=False,
+#      so memory._render skips it (other agents never see the call) while
+#      --save-transcript can still dump it for replay.
+#
+# Field names intentionally mirror OpenTelemetry GenAI semantic conventions
+# (gen_ai.tool.name / .call.arguments / .call.response). We borrow the naming
+# only — no SDK dependency, no spans, no exporter.
+
+
+def _preview_args(arguments: dict) -> str:
+    """Render a short k=v, k=v summary of tool arguments for the terminal."""
+    parts: list[str] = []
+    for k, v in arguments.items():
+        if isinstance(v, str):
+            s = v if len(v) <= 40 else v[:37] + "..."
+            parts.append(f"{k}={s!r}")
+        else:
+            s = repr(v)
+            if len(s) > 40:
+                s = s[:37] + "..."
+            parts.append(f"{k}={s}")
+    return ", ".join(parts)
+
+
+def _preview_result(result: str, ok: bool) -> str:
+    """Render a short summary of a tool result for the terminal."""
+    try:
+        payload = json.loads(result)
+    except (ValueError, TypeError):
+        flat = result.replace("\n", " ").strip()
+        return flat if len(flat) <= 60 else flat[:57] + "..."
+    if not ok and isinstance(payload, dict) and "error" in payload:
+        first = str(payload["error"]).splitlines()[0]
+        return f"error: {first}"
+    if isinstance(payload, dict):
+        if isinstance(payload.get("hits"), list):
+            return f"{{hits: {len(payload['hits'])}}}"
+        if isinstance(payload.get("results"), list):
+            return f"{{results: {len(payload['results'])}}}"
+        if "count" in payload:
+            return f"{{count: {payload['count']}}}"
+        keys = list(payload.keys())
+        if len(keys) <= 3:
+            return "{" + ", ".join(keys) + "}"
+        return "{" + ", ".join(keys[:3]) + ", ...}"
+    if isinstance(payload, list):
+        return f"[{len(payload)} items]"
+    flat = str(payload)
+    return flat if len(flat) <= 60 else flat[:57] + "..."
+
+
+class ToolTracer:
+    """Collect non-artifact tool-call events across one Discussion.
+
+    Events are drained by ``Discussion._run_turn`` after each turn and
+    appended to ``Discussion.history`` with ``visible=False``.
+    """
+
+    def __init__(self) -> None:
+        self._events: list[dict] = []
+
+    def record(self, caller: str, tool: str, arguments: dict, result: str) -> None:
+        ok = not is_error(result)
+        print(
+            f"🔧 [{caller}] {tool}({_preview_args(arguments)}) "
+            f"→ {_preview_result(result, ok)}",
+            file=sys.stderr, flush=True,
+        )
+        self._events.append({
+            "type": "tool_call",
+            "caller": caller,
+            "tool": tool,
+            "arguments": arguments,
+            "result": result,
+            "ok": ok,
+            "visible": False,
+            "ts": time.time(),
+        })
+
+    def drain(self) -> list[dict]:
+        events, self._events = self._events, []
+        return events
 
 
 # -- frontmatter parser -----------------------------------------------------
@@ -284,6 +376,10 @@ def main() -> None:
     parser.add_argument("--save-artifact", metavar="PATH", default=None,
                         help="after the run, write the final artifact markdown to PATH "
                              "(only when the scenario has artifact enabled)")
+    parser.add_argument("--save-transcript", metavar="PATH", default=None,
+                        help="after the run, dump the structured history (topic, "
+                             "rounds, speaker turns, artifact_event, tool_call) "
+                             "to PATH as JSON")
     args = parser.parse_args()
 
     meta, body = load_scenario(args.scenario)
@@ -324,6 +420,10 @@ def main() -> None:
     if isinstance(artifact_cfg, dict) and artifact_cfg.get("enabled"):
         store = ArtifactStore(initial_sections=artifact_cfg.get("initial_sections"))
 
+    # One tracer per Discussion; handed to both the per-agent handler (for
+    # recording) and the Discussion (for draining into history).
+    tracer = ToolTracer() if base_handler is not None else None
+
     def _agent_bundle(agent_name: str, role: str):
         """Compose per-agent (tool_defs, handler) baking in caller name + role."""
         defs = list(base_tool_defs)
@@ -334,10 +434,15 @@ def main() -> None:
 
         def handler(name: str, args: dict, *, _caller=agent_name) -> str:
             if store is not None and name in ARTIFACT_TOOL_NAMES:
+                # Artifact tools have their own emoji print + artifact_event
+                # channel — don't double-record via tracer.
                 return store.dispatch(name, args, caller=_caller)
             if base_handler is None:
                 return json.dumps({"error": f"Unknown tool: {name}"})
-            return base_handler(name, args)
+            result = base_handler(name, args)
+            if tracer is not None:
+                tracer.record(_caller, name, args, result)
+            return result
 
         return defs, handler
 
@@ -354,7 +459,7 @@ def main() -> None:
         moderator = _build_agent(mspec, tool_defs=defs, tool_handler=handler,
                                  scenario_mem_cfg=scenario_mem_cfg)
 
-    Discussion(
+    history = Discussion(
         members=members,
         topic=body,
         opening=opening,
@@ -364,6 +469,7 @@ def main() -> None:
         stream=stream,
         moderator=moderator,
         artifact=store,
+        tracer=tracer,
     ).run()
 
     if args.save_artifact:
@@ -376,6 +482,13 @@ def main() -> None:
                 f.write(store.render())
                 f.write("\n")
             print(f"\n💾 artifact saved → {out_path}", flush=True)
+
+    if args.save_transcript:
+        out_path = os.path.abspath(args.save_transcript)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        print(f"\n💾 transcript saved → {out_path}", flush=True)
 
 
 if __name__ == "__main__":

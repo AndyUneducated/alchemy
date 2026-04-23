@@ -28,6 +28,10 @@ def _render(entries: Iterable[dict], owner: str) -> list[dict]:
     """
     messages: list[dict] = []
     for entry in entries:
+        # Entries flagged with visible=False (e.g. tool_call events recorded
+        # by ToolTracer) are human-only: skip them so other agents can't see.
+        if entry.get("visible") is False:
+            continue
         speaker = entry.get("speaker")
         if speaker is None:
             tag = entry.get("type", "topic")

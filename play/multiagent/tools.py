@@ -68,20 +68,31 @@ def _retrieve_docs(query: str, vdb_dir: str, top_k: int = 3) -> str:
 TOOL_HANDLERS["retrieve_docs"] = _retrieve_docs
 
 
+def is_error(result: str) -> bool:
+    """Return True if *result* parses as a JSON object with an ``error`` key.
+
+    Shared by :func:`warn_if_error` (stderr surface) and the tool tracer
+    (to stamp ``ok`` on recorded events), so both agree on what "failed" means.
+    """
+    try:
+        payload = json.loads(result)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(payload, dict) and "error" in payload
+
+
 def warn_if_error(name: str, result: str) -> None:
     """Print a one-line stderr notice when *result* is ``{"error": ...}`` JSON.
 
     Extracted so other dispatchers (e.g. ``ArtifactStore.dispatch``) can share
     the same silent-failure catch-all used by :func:`dispatch`.
     """
-    try:
-        payload = json.loads(result)
-    except (ValueError, TypeError):
+    if not is_error(result):
         return
-    if isinstance(payload, dict) and "error" in payload:
-        first_line = str(payload["error"]).splitlines()[0]
-        print(f"WARNING: tool {name} failed: {first_line}",
-              file=sys.stderr, flush=True)
+    payload = json.loads(result)
+    first_line = str(payload["error"]).splitlines()[0]
+    print(f"WARNING: tool {name} failed: {first_line}",
+          file=sys.stderr, flush=True)
 
 
 def dispatch(name: str, arguments: dict) -> str:

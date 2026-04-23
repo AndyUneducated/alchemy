@@ -21,6 +21,7 @@ backend client re-feeds it to the agent so it can self-correct.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -165,6 +166,7 @@ def _h_write_section(store: ArtifactStore, args: dict, caller: str) -> str:
         "tool": "write_section",
         "caller": caller,
         "content": f"{caller} wrote section '{name}' ({n} chars)",
+        "ts": time.time(),
     })
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
 
@@ -189,6 +191,7 @@ def _h_append_section(store: ArtifactStore, args: dict, caller: str) -> str:
         "tool": "append_section",
         "caller": caller,
         "content": f"{caller} appended to '{name}' ({n} chars)",
+        "ts": time.time(),
     })
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
 
@@ -210,6 +213,7 @@ def _h_propose_vote(store: ArtifactStore, args: dict, caller: str) -> str:
         "tool": "propose_vote",
         "caller": caller,
         "content": f"{caller} proposed vote {vid}: '{question}'",
+        "ts": time.time(),
     })
     return json.dumps({"vote_id": vid}, ensure_ascii=False)
 
@@ -232,6 +236,7 @@ def _h_cast_vote(store: ArtifactStore, args: dict, caller: str) -> str:
         "tool": "cast_vote",
         "caller": caller,
         "content": f"{caller} cast {vid} → {option}",
+        "ts": time.time(),
     })
     return json.dumps({"ok": True}, ensure_ascii=False)
 
@@ -254,6 +259,7 @@ def _h_finalize_artifact(store: ArtifactStore, args: dict, caller: str) -> str:
         "tool": "finalize_artifact",
         "caller": caller,
         "content": f"{caller} finalized: {decision}",
+        "ts": time.time(),
     })
     return json.dumps({"ok": True}, ensure_ascii=False)
 

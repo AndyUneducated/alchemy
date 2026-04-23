@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import sys
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent import Agent
     from artifact import ArtifactStore
+    from run import ToolTracer
 
 SEPARATOR = "-" * 60
 
@@ -48,6 +50,7 @@ class Discussion:
         stream: bool = True,
         moderator: Agent | None = None,
         artifact: "ArtifactStore | None" = None,
+        tracer: "ToolTracer | None" = None,
     ) -> None:
         self.members = members
         self.topic = topic
@@ -58,20 +61,25 @@ class Discussion:
         self.stream = stream
         self.moderator = moderator
         self.artifact = artifact
+        self.tracer = tracer
         self.history: list[dict] = []
 
     def run(self) -> list[dict]:
         self._print_header()
-        self.history.append({"type": "topic", "content": self.topic})
+        self.history.append({"type": "topic", "content": self.topic, "ts": time.time()})
 
         if self.opening:
-            self.history.append({"type": "phase", "content": "opening"})
+            self.history.append({"type": "phase", "content": "opening", "ts": time.time()})
             for phase in self.opening:
                 self._exec_phase(phase)
 
         for round_num in range(1, self.rounds + 1):
             print(f"\n{SEPARATOR}\n  Round {round_num}\n{SEPARATOR}")
-            self.history.append({"type": "round", "content": f"Round {round_num}/{self.rounds}"})
+            self.history.append({
+                "type": "round",
+                "content": f"Round {round_num}/{self.rounds}",
+                "ts": time.time(),
+            })
             phases = [p for p in self.main if p["round"] == round_num]
             if not phases:
                 phases = [p for p in self.main if p["round"] == "default"]
@@ -81,7 +89,7 @@ class Discussion:
                 self._exec_phase(phase)
 
         if self.closing:
-            self.history.append({"type": "phase", "content": "closing"})
+            self.history.append({"type": "phase", "content": "closing", "ts": time.time()})
             for phase in self.closing:
                 self._exec_phase(phase)
 
@@ -114,7 +122,17 @@ class Discussion:
                 stream=self.stream,
                 artifact_view=view,
             )
-            self.history.append({"speaker": agent.name, "content": reply})
+            # Drain tool_call events BEFORE the speaker entry so transcript
+            # order matches chronology: tool calls happened during respond(),
+            # the final reply text came out after them. visible=False keeps
+            # them invisible to other agents either way.
+            if self.tracer:
+                self.history.extend(self.tracer.drain())
+            self.history.append({
+                "speaker": agent.name,
+                "content": reply,
+                "ts": time.time(),
+            })
             events: list[dict] = []
             if self.artifact:
                 events = self.artifact.drain_events()
