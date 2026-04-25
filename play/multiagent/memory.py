@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-PINNED_TYPES: frozenset[str] = frozenset({"topic", "round", "phase", "artifact_event"})
+PINNED_TYPES: frozenset[str] = frozenset({"topic", "turn", "artifact_event"})
 """Event types that must never be pruned or folded by any strategy."""
 
 
@@ -22,7 +22,7 @@ def _render(entries: Iterable[dict], owner: str) -> list[dict]:
     """Wrap history entries into chat messages from *owner*'s perspective.
 
     Same logic as the original inline loop in ``Agent.respond``:
-    - no ``speaker``                -> system-injected tagged block (``<topic>`` / ``<round>`` / ``<phase>`` / ``<summary>``)
+    - no ``speaker``                -> system-injected tagged block (``<topic>`` / ``<turn>`` / ``<summary>``)
     - ``speaker == owner``          -> assistant turn
     - other ``speaker``             -> ``<message from="...">`` user turn
     """

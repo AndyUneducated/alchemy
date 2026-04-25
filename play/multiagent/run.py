@@ -245,69 +245,112 @@ def _build_agent(spec: dict, *, tool_defs: list[dict] | None = None,
 
 
 # -- validation --------------------------------------------------------------
+#
+# Two literal forms accepted by ``who`` (and by ``artifact.tool_owners`` values):
+#   - scalar str: "moderator" | "member" | "all"          (role / keyword addressing)
+#   - list[str]: agent name list                          (name addressing)
+#
+# Anything else is rejected at startup. The validators below produce one
+# concrete error message per failure and call ``sys.exit`` — fail-fast so the
+# author sees the issue before tokens are spent.
 
-VALID_WHO = {"moderator", "members", "all"}
-
-MAIN_ROUND_MISSING_MSG = (
-    "Error in main phase #{idx}: missing required field 'round'. "
-    "Must be a positive integer or \"default\"."
-)
-
-MAIN_ROUND_INVALID_MSG = (
-    "Error in main phase #{idx}: round='{val}' is invalid. "
-    "Must be a positive integer or \"default\"."
-)
-
-PHASE_WHO_MSG = (
-    "Error in {section} phase #{idx}: who='{val}' is not a valid target. "
-    "Must be one of: moderator, members, all, or a participant name."
-)
-
-OC_ROUND_MSG = (
-    "Error in {section} phase #{idx}: 'round' is not allowed in {section} phases."
-)
-
+VALID_ROLES = {"moderator", "member"}
+VALID_WHO_SCALARS = {"moderator", "member", "all"}
 VALID_MEMORY_TYPES = {"full", "window", "summary"}
-
-MEMORY_TYPE_MSG = (
-    "Error in memory config ({section}): type='{val}' is invalid. "
-    "Must be one of: full, window, summary."
-)
-
-MEMORY_MAX_RECENT_MSG = (
-    "Error in memory config ({section}): 'max_recent' must be a positive integer, got {val!r}."
-)
-
 VALID_SECTION_MODES = {"replace", "append"}
 
-ARTIFACT_CFG_TYPE_MSG = "Error in artifact config: must be a mapping."
-ARTIFACT_ENABLED_MSG = "Error in artifact config: 'enabled' must be a boolean."
-ARTIFACT_SECTIONS_TYPE_MSG = (
-    "Error in artifact config: 'initial_sections' must be a list."
-)
-ARTIFACT_SECTION_ITEM_MSG = (
-    "Error in artifact config: initial_sections[{idx}] must be a string name "
-    "or a mapping with 'name' (and optional 'mode')."
-)
-ARTIFACT_SECTION_MODE_MSG = (
-    "Error in artifact config: initial_sections[{idx}] mode='{val}' is invalid. "
-    "Must be one of: replace, append."
-)
+
+def _err(msg: str) -> None:
+    sys.exit(f"Error: {msg}")
 
 
-def _validate_who(who: str, agent_names: set[str], section: str, idx: int) -> None:
-    if who not in VALID_WHO and who not in agent_names:
-        sys.exit(PHASE_WHO_MSG.format(section=section, idx=idx, val=who))
+def _validate_agents(agents: list, agent_names: set[str], agent_roles: dict[str, str]) -> None:
+    if not isinstance(agents, list) or not agents:
+        _err("'agents' must be a non-empty list at the top level.")
+    seen: set[str] = set()
+    for i, a in enumerate(agents, 1):
+        if not isinstance(a, dict):
+            _err(f"agents[{i}] must be a mapping.")
+        name = a.get("name")
+        if not isinstance(name, str) or not name:
+            _err(f"agents[{i}] missing required string 'name'.")
+        if not isinstance(a.get("prompt"), str) or not a["prompt"]:
+            _err(f"agents[{i}] '{name}' missing required string 'prompt'.")
+        role = a.get("role")
+        if role not in VALID_ROLES:
+            _err(
+                f"agents[{i}] '{name}' has role={role!r}; "
+                f"required, must be one of: moderator, member."
+            )
+        if name in seen:
+            _err(f"agents[{i}] duplicate name '{name}'.")
+        seen.add(name)
+        agent_names.add(name)
+        agent_roles[name] = role
 
 
-def _validate_oc_phases(phases: list[dict], agent_names: set[str], section: str) -> None:
-    """Validate opening or closing phases."""
-    for i, phase in enumerate(phases, 1):
-        if "who" not in phase:
-            sys.exit(f"Error in {section} phase #{i}: missing required field 'who'.")
-        _validate_who(phase["who"], agent_names, section, i)
-        if "round" in phase:
-            sys.exit(OC_ROUND_MSG.format(section=section, idx=i))
+def _validate_who(who, agent_names: set[str], where: str) -> None:
+    """Validate a step's ``who`` form. Reachability of role lookup is checked here too."""
+    if isinstance(who, str):
+        if who not in VALID_WHO_SCALARS:
+            _err(
+                f"{where}: who={who!r} is not a valid scalar. "
+                f"Must be one of: moderator, member, all "
+                f"(or use a list of agent names)."
+            )
+        # role-based addressing must hit at least one agent
+        # (run.py needs agent_roles which it has via the closure caller — pass through)
+        return
+    if isinstance(who, list):
+        if not who:
+            _err(f"{where}: who is an empty list; address at least one agent.")
+        for n in who:
+            if not isinstance(n, str):
+                _err(f"{where}: who list contains non-string element {n!r}.")
+            if n not in agent_names:
+                _err(
+                    f"{where}: who references unknown agent name '{n}'. "
+                    f"Known: {sorted(agent_names)}."
+                )
+        return
+    _err(
+        f"{where}: who must be a scalar (moderator/member/all) "
+        f"or a list of agent names; got {type(who).__name__}."
+    )
+
+
+def _validate_who_role_reachability(who, agent_roles: dict[str, str], where: str) -> None:
+    """Second pass: scalar role ``moderator``/``member`` must hit ≥1 agent."""
+    if not isinstance(who, str) or who == "all":
+        return
+    if not any(r == who for r in agent_roles.values()):
+        _err(
+            f"{where}: who={who!r} matches 0 agents — no agent has role={who!r}."
+        )
+
+
+def _validate_steps(steps, agent_names: set[str], agent_roles: dict[str, str]) -> None:
+    if not isinstance(steps, list) or not steps:
+        _err("'steps' must be a non-empty list at the top level.")
+    for i, step in enumerate(steps, 1):
+        if not isinstance(step, dict):
+            _err(f"steps[{i}] must be a mapping.")
+        where = f"steps[{i}]"
+        if "id" in step and step["id"] is not None and not isinstance(step["id"], str):
+            _err(f"{where}: 'id' must be a string when present.")
+        if "who" not in step:
+            _err(f"{where}: missing required field 'who'.")
+        _validate_who(step["who"], agent_names, where)
+        _validate_who_role_reachability(step["who"], agent_roles, where)
+        instr = step.get("instruction")
+        if not isinstance(instr, str) or not instr.strip():
+            _err(f"{where}: missing required non-empty string 'instruction'.")
+        if "require_tool" in step and not isinstance(step["require_tool"], str):
+            _err(f"{where}: 'require_tool' must be a string.")
+        if "max_retries" in step:
+            mr = step["max_retries"]
+            if not isinstance(mr, int) or mr < 0:
+                _err(f"{where}: 'max_retries' must be a non-negative integer, got {mr!r}.")
 
 
 def _validate_memory(cfg: dict | None, section: str) -> None:
@@ -316,47 +359,87 @@ def _validate_memory(cfg: dict | None, section: str) -> None:
         return
     t = cfg.get("type")
     if t not in VALID_MEMORY_TYPES:
-        sys.exit(MEMORY_TYPE_MSG.format(section=section, val=t))
+        _err(
+            f"memory config ({section}): type={t!r} is invalid. "
+            f"Must be one of: full, window, summary."
+        )
     if t in ("window", "summary"):
         mr = cfg.get("max_recent")
         if not (isinstance(mr, int) and mr > 0):
-            sys.exit(MEMORY_MAX_RECENT_MSG.format(section=section, val=mr))
+            _err(
+                f"memory config ({section}): 'max_recent' must be a positive integer, got {mr!r}."
+            )
 
 
-def _validate_artifact(cfg: dict | None) -> None:
-    """Validate an ``artifact`` frontmatter block. ``None`` means unset (disabled)."""
+def _validate_artifact(cfg: dict | None, agent_names: set[str], agent_roles: dict[str, str]) -> None:
+    """Validate an ``artifact`` block. ``None`` means unset (disabled)."""
     if cfg is None:
         return
     if not isinstance(cfg, dict):
-        sys.exit(ARTIFACT_CFG_TYPE_MSG)
+        _err("artifact config: must be a mapping.")
     if "enabled" in cfg and not isinstance(cfg["enabled"], bool):
-        sys.exit(ARTIFACT_ENABLED_MSG)
+        _err("artifact config: 'enabled' must be a boolean.")
+
     sections = cfg.get("initial_sections")
-    if sections is None:
+    if sections is not None:
+        if not isinstance(sections, list):
+            _err("artifact config: 'initial_sections' must be a list.")
+        for i, item in enumerate(sections):
+            if isinstance(item, str):
+                continue
+            if not isinstance(item, dict) or "name" not in item or not isinstance(item["name"], str):
+                _err(
+                    f"artifact config: initial_sections[{i}] must be a string name "
+                    f"or a mapping with 'name' (and optional 'mode')."
+                )
+            mode = item.get("mode", "replace")
+            if mode not in VALID_SECTION_MODES:
+                _err(
+                    f"artifact config: initial_sections[{i}] mode={mode!r} is invalid. "
+                    f"Must be one of: replace, append."
+                )
+
+    owners_cfg = cfg.get("tool_owners")
+    if owners_cfg is None:
         return
-    if not isinstance(sections, list):
-        sys.exit(ARTIFACT_SECTIONS_TYPE_MSG)
-    for i, item in enumerate(sections):
-        if isinstance(item, str):
-            continue
-        if not isinstance(item, dict) or "name" not in item or not isinstance(item["name"], str):
-            sys.exit(ARTIFACT_SECTION_ITEM_MSG.format(idx=i))
-        mode = item.get("mode", "replace")
-        if mode not in VALID_SECTION_MODES:
-            sys.exit(ARTIFACT_SECTION_MODE_MSG.format(idx=i, val=mode))
+    if not isinstance(owners_cfg, dict):
+        _err("artifact config: 'tool_owners' must be a mapping.")
+    for tool_name, value in owners_cfg.items():
+        if tool_name not in ARTIFACT_TOOL_NAMES:
+            _err(
+                f"artifact.tool_owners: '{tool_name}' is not an artifact tool. "
+                f"Allowed keys: {sorted(ARTIFACT_TOOL_NAMES)}."
+            )
+        where = f"artifact.tool_owners['{tool_name}']"
+        _validate_who(value, agent_names, where)
+        _validate_who_role_reachability(value, agent_roles, where)
 
 
-def _validate_main_phases(phases: list[dict], agent_names: set[str]) -> None:
-    """Validate main phases — ``round`` is required."""
-    for i, phase in enumerate(phases, 1):
-        if "who" not in phase:
-            sys.exit(f"Error in main phase #{i}: missing required field 'who'.")
-        _validate_who(phase["who"], agent_names, "main", i)
-        if "round" not in phase:
-            sys.exit(MAIN_ROUND_MISSING_MSG.format(idx=i))
-        r = phase["round"]
-        if r != "default" and not (isinstance(r, int) and r > 0):
-            sys.exit(MAIN_ROUND_INVALID_MSG.format(idx=i, val=r))
+def _resolve_tool_owners(
+    owners_cfg: dict | None,
+    agents: list[dict],
+    agent_roles: dict[str, str],
+) -> dict[str, list[str]]:
+    """Expand owner expressions into flat ``{tool: [agent_name, ...]}`` allowlists.
+
+    Mirrors the four ``who`` literal forms (run.py:_validate_who):
+    - scalar "moderator" / "member" → all agents with that role, in declaration order
+    - scalar "all" → every agent, in declaration order
+    - list[str] → name list as written
+    """
+    if not owners_cfg:
+        return {}
+    declared_order = [a["name"] for a in agents]
+    out: dict[str, list[str]] = {}
+    for tool_name, value in owners_cfg.items():
+        if isinstance(value, str):
+            if value == "all":
+                out[tool_name] = list(declared_order)
+            else:
+                out[tool_name] = [n for n in declared_order if agent_roles.get(n) == value]
+        elif isinstance(value, list):
+            out[tool_name] = list(value)
+    return out
 
 
 # -- main --------------------------------------------------------------------
@@ -369,8 +452,6 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Multi-Agent Discussion Engine")
     parser.add_argument("scenario", help="scenario .md file path")
-    parser.add_argument("-r", "--rounds", type=int, default=None,
-                        help="override round count from scenario")
     parser.add_argument("--no-stream", action="store_true",
                         help="disable streaming output")
     parser.add_argument("--save-artifact", metavar="PATH", default=None,
@@ -378,38 +459,30 @@ def main() -> None:
                              "(only when the scenario has artifact enabled)")
     parser.add_argument("--save-transcript", metavar="PATH", default=None,
                         help="after the run, dump the structured history (topic, "
-                             "rounds, speaker turns, artifact_event, tool_call) "
+                             "turn marker, speaker turns, artifact_event, tool_call) "
                              "to PATH as JSON")
     args = parser.parse_args()
 
     meta, body = load_scenario(args.scenario)
     scenario_dir = os.path.dirname(os.path.abspath(args.scenario))
 
-    agent_names = {s["name"] for s in meta.get("members", [])}
-    if "moderator" in meta:
-        agent_names.add(meta["moderator"]["name"])
+    agents_cfg = meta.get("agents")
+    agent_names: set[str] = set()
+    agent_roles: dict[str, str] = {}
+    _validate_agents(agents_cfg, agent_names, agent_roles)
 
-    opening = meta.get("opening", [])
-    main_phases = meta.get("main", [])
-    closing = meta.get("closing", [])
-
-    _validate_oc_phases(opening, agent_names, "opening")
-    _validate_main_phases(main_phases, agent_names)
-    _validate_oc_phases(closing, agent_names, "closing")
+    steps_cfg = meta.get("steps")
+    _validate_steps(steps_cfg, agent_names, agent_roles)
 
     scenario_mem_cfg = meta.get("memory")
     _validate_memory(scenario_mem_cfg, "scenario")
-    for s in meta.get("members", []):
+    for s in agents_cfg:
         if "memory" in s:
-            _validate_memory(s["memory"], f"member '{s.get('name')}'")
-    if "moderator" in meta and "memory" in meta["moderator"]:
-        _validate_memory(meta["moderator"]["memory"],
-                         f"moderator '{meta['moderator'].get('name')}'")
+            _validate_memory(s["memory"], f"agent '{s.get('name')}'")
 
     artifact_cfg = meta.get("artifact")
-    _validate_artifact(artifact_cfg)
+    _validate_artifact(artifact_cfg, agent_names, agent_roles)
 
-    rounds = args.rounds or meta.get("rounds", 3)
     stream = not args.no_stream
 
     tool_configs = meta.get("tools", [])
@@ -418,17 +491,25 @@ def main() -> None:
 
     store: ArtifactStore | None = None
     if isinstance(artifact_cfg, dict) and artifact_cfg.get("enabled"):
-        store = ArtifactStore(initial_sections=artifact_cfg.get("initial_sections"))
+        resolved_owners = _resolve_tool_owners(
+            artifact_cfg.get("tool_owners"),
+            agents_cfg,
+            agent_roles,
+        )
+        store = ArtifactStore(
+            initial_sections=artifact_cfg.get("initial_sections"),
+            tool_owners=resolved_owners,
+        )
 
     # One tracer per Discussion; handed to both the per-agent handler (for
     # recording) and the Discussion (for draining into history).
     tracer = ToolTracer() if base_handler is not None else None
 
-    def _agent_bundle(agent_name: str, role: str):
-        """Compose per-agent (tool_defs, handler) baking in caller name + role."""
+    def _agent_bundle(agent_name: str):
+        """Compose per-agent (tool_defs, handler) baking in caller name."""
         defs = list(base_tool_defs)
         if store is not None:
-            defs.extend(store.build_tool_defs(role))
+            defs.extend(store.build_tool_defs(agent_name))
         if not defs:
             return None, None
 
@@ -446,28 +527,18 @@ def main() -> None:
 
         return defs, handler
 
-    members = []
-    for s in meta.get("members", []):
-        defs, handler = _agent_bundle(s["name"], role="member")
-        members.append(_build_agent(s, tool_defs=defs, tool_handler=handler,
-                                    scenario_mem_cfg=scenario_mem_cfg))
-
-    moderator = None
-    if "moderator" in meta:
-        mspec = meta["moderator"]
-        defs, handler = _agent_bundle(mspec["name"], role="moderator")
-        moderator = _build_agent(mspec, tool_defs=defs, tool_handler=handler,
-                                 scenario_mem_cfg=scenario_mem_cfg)
+    agents: list[Agent] = []
+    for s in agents_cfg:
+        defs, handler = _agent_bundle(s["name"])
+        agents.append(_build_agent(s, tool_defs=defs, tool_handler=handler,
+                                   scenario_mem_cfg=scenario_mem_cfg))
 
     history = Discussion(
-        members=members,
+        agents=agents,
+        agent_roles=agent_roles,
         topic=body,
-        opening=opening,
-        main=main_phases,
-        closing=closing,
-        rounds=rounds,
+        steps=steps_cfg,
         stream=stream,
-        moderator=moderator,
         artifact=store,
         tracer=tracer,
     ).run()

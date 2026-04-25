@@ -9,13 +9,19 @@ agents call through the standard ``tool_handler`` protocol:
   - ``append_section``    append an entry (blocked on replace-only)
   - ``propose_vote``      register a structured vote, returns vote_id
   - ``cast_vote``         record a ballot
-  - ``finalize_artifact`` moderator-only; seal the decision
+  - ``finalize_artifact`` seal the decision; idempotent
 
 Section modes are declared by the scenario author in ``initial_sections``.
 Agents pick the tool, ArtifactStore enforces the mode and returns a clear
 ``{"error": ...}`` on mismatch; the existing ``tools.warn_if_error`` catch-all
 surfaces it on stderr for the workshop audience, and the tool-loop in every
 backend client re-feeds it to the agent so it can self-correct.
+
+Tool permissions are governed by ``tool_owners``: scenario author declares
+``artifact.tool_owners`` mapping each tool to a role / ``all`` / agent name(s);
+``run.py`` resolves it to a flat ``{tool_name: [agent_name, ...]}`` allowlist
+that is then handed to ArtifactStore. Tools absent from the dict are open to
+every agent (including ``finalize_artifact`` — there is no built-in default).
 """
 
 from __future__ import annotations
@@ -37,8 +43,6 @@ ARTIFACT_TOOL_NAMES = frozenset({
     "finalize_artifact",
 })
 
-MODERATOR_ONLY_TOOLS = frozenset({"finalize_artifact", "propose_vote"})
-
 
 @dataclass
 class Vote:
@@ -49,9 +53,19 @@ class Vote:
 
 
 class ArtifactStore:
-    """In-memory artifact + voting state shared across one Discussion."""
+    """In-memory artifact + voting state shared across one Discussion.
 
-    def __init__(self, initial_sections: list | None = None) -> None:
+    ``tool_owners`` is the **resolved** allowlist (run.py expands the scenario's
+    role/all/name shorthand into agent-name lists before constructing the store).
+    A tool absent from the dict is open to every agent; explicit ``[]`` is
+    rejected upstream by the schema validator.
+    """
+
+    def __init__(
+        self,
+        initial_sections: list | None = None,
+        tool_owners: dict[str, list[str]] | None = None,
+    ) -> None:
         self.sections: dict[str, str] = {}
         self.section_modes: dict[str, str] = {}  # declared sections only
         self.votes: dict[str, Vote] = {}
@@ -60,6 +74,7 @@ class ArtifactStore:
         self.final_rationale: str | None = None
         self._events: list[dict] = []
         self._next_vote_num: int = 1
+        self._tool_owners: dict[str, list[str]] = dict(tool_owners or {})
 
         for item in initial_sections or []:
             if isinstance(item, str):
@@ -105,7 +120,20 @@ class ArtifactStore:
         return events
 
     def dispatch(self, name: str, args: dict, *, caller: str) -> str:
-        """Route a tool call to the right handler; surface errors on stderr."""
+        """Route a tool call to the right handler; surface errors on stderr.
+
+        Defensive permission check: the per-agent ``build_tool_defs`` already
+        hides unauthorized tools, but a hallucinated call still reaches here.
+        Reject with a structured error so the model can self-correct in the
+        same tool loop.
+        """
+        owners = self._tool_owners.get(name)
+        if owners is not None and caller not in owners:
+            result = json.dumps({
+                "error": f"{name}: caller '{caller}' not in tool_owners for this tool",
+            })
+            warn_if_error(name, result)
+            return result
         handler = _HANDLERS.get(name)
         if handler is None:
             result = json.dumps({"error": f"Unknown artifact tool: {name}"})
@@ -117,15 +145,20 @@ class ArtifactStore:
         warn_if_error(name, result)
         return result
 
-    def build_tool_defs(self, role: str) -> list[dict]:
-        """Return OpenAI-format tool defs visible to an agent of *role*.
+    def build_tool_defs(self, caller: str) -> list[dict]:
+        """Return OpenAI-format tool defs visible to agent *caller*.
 
-        ``role`` is either ``"moderator"`` or ``"member"``.  Moderators get the
-        full set including ``finalize_artifact``; members get everything else.
+        Filtering rule: a tool listed in ``tool_owners`` is hidden from any
+        agent not in its owner list; tools absent from ``tool_owners`` are
+        visible to everyone.
         """
-        defs = [d for d in _TOOL_DEFS if d["function"]["name"] not in MODERATOR_ONLY_TOOLS]
-        if role == "moderator":
-            defs = list(_TOOL_DEFS)  # includes finalize
+        defs = []
+        for d in _TOOL_DEFS:
+            tool_name = d["function"]["name"]
+            owners = self._tool_owners.get(tool_name)
+            if owners is not None and caller not in owners:
+                continue
+            defs.append(d)
         return defs
 
     # -- internals ----------------------------------------------------------
@@ -343,7 +376,7 @@ _TOOL_DEFS: list[dict] = [
             "name": "propose_vote",
             "description": (
                 "Register a structured vote. Returns a vote_id that others "
-                "pass to cast_vote. Moderator only."
+                "pass to cast_vote."
             ),
             "parameters": {
                 "type": "object",
@@ -396,7 +429,7 @@ _TOOL_DEFS: list[dict] = [
             "name": "finalize_artifact",
             "description": (
                 "Seal the artifact with a final decision and rationale. "
-                "Moderator only; idempotent — a second call returns an error."
+                "Idempotent — a second call returns an error."
             ),
             "parameters": {
                 "type": "object",

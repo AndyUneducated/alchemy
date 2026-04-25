@@ -1,4 +1,11 @@
-"""Phase-driven multi-agent conversation engine."""
+"""Step-driven multi-agent conversation engine.
+
+Scenario flow is a single flat ``steps:`` list. Each step's ``who`` is one
+of: scalar role (``moderator`` / ``member``), scalar keyword ``all``, or
+a list of agent names. The engine expands every step into one or more
+``turns`` (one turn per matched agent), assigns each turn a globally
+monotonic counter ``<turn>turn X of N</turn>``, and runs them sequentially.
+"""
 
 from __future__ import annotations
 
@@ -14,8 +21,9 @@ if TYPE_CHECKING:
 SEPARATOR = "-" * 60
 
 
-def _print_speaker(name: str) -> None:
-    sys.stdout.write(f"\n🗣  [{name}]: ")
+def _print_speaker(name: str, step_id: str | None = None) -> None:
+    suffix = f" (step={step_id})" if step_id else ""
+    sys.stdout.write(f"\n🗣  [{name}]{suffix}: ")
     sys.stdout.flush()
 
 
@@ -28,84 +36,94 @@ def _called_tool(events: list[dict], caller: str, tool: str) -> bool:
 
 
 class Discussion:
-    """Execute a multi-agent discussion with opening, main, and closing phases.
+    """Execute a multi-agent discussion as a flat sequence of turns.
 
-    *opening* and *closing* phases run once.  *main* phases repeat for
-    *rounds* iterations, resolved per-round via the ``round`` field:
-
-      1. Exact match on ``round: <int>``
-      2. Fallback to ``round: "default"``
-      3. Implicit default — all participants speak, no instruction
+    The schema-level concept is ``steps`` (declarative); each step expands
+    into one or more ``turns`` (runtime execution units). The total turn
+    count ``N`` is precomputed at construction so each turn can be tagged
+    ``<turn>turn X of N</turn>`` for the agent's positional awareness.
     """
 
     def __init__(
         self,
-        members: list[Agent],
+        agents: list[Agent],
+        agent_roles: dict[str, str],
         topic: str,
         *,
-        opening: list[dict] | None = None,
-        main: list[dict] | None = None,
-        closing: list[dict] | None = None,
-        rounds: int,
+        steps: list[dict],
         stream: bool = True,
-        moderator: Agent | None = None,
         artifact: "ArtifactStore | None" = None,
         tracer: "ToolTracer | None" = None,
     ) -> None:
-        self.members = members
+        self.agents = agents
+        self.agent_roles = agent_roles
         self.topic = topic
-        self.opening = opening or []
-        self.main = main or []
-        self.closing = closing or []
-        self.rounds = rounds
+        self.steps = steps
         self.stream = stream
-        self.moderator = moderator
         self.artifact = artifact
         self.tracer = tracer
         self.history: list[dict] = []
+        self._by_name: dict[str, "Agent"] = {a.name: a for a in agents}
+        self._expanded: list[tuple["Agent", dict]] = self._expand_steps()
+
+    # -- public ------------------------------------------------------------
 
     def run(self) -> list[dict]:
-        self._print_header()
-        self.history.append({"type": "topic", "content": self.topic, "ts": time.time()})
+        total = len(self._expanded)
+        self._print_header(total)
+        self.history.append({
+            "type": "topic", "content": self.topic, "ts": time.time(),
+        })
 
-        if self.opening:
-            self.history.append({"type": "phase", "content": "opening", "ts": time.time()})
-            for phase in self.opening:
-                self._exec_phase(phase)
-
-        for round_num in range(1, self.rounds + 1):
-            print(f"\n{SEPARATOR}\n  Round {round_num}\n{SEPARATOR}")
+        for idx, (agent, step) in enumerate(self._expanded, 1):
+            marker = f"turn {idx} of {total}"
             self.history.append({
-                "type": "round",
-                "content": f"Round {round_num}/{self.rounds}",
-                "ts": time.time(),
+                "type": "turn", "content": marker, "ts": time.time(),
             })
-            phases = [p for p in self.main if p["round"] == round_num]
-            if not phases:
-                phases = [p for p in self.main if p["round"] == "default"]
-            if not phases:
-                phases = [{"who": "all", "round": "default"}]
-            for phase in phases:
-                self._exec_phase(phase)
-
-        if self.closing:
-            self.history.append({"type": "phase", "content": "closing", "ts": time.time()})
-            for phase in self.closing:
-                self._exec_phase(phase)
+            instruction = step.get("instruction")
+            require_tool = step.get("require_tool")
+            # default to 1 retry when a tool is required; else 0 (no nudge)
+            max_retries = int(step.get("max_retries", 1 if require_tool else 0))
+            step_id = step.get("id")
+            self._run_turn(agent, step_id, instruction, require_tool, max_retries)
 
         print(f"\n{'=' * 60}\n  End\n{'=' * 60}\n")
         return self.history
 
-    def _exec_phase(self, phase: dict) -> None:
-        instruction = phase.get("instruction")
-        require_tool = phase.get("require_tool")
-        # default to 1 retry when a tool is required; else 0 (legacy behavior)
-        max_retries = int(phase.get("max_retries", 1 if require_tool else 0))
-        for agent in self._resolve_who(phase["who"]):
-            self._run_turn(agent, instruction, require_tool, max_retries)
+    # -- internals ---------------------------------------------------------
 
-    def _run_turn(self, agent: "Agent", instruction: str | None,
-                  require_tool: str | None, max_retries: int) -> None:
+    def _expand_steps(self) -> list[tuple["Agent", dict]]:
+        """Resolve each step's ``who`` once, in declaration order."""
+        out: list[tuple[Agent, dict]] = []
+        for step in self.steps:
+            for agent in self._resolve_who(step["who"]):
+                out.append((agent, step))
+        return out
+
+    def _resolve_who(self, who) -> list["Agent"]:
+        """Map a step's ``who`` value to the ordered list of agents.
+
+        Two literal forms (validated upstream by ``run.py``):
+        - scalar ``str`` ∈ {moderator, member, all}
+        - ``list[str]`` of agent names
+        """
+        if isinstance(who, str):
+            if who == "all":
+                return list(self.agents)
+            return [a for a in self.agents if self.agent_roles.get(a.name) == who]
+        if isinstance(who, list):
+            return [self._by_name[n] for n in who]
+        # Should never reach here — schema validator rejects other types.
+        raise TypeError(f"Unsupported who form: {who!r}")
+
+    def _run_turn(
+        self,
+        agent: "Agent",
+        step_id: str | None,
+        instruction: str | None,
+        require_tool: str | None,
+        max_retries: int,
+    ) -> None:
         """Run one agent's turn, optionally retrying if require_tool wasn't called.
 
         The nudge on retry is passed as an ``instruction`` override — it's
@@ -114,7 +132,7 @@ class Discussion:
         """
         current_instruction = instruction
         for attempt in range(max_retries + 1):
-            _print_speaker(agent.name)
+            _print_speaker(agent.name, step_id)
             view = self.artifact.render() if self.artifact else None
             reply = agent.respond(
                 self.history,
@@ -159,27 +177,9 @@ class Discussion:
                 f"请现在补上该调用以完成本轮任务。"
             )
 
-    def _resolve_who(self, who: str) -> list[Agent]:
-        if who == "members":
-            return self.members
-        if who == "moderator":
-            return [self.moderator] if self.moderator else []
-        if who == "all":
-            result: list[Agent] = []
-            if self.moderator:
-                result.append(self.moderator)
-            result.extend(self.members)
-            return result
-        all_agents = list(self.members)
-        if self.moderator:
-            all_agents.append(self.moderator)
-        return [a for a in all_agents if a.name == who]
-
-    def _print_header(self) -> None:
-        names = [a.name for a in self.members]
-        if self.moderator:
-            names.insert(0, self.moderator.name)
+    def _print_header(self, total_turns: int) -> None:
+        names = [a.name for a in self.agents]
         print(f"\n{'=' * 60}")
         print(f"  Participants: {', '.join(names)}")
-        print(f"  Rounds: {self.rounds}")
+        print(f"  Steps: {len(self.steps)}  |  Total turns: {total_turns}")
         print(f"{'=' * 60}")
