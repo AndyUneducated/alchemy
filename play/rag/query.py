@@ -109,14 +109,53 @@ def query(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Query a ChromaDB VDB")
-    parser.add_argument("--vdb", required=True, help="path to VDB directory")
-    parser.add_argument("--query", required=True, help="query text")
-    parser.add_argument("--top-k", type=int, default=5, help="number of results")
-    parser.add_argument("--model", default=None, help="override embedding model")
-    parser.add_argument("--collection", default=None, help="collection name")
-    parser.add_argument("--json", action="store_true",
-                        help="output JSON for machine consumption")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Similarity search over a ChromaDB VDB produced by ingest.py. "
+            "Defaults to human-readable output; --json switches to machine mode "
+            "(pure JSON on stdout, warnings on stderr).\n"
+            "Typical usage: python query.py --vdb vdb/panel --query \"cash flow\" --top-k 5"
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--vdb", required=True,
+        help="VDB directory (output of ingest --output); metadata.json is read "
+             "at startup to pick the embedding model",
+    )
+    parser.add_argument(
+        "--query", required=True,
+        help="query text; Chinese / English / mixed all supported",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=5,
+        help="return the top-N most similar chunks; clamped by ChromaDB if it "
+             "exceeds the total chunk count",
+    )
+    parser.add_argument(
+        "--model", default=None,
+        help=(
+            "explicitly override the embedding model; by default reuses the "
+            "stored model from VDB metadata.json. A mismatch only logs a "
+            "WARNING to stderr (does not fail)"
+        ),
+    )
+    parser.add_argument(
+        "--collection", default=None,
+        help=(
+            "collection name; optional for single-collection VDBs; for "
+            "multi-collection VDBs without this flag, the first one is used "
+            "and a notice is printed to stderr"
+        ),
+    )
+    parser.add_argument(
+        "--json", action="store_true",
+        help=(
+            "machine-consumption mode: stdout emits a pure JSON array of "
+            "SearchResult (no banner / separators); warnings still go to "
+            "stderr so subprocess callers can split them"
+        ),
+    )
     args = parser.parse_args()
 
     if args.json:

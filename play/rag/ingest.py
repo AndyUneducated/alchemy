@@ -108,14 +108,52 @@ def ingest(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest documents into a ChromaDB VDB")
-    parser.add_argument("--docs", required=True, nargs="+",
-                        help="files or directories of .txt/.md/.pdf documents")
-    parser.add_argument("--output", required=True, help="output VDB directory")
-    parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE)
-    parser.add_argument("--overlap", type=int, default=CHUNK_OVERLAP)
-    parser.add_argument("--model", default=EMBED_MODEL, help="Ollama embedding model")
-    parser.add_argument("--collection", default=None, help="ChromaDB collection name")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Read .txt/.md/.pdf documents, chunk by paragraphs, embed via Ollama, "
+            "and persist to a ChromaDB directory-style VDB (with metadata.json "
+            "as consistency sentinel).\n"
+            "Typical usage: python ingest.py --docs docs/panel --output vdb/panel"
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--docs", required=True, nargs="+",
+        help=(
+            "one or more file/directory paths (mixable); directories are walked "
+            "alphabetically, only .txt/.md/.pdf (case-insensitive) are kept, "
+            "empty files are silently skipped"
+        ),
+    )
+    parser.add_argument(
+        "--output", required=True,
+        help=(
+            "VDB output directory (auto-created); contains chroma.sqlite3 + "
+            "metadata.json; the whole directory is portable via cp -r"
+        ),
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=CHUNK_SIZE,
+        help="target chars per chunk (not tokens); paragraph boundaries preferred, "
+             "oversized paragraphs fall back to hard char-split",
+    )
+    parser.add_argument(
+        "--overlap", type=int, default=CHUNK_OVERLAP,
+        help="max trailing chars carried into next chunk (whole paragraphs only); "
+             "must be < chunk-size",
+    )
+    parser.add_argument(
+        "--model", default=EMBED_MODEL,
+        help=(
+            "any ollama-pulled embedding model; written to metadata.json so "
+            "query side reuses it by default and avoids silent model mismatch"
+        ),
+    )
+    parser.add_argument(
+        "--collection", default=None,
+        help="ChromaDB collection name; defaults to basename(--output); "
+             "specify when multiple collections share a VDB dir",
+    )
     args = parser.parse_args()
 
     ingest(
