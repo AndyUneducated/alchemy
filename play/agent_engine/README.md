@@ -1,4 +1,4 @@
-# play/multiagent
+# play/agent_engine
 
 Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatter 声明参与者 / 流程 / 工具 / memory / artifact，body 即话题。共享 transcript + per-agent 投影，支持 ollama / openai / anthropic / gemini 四个后端，可被 `[play/rag/](../rag/)` 通过 subprocess 喂数据。
 
@@ -82,7 +82,7 @@ flowchart TB
 | **Planning / 规划**           | scenario `steps` 声明式列表；`who` 路由（role/all/name）；`require_tool` + `max_retries` 行为约束                                  |
 | **Reasoning / 推理**          | `Agent.respond()` + persona system prompt + per-step instruction；backend client 内的 tool-use loop（多轮 function calling） |
 | **Memory / 记忆**             | shared transcript（`Discussion.history` 唯一权威）+ per-agent `Memory.build_messages` 投影；`Full / Window / Summary` 三策略可换 |
-| **Tool Use / 工具**           | `tools.py` dispatch + scenario default 注入 + path 解析；`ArtifactStore` 6 工具（`read/write/append/propose/cast/finalize`）+ `tool_owners` ACL |
+| **Tool Use / 工具**           | `tools/` 包 dispatch + scenario default 注入 + path 解析；`ArtifactStore` 6 工具（`read/write/append/propose/cast/finalize`）+ `tool_owners` ACL |
 | **LLM Core / 大模型核心**        | 4 个 pluggable backend client（ollama / openai / anthropic / gemini），`config.BACKEND` 一行切换；`config.py` 集中模型 / temperature / max_tokens / 各家 API key |
 | **Infrastructure / 基础设施**   | Subprocess 沙箱（`subprocess.run([python, rag/query.py, --json])` 隔离 `config.py` / 依赖）；`play/rag/` 提供 Vector DB + BM25；`ToolTracer` 双 sink + `artifact_event` 流 + JSON transcript 落盘 |
 
@@ -274,7 +274,7 @@ ollama pull qwen2.5:32b
 
 ## 快速开始
 
-在 `play/multiagent/` 目录下：
+在 `play/agent_engine/` 目录下：
 
 ```bash
 # 1. 经典圆桌（主持人 + 2 嘉宾）
@@ -375,7 +375,7 @@ YAML frontmatter 字段：
 ## 项目结构
 
 ```
-play/multiagent/
+play/agent_engine/
 ├── README.md                   # 本文件
 ├── DESIGN_DECISIONS.md         # 设计决策时间线（按时间顺序）
 ├── requirements.txt            # anthropic / google-genai / openai / pyyaml
@@ -385,7 +385,7 @@ play/multiagent/
 ├── agent.py                    # Agent.respond() + memory 投影入口
 ├── memory.py                   # FullHistory / WindowMemory / SummaryMemory
 ├── artifact.py                 # ArtifactStore + 6 工具 + 投票 + finalize
-├── tools.py                    # TOOL_DEFINITIONS + dispatch + retrieve_docs
+├── tools/                      # reasoning tool 包（_envelope / _subprocess / retrieve_docs / __init__）
 ├── anthropic_client.py         # 后端 client（含 tool_handler loop）
 ├── openai_client.py            #
 ├── gemini_client.py            #

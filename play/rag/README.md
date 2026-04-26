@@ -1,6 +1,6 @@
 # play/rag
 
-本地优先的两阶段 RAG 工具集：**dense (Ollama embedding) + BM25 + RRF 融合**做召回，可选 **cross-encoder（`bge-reranker-v2-m3`）** 精排。CLI 与程序化 API 两用，可被外部工具（如 `[play/multiagent/](../multiagent/)`）通过 subprocess + JSON envelope 消费。
+本地优先的两阶段 RAG 工具集：**dense (Ollama embedding) + BM25 + RRF 融合**做召回，可选 **cross-encoder（`bge-reranker-v2-m3`）** 精排。CLI 与程序化 API 两用，可被外部工具（如 `[play/agent_engine/](../agent_engine/)`）通过 subprocess + JSON envelope 消费。
 
 ## 特性
 

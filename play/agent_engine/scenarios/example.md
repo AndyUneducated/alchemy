@@ -38,7 +38,7 @@ tools:
   # "scenario 注入的默认参数"——这些参数会从 LLM 看到的 schema 中**隐藏**，
   # LLM 不需要也无法填写；调用时由 run.py 注入到 dispatch。
   #
-  # 路径类参数（在 tools.py 里通过 `_path_params` 声明，目前只有 `vdb_dir`）
+  # 路径类参数（在 tools/ 包里通过 `_path_params` 声明，目前只有 `vdb_dir`）
   # 若是相对路径，会被解析为相对于本 scenario 文件所在目录的绝对路径，
   # 这样 scenario 不依赖调用时的 cwd。
   - name: retrieve_docs
