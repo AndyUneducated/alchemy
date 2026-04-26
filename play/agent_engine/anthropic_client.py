@@ -8,7 +8,7 @@ from typing import Callable
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY, MAX_TOKENS, TEMPERATURE
+from .config import ANTHROPIC_API_KEY, MAX_TOKENS, TEMPERATURE
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 

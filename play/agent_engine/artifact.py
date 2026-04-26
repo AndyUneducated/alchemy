@@ -19,9 +19,10 @@ backend client re-feeds it to the agent so it can self-correct.
 
 Tool permissions are governed by ``tool_owners``: scenario author declares
 ``artifact.tool_owners`` mapping each tool to a role / ``all`` / agent name(s);
-``run.py`` resolves it to a flat ``{tool_name: [agent_name, ...]}`` allowlist
-that is then handed to ArtifactStore. Tools absent from the dict are open to
-every agent (including ``finalize_artifact`` — there is no built-in default).
+``scenario.py`` resolves it to a flat ``{tool_name: [agent_name, ...]}``
+allowlist that is then handed to ArtifactStore. Tools absent from the dict
+are open to every agent (including ``finalize_artifact`` — there is no
+built-in default).
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from tools import warn_if_error
+from .tools import warn_if_error
 
 
 ARTIFACT_TOOL_NAMES = frozenset({
@@ -55,7 +56,7 @@ class Vote:
 class ArtifactStore:
     """In-memory artifact + voting state shared across one Discussion.
 
-    ``tool_owners`` is the **resolved** allowlist (run.py expands the scenario's
+    ``tool_owners`` is the **resolved** allowlist (scenario.py expands the scenario's
     role/all/name shorthand into agent-name lists before constructing the store).
     A tool absent from the dict is open to every agent; explicit ``[]`` is
     rejected upstream by the schema validator.

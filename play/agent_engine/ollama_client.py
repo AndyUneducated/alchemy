@@ -7,7 +7,7 @@ import sys
 import urllib.request
 from typing import Callable
 
-from config import OLLAMA_BASE_URL, MAX_TOKENS, TEMPERATURE
+from .config import OLLAMA_BASE_URL, MAX_TOKENS, TEMPERATURE
 
 MAX_TOOL_ROUNDS = 5
 

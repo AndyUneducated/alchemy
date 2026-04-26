@@ -4,7 +4,7 @@
 # 这是一个**可运行**的 scenario，同时把每个 frontmatter 字段都用上一次。
 # 每行 `#` 注释解释该字段的语义、取值、默认。删掉所有注释后即得最小可读形式。
 #
-#   python run.py scenarios/example.md
+#   python -m agent_engine scenarios/example.md
 #
 # 运行前提：`../../rag/vdb/test_vdb` 已存在（test_vdb.md 用同一份 vdb）。
 # 不想跑 retrieve_docs？删掉 frontmatter 里的整个 `tools:` 块即可。
@@ -36,7 +36,7 @@ memory:
 tools:
   # 列举本场景启用的非 artifact 工具。每项必填 `name`，其余键作为
   # "scenario 注入的默认参数"——这些参数会从 LLM 看到的 schema 中**隐藏**，
-  # LLM 不需要也无法填写；调用时由 run.py 注入到 dispatch。
+  # LLM 不需要也无法填写；调用时由 scenario.py 的 _build_tool_handler 注入到 dispatch。
   #
   # 路径类参数（在 tools/ 包里通过 `_path_params` 声明，目前只有 `vdb_dir`）
   # 若是相对路径，会被解析为相对于本 scenario 文件所在目录的绝对路径，
@@ -45,7 +45,7 @@ tools:
     vdb_dir: ../../rag/vdb/test_vdb
     top_k: 3
     # 这里列出的**任何键**（除 `name`）都会被 _resolve_tool_defs 从 LLM
-    # 看到的 schema 中删除并由 run.py 注入——这就是"scenario pin"。所以
+    # 看到的 schema 中删除并由 scenario.py 注入——这就是"scenario pin"。所以
     # `vdb_dir` / `top_k` 在本场景里 LLM 都看不到、也填不了。
     # 没列在这里的参数（如 mode / rerank）保持 LLM-visible，可由 LLM 在
     # tool_call 时自由选择：
@@ -228,7 +228,7 @@ steps:
    不阻塞演示，但留下可见痕迹。
 
 5. **tools 隐藏机制**——`tools:` 下声明的 scenario 默认参数（如 `vdb_dir`）
-   会从 LLM 看到的 OpenAI tool schema 中删除，调用时由 run.py 注入。LLM 既
+   会从 LLM 看到的 OpenAI tool schema 中删除，调用时由 scenario.py 注入。LLM 既
    不需要知道路径，也无法覆盖。`_path_params` 标记的路径参数还会自动按
    scenario 文件所在目录解析相对路径——scenario 因此可以从任何 cwd 调起。
 

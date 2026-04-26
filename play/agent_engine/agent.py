@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import Callable
 
-from config import BACKEND, DEFAULT_MODEL, MAX_TOKENS, TEMPERATURE
-from memory import ConversationMemory, FullHistory
+from .config import BACKEND, DEFAULT_MODEL, MAX_TOKENS, TEMPERATURE
+from .memory import ConversationMemory, FullHistory
 
 if BACKEND == "anthropic":
-    import anthropic_client as _client
+    from . import anthropic_client as _client
 elif BACKEND == "openai":
-    import openai_client as _client
+    from . import openai_client as _client
 elif BACKEND == "gemini":
-    import gemini_client as _client
+    from . import gemini_client as _client
 else:
-    import ollama_client as _client
+    from . import ollama_client as _client
 
 
 class Agent:

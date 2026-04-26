@@ -8,7 +8,7 @@ from typing import Callable
 
 from openai import OpenAI
 
-from config import MAX_TOKENS, OPENAI_API_KEY, OPENAI_BASE_URL, TEMPERATURE
+from .config import MAX_TOKENS, OPENAI_API_KEY, OPENAI_BASE_URL, TEMPERATURE
 
 _client = OpenAI(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
 

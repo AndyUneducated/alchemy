@@ -71,9 +71,9 @@ TOOL_DEF: dict = {
             "required": ["query", "vdb_dir"],
         },
     },
-    # Non-OpenAI-standard hint read by run.py: parameter names whose
-    # scenario-level default values are filesystem paths, so run.py should
-    # resolve relative paths against the scenario file's directory.
+    # Non-OpenAI-standard hint read by scenario.py: parameter names whose
+    # scenario-level default values are filesystem paths, so scenario.py
+    # resolves relative paths against the scenario file's directory.
     "_path_params": {"vdb_dir"},
 }
 

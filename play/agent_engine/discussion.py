@@ -14,9 +14,9 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent import Agent
-    from artifact import ArtifactStore
-    from run import ToolTracer
+    from .agent import Agent
+    from .artifact import ArtifactStore
+    from .tracer import ToolTracer
 
 SEPARATOR = "-" * 60
 
@@ -63,6 +63,10 @@ class Discussion:
         self.artifact = artifact
         self.tracer = tracer
         self.history: list[dict] = []
+        # Soft failures captured for Engine.invoke() -> Result.warnings.
+        # Each string mirrors a stderr "WARNING:" line (no double bookkeeping
+        # of meaning — the stderr line stays for live workshop visibility).
+        self.warnings: list[str] = []
         self._by_name: dict[str, "Agent"] = {a.name: a for a in agents}
         self._expanded: list[tuple["Agent", dict]] = self._expand_steps()
 
@@ -103,7 +107,7 @@ class Discussion:
     def _resolve_who(self, who) -> list["Agent"]:
         """Map a step's ``who`` value to the ordered list of agents.
 
-        Two literal forms (validated upstream by ``run.py``):
+        Two literal forms (validated upstream by ``scenario.py``):
         - scalar ``str`` ∈ {moderator, member, all}
         - ``list[str]`` of agent names
         """
@@ -160,11 +164,12 @@ class Discussion:
                 return
 
             if attempt >= max_retries:
-                print(
-                    f"WARNING: {agent.name} skipped required tool "
-                    f"'{require_tool}' after {attempt + 1} attempt(s)",
-                    file=sys.stderr, flush=True,
+                msg = (
+                    f"{agent.name} skipped required tool "
+                    f"'{require_tool}' after {attempt + 1} attempt(s)"
                 )
+                print(f"WARNING: {msg}", file=sys.stderr, flush=True)
+                self.warnings.append(msg)
                 return
 
             print(

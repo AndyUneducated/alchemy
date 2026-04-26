@@ -9,7 +9,7 @@ from typing import Callable
 from google import genai
 from google.genai import types
 
-from config import GEMINI_API_KEY, MAX_TOKENS, TEMPERATURE
+from .config import GEMINI_API_KEY, MAX_TOKENS, TEMPERATURE
 
 _client = genai.Client(api_key=GEMINI_API_KEY)
 

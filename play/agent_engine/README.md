@@ -24,13 +24,13 @@ Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatt
 ```mermaid
 flowchart TB
     subgraph UI["🖥 用户接口层 / User Interface Layer"]
-        cli["run.py CLI<br/>argparse: scenario.md · --no-stream<br/>--save-artifact / --save-transcript"]
+        cli["python -m agent_engine CLI<br/>(cli.py: argparse → Engine.invoke)<br/>scenario.md · --no-stream · --save-* PATH"]
         io["stdout: 🗣 speaker / 🔧 tool / 📝➕🗳✓🏁 artifact<br/>stderr: 🔁 retry · WARNING"]
         scn["scenario.md<br/>(YAML frontmatter + body)"]
     end
 
     subgraph ORCH["🎬 编排层 / Orchestration Layer"]
-        asm["composition root (run.py)<br/>schema validate · 装配 Agent/Memory/ACL"]
+        asm["composition root (scenario.Scenario)<br/>schema validate · 装配 Agent/Memory/ACL"]
         disc["Discussion (discussion.py)<br/>steps → turns 展开<br/>+ &lt;turn X of N&gt; pinned marker"]
         route["_resolve_who<br/>role / all / name 路由寻址"]
         retry["_run_turn retry loop<br/>require_tool · nudge · WARNING"]
@@ -77,8 +77,8 @@ flowchart TB
 
 | 层                           | 本项目里的具体落地                                                                                                          |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **UI / 用户接口**               | `run.py` argparse；scenario `.md` 输入；stdout 流式发言 + emoji 实时事件、stderr WARNING；`--save-artifact` / `--save-transcript` 落盘 |
-| **Orchestration / 编排**      | `run.py` composition root（schema 校验 + 装配）；`discussion.py` Discussion 引擎（steps → turns + `<turn X of N>` marker + retry 闭环） |
+| **UI / 用户接口**               | Python API `Engine.invoke(...)` (库 SoT) + `cli.py` 作为 thin adapter (`python -m agent_engine`) ；scenario `.md` 输入；stdout 流式发言 + emoji 实时事件、stderr WARNING；`artifact_path` / `transcript_path` 落盘 |
+| **Orchestration / 编排**      | `scenario.Scenario` (schema 校验 + 装配)；`engine.Engine` 库化壳子；`discussion.py` Discussion 引擎（steps → turns + `<turn X of N>` marker + retry 闭环） |
 | **Planning / 规划**           | scenario `steps` 声明式列表；`who` 路由（role/all/name）；`require_tool` + `max_retries` 行为约束                                  |
 | **Reasoning / 推理**          | `Agent.respond()` + persona system prompt + per-step instruction；backend client 内的 tool-use loop（多轮 function calling） |
 | **Memory / 记忆**             | shared transcript（`Discussion.history` 唯一权威）+ per-agent `Memory.build_messages` 投影；`Full / Window / Summary` 三策略可换 |
@@ -88,13 +88,13 @@ flowchart TB
 
 ### 组件总览
 
-`run.py` 作为 composition root 把 scenario 装配成运行时对象图；`Discussion` 持有唯一权威 `history`，`Agent` 通过 `Memory` 投影读取它，`ArtifactStore` / `ToolTracer` 各自往 `history` 反向写事件。
+`scenario.Scenario` 作为 composition root 把 scenario.md 装配成运行时对象图（`Assembly`），由 `engine.Engine` 串到 `Discussion`；`Discussion` 持有唯一权威 `history`，`Agent` 通过 `Memory` 投影读取它，`ArtifactStore` / `ToolTracer` 各自往 `history` 反向写事件。
 
 ```mermaid
 flowchart TB
     scenario["scenario.md<br/>YAML frontmatter + body"]
 
-    subgraph rt["run.py — composition root"]
+    subgraph rt["scenario.Scenario — composition root"]
         val["schema validate<br/>(fail-fast)"]
         asm["assemble<br/>Agent + Memory + ACL"]
     end
@@ -132,7 +132,7 @@ flowchart TB
 
 ### Scenario → 运行时装配
 
-YAML 字段与 runtime 对象一一对应；`run.py` 是唯一知道这些映射的地方。
+YAML 字段与 runtime 对象一一对应；`scenario.py` 是唯一知道这些映射的地方。
 
 ```mermaid
 flowchart LR
@@ -274,17 +274,38 @@ ollama pull qwen2.5:32b
 
 ## 快速开始
 
-在 `play/agent_engine/` 目录下：
+### 作为 Python 库（library, source of truth）
+
+```python
+from agent_engine import Engine, Scenario
+
+scenario = Scenario.from_yaml("scenarios/roundtable.md")
+engine = Engine(scenario)
+result = engine.invoke(
+    initial_artifact={"PRD": "..."},          # 可选; 预填 artifact section
+    transcript_path="/tmp/transcript.json",   # 可选; 落盘结构化 history
+    artifact_path="/tmp/artifact.md",         # 可选; 落盘渲染后 markdown
+    print_stream=False,                       # 库默认安静; CLI 默认 True
+)
+result.artifact     # dict[section_name, content]
+result.transcript   # list[Entry]
+result.success      # bool (True iff no warnings)
+result.warnings     # require_tool 用尽等软失败
+```
+
+### 作为 CLI（thin adapter）
+
+在仓库根目录（或 `play/`）下：
 
 ```bash
 # 1. 经典圆桌（主持人 + 2 嘉宾）
-python run.py scenarios/roundtable.md
+python -m agent_engine scenarios/roundtable.md
 
 # 2. 决策会议（主持人 + 4 成员，11 步 25 turn，带 artifact + 投票 + finalize）
-python run.py scenarios/panel.md --save-artifact /tmp/panel.md
+python -m agent_engine scenarios/panel.md --save-artifact /tmp/panel.md
 
 # 3. RAG 工具烟囱测试（agents 通过 subprocess 调 rag）
-python run.py scenarios/test_vdb.md
+python -m agent_engine scenarios/test_vdb.md
 ```
 
 预期输出片段：
@@ -303,12 +324,12 @@ python run.py scenarios/test_vdb.md
 
 ## CLI 速查
 
-> 完整说明见 `python run.py --help`。
+> 完整说明见 `python -m agent_engine --help`。
 
 | 参数                  | 必选   | 默认           | 说明                                                                |
 | ------------------- | ---- | ------------ | ----------------------------------------------------------------- |
 | `scenario`          | 是    | —            | scenario `.md` 文件路径                                               |
-| `--no-stream`       | flag | `False`      | 关闭流式输出                                                            |
+| `--no-stream`       | flag | `False`      | 关闭流式输出（CLI 默认开；库调用默认关）                                          |
 | `--save-artifact`   | 否    | —            | 把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效）              |
 | `--save-transcript` | 否    | —            | 落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON |
 
@@ -341,7 +362,7 @@ YAML frontmatter 字段：
 | --------- | ---------------- | ------------------------------------------------------------- |
 | `full`    | —                | 默认；保留全量 history                                               |
 | `window`  | `max_recent`     | 保留所有 pinned marker + 最近 N 条发言                                 |
-| `summary` | `max_recent` + 可选 `model / max_tokens / temperature / summarizer_prompt / summarize_instruction` | stale 发言增量折叠进 `<summary>` block；client 由 `run.py` 注入 |
+| `summary` | `max_recent` + 可选 `model / max_tokens / temperature / summarizer_prompt / summarize_instruction` | stale 发言增量折叠进 `<summary>` block；client 由 `Engine.invoke()` 装配时注入 |
 
 ### Artifact 工具
 
@@ -380,7 +401,15 @@ play/agent_engine/
 ├── DESIGN_DECISIONS.md         # 设计决策时间线（按时间顺序）
 ├── requirements.txt            # anthropic / google-genai / openai / pyyaml
 ├── config.py                   # BACKEND + 各家 model/key/默认参数
-├── run.py                      # CLI + composition root（装配点集中）
+├── __init__.py                 # 导出 Engine / Scenario / Result / Callback
+├── __main__.py                 # python -m agent_engine 入口
+├── cli.py                      # zero-logic CLI: argparse → Engine.invoke
+├── engine.py                   # Engine class (invoke / ainvoke* / stream* / astream*)
+├── result.py                   # Result dataclass (artifact / transcript / success / warnings)
+├── events.py                   # Event base + 5 子类（流式占位，今天仅 RunFinished 触发）
+├── callbacks.py                # Callback base（on_xxx 方法）
+├── scenario.py                 # Scenario.from_yaml + 装配 Assembly
+├── tracer.py                   # ToolTracer（非 artifact tool 调用事件 + stderr 🔧）
 ├── discussion.py               # Discussion 引擎：扁平 steps -> 线性 turn
 ├── agent.py                    # Agent.respond() + memory 投影入口
 ├── memory.py                   # FullHistory / WindowMemory / SummaryMemory
