@@ -21,7 +21,10 @@ Unless the user names another path, **create new experiments under `play/`**.
 
 - **Minimal diffs**: only what the task needs; no drive-by refactors or unrelated files.
 - **Match locals**: naming, imports, types, formatting, and comment density already in touched files.
-- **Docs**: do not add README or other markdown the user did not ask for.
+- **Docs**:
+  - Do not create new README or other markdown the user did not ask for.
+  - When a change alters something an existing project-level doc describes (CLI flags, public API, architecture diagram, choice rationale), update that doc in the same turn.
+  - Match the existing doc's structure, section style, and natural language; do not rewrite untouched sections.
 - **Secrets**: never commit real credentials; use `.env` locally and `.env.example` when a template helps.
 
 ## Verification
