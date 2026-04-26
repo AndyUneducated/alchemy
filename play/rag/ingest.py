@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pickle
 import sys
 from datetime import datetime, timezone
 
@@ -13,10 +14,18 @@ import fitz  # pymupdf
 
 import chromadb
 from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+from rank_bm25 import BM25Okapi
 
-from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, OLLAMA_BASE_URL
+from config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    EMBED_MODEL,
+    EMBED_TOKENIZER,
+    OLLAMA_BASE_URL,
+)
 
 from chunker import split_text
+from tokenizer import tokenize
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
@@ -91,8 +100,16 @@ def ingest(
     print(f"Embedding {len(documents)} chunk(s) via {model} ...")
     collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
+    print(f"Building BM25 index via tokenizer {EMBED_TOKENIZER} ...")
+    tokenized = [tokenize(doc) for doc in documents]
+    bm25_model = BM25Okapi(tokenized)
+    bm25_path = os.path.join(output_dir, "bm25.pkl")
+    with open(bm25_path, "wb") as f:
+        pickle.dump({"ids": ids, "tokenized": tokenized, "model": bm25_model}, f)
+
     metadata = {
         "embedding_model": model,
+        "tokenizer": EMBED_TOKENIZER,
         "chunk_size": chunk_size,
         "chunk_overlap": overlap,
         "doc_count": len(docs),
@@ -105,6 +122,7 @@ def ingest(
 
     print(f"VDB saved to {output_dir}  ({len(documents)} chunks)")
     print(f"Metadata written to {meta_path}")
+    print(f"BM25 index written to {bm25_path}")
 
 
 def main() -> None:

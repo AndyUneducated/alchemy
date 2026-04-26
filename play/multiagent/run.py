@@ -62,8 +62,15 @@ def _preview_result(result: str, ok: bool) -> str:
         first = str(payload["error"]).splitlines()[0]
         return f"error: {first}"
     if isinstance(payload, dict):
-        if isinstance(payload.get("hits"), list):
-            return f"{{hits: {len(payload['hits'])}}}"
+        # retrieve_docs returns {data, meta:{mode, reranked, top_k}}; surface
+        # the retrieval path so workshop viewers can see which strategy ran.
+        if isinstance(payload.get("data"), list) and isinstance(payload.get("meta"), dict):
+            n = len(payload["data"])
+            m = payload["meta"]
+            tags = [f"mode={m.get('mode')}"]
+            if m.get("reranked"):
+                tags.append("reranked")
+            return f"[{n} items, " + ", ".join(tags) + "]"
         if isinstance(payload.get("results"), list):
             return f"{{results: {len(payload['results'])}}}"
         if "count" in payload:

@@ -1,3 +1,7 @@
 chromadb
 pymupdf
 ollama
+rank-bm25
+tokenizers
+sentence-transformers
+torch

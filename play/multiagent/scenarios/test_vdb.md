@@ -6,12 +6,12 @@ tools:
 agents:
   - name: A
     role: member
-    prompt: 你必须先调用 retrieve_docs 工具查询文档，再根据检索结果回答。禁止凭记忆回答。回答只说一句话，格式："<字段> 是 <值>"。用中文。
+    prompt: 你必须先调用 retrieve_docs 工具查询文档，再根据检索结果回答。复杂或语义模糊的查询可传 rerank=true 提升精度。禁止凭记忆回答。回答只说一句话，格式："<字段> 是 <值>"。用中文。
     max_tokens: 128
 
   - name: B
     role: member
-    prompt: 你必须先调用 retrieve_docs 工具查询文档，再根据检索结果回答。禁止凭记忆回答。回答只说一句话，格式："<字段> 是 <值>"。用中文。
+    prompt: 你必须先调用 retrieve_docs 工具查询文档，再根据检索结果回答。复杂或语义模糊的查询可传 rerank=true 提升精度。禁止凭记忆回答。回答只说一句话，格式："<字段> 是 <值>"。用中文。
     max_tokens: 128
 
 steps:

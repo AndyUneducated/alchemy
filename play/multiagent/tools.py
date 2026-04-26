@@ -15,7 +15,13 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "retrieve_docs",
-            "description": "Search a vector database for relevant document chunks.",
+            "description": (
+                "Search a vector database for relevant document chunks. "
+                "Default 'hybrid' mode (dense + BM25 fused via RRF) handles "
+                "most queries well; flip 'rerank' on for ambiguous or "
+                "semantically tricky queries to trade ~5s latency for higher "
+                "precision."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -32,6 +38,27 @@ TOOL_DEFINITIONS: list[dict] = [
                         "description": "Maximum number of results to return.",
                         "default": 3,
                     },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["dense", "bm25", "hybrid"],
+                        "description": (
+                            "Retrieval strategy. 'hybrid' (default) is the "
+                            "strongest general-purpose option. 'dense' / "
+                            "'bm25' are diagnostic-only single-retriever "
+                            "paths — pick them only when comparing strategies."
+                        ),
+                        "default": "hybrid",
+                    },
+                    "rerank": {
+                        "type": "boolean",
+                        "description": (
+                            "Enable cross-encoder reranking for higher "
+                            "precision on ambiguous queries. First call "
+                            "lazily loads a ~1.2GB model (~5s); subsequent "
+                            "calls add ~1-3s per query. Default false."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": ["query", "vdb_dir"],
             },
@@ -46,23 +73,42 @@ TOOL_DEFINITIONS: list[dict] = [
 TOOL_HANDLERS: dict[str, Callable[..., str]] = {}
 
 
-def _retrieve_docs(query: str, vdb_dir: str, top_k: int = 3) -> str:
+def _retrieve_docs(
+    query: str,
+    vdb_dir: str,
+    top_k: int = 3,
+    mode: str = "hybrid",
+    rerank: bool = False,
+) -> str:
     # Only pipe stdout (we need the JSON). stderr defaults to parent's stderr,
     # so any subprocess error (traceback, warnings) flows to the terminal for free.
-    result = subprocess.run(
-        [
-            sys.executable, _QUERY_SCRIPT,
-            "--vdb", vdb_dir,
-            "--query", query,
-            "--top-k", str(top_k),
-            "--json",
-        ],
-        stdout=subprocess.PIPE,
-        text=True,
-    )
+    cmd = [
+        sys.executable, _QUERY_SCRIPT,
+        "--vdb", vdb_dir,
+        "--query", query,
+        "--top-k", str(top_k),
+        "--mode", mode,
+        "--json",
+    ]
+    if rerank:
+        cmd.append("--rerank")
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
     if result.returncode != 0:
         return json.dumps({"error": f"retrieve_docs exited with code {result.returncode}"})
-    return result.stdout.strip()
+    # rag CLI emits {query, data, meta} for evolution headroom (pagination,
+    # timing, version). The LLM only needs the hits and a self-observable
+    # tag of which retrieval path ran — strip the rest at the tool boundary,
+    # like an SDK unwrapping an HTTP envelope.
+    payload = json.loads(result.stdout)
+    slim = {
+        "data": payload["data"],
+        "meta": {
+            "mode": payload["meta"]["mode"],
+            "reranked": payload["meta"]["reranked"],
+            "top_k": payload["meta"]["top_k"],
+        },
+    }
+    return json.dumps(slim, ensure_ascii=False)
 
 
 TOOL_HANDLERS["retrieve_docs"] = _retrieve_docs

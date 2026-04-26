@@ -44,8 +44,15 @@ tools:
   - name: retrieve_docs
     vdb_dir: ../../rag/vdb/test_vdb
     top_k: 3
-    # `top_k` 不在 _path_params 里，所以 LLM 仍然能看到并覆盖（如果它想）。
-    # 反过来：vdb_dir 在 schema 里被隐藏，LLM 即使想填也不会被尊重。
+    # 这里列出的**任何键**（除 `name`）都会被 _resolve_tool_defs 从 LLM
+    # 看到的 schema 中删除并由 run.py 注入——这就是"scenario pin"。所以
+    # `vdb_dir` / `top_k` 在本场景里 LLM 都看不到、也填不了。
+    # 没列在这里的参数（如 mode / rerank）保持 LLM-visible，可由 LLM 在
+    # tool_call 时自由选择：
+    #   mode: "dense" | "bm25" | "hybrid"   (默认 hybrid)
+    #   rerank: true                          (默认 false；首次调用 ~5s 加载 ~1.2GB 模型)
+    # 想把 rerank 强制开成"高精度场景"或把 mode 锁成 dense 跑对照，
+    # 直接在本块加同名键即可——效果是该参数从 LLM schema 删除 + 注入默认。
 
 # ── artifact（共享结构化文档 + 投票）────────────────────────────────────────
 
