@@ -1,5 +1,4 @@
 ---
-description: Workshops sandbox layout, vibe workflow, and agent defaults
 alwaysApply: true
 ---
 
@@ -19,13 +18,15 @@ Unless the user names another path, **create new experiments under `play/`**.
 
 ## Editing discipline
 
-- **Minimal diffs**: only what the task needs; no drive-by refactors or unrelated files.
-- **Match locals**: naming, imports, types, formatting, and comment density already in touched files.
-- **Docs**:
-  - Do not create new README or other markdown the user did not ask for.
-  - When a change alters something an existing project-level doc describes (CLI flags, public API, architecture diagram, choice rationale), update that doc in the same turn.
-  - Match the existing doc's structure, section style, and natural language; do not rewrite untouched sections.
+- **Minimal diffs**: only what the task needs; no drive-by refactors, unrelated files, or rewrites of untouched sections.
+- **Match locals**: in code (naming, imports, types, formatting, comment density) and docs (section style, natural language).
+- **Docs**: when a change alters something an existing project-level doc describes (CLI flags, public API, choice rationale), update that doc in the same turn; don't create new README/markdown the user didn't ask for.
 - **Secrets**: never commit real credentials; use `.env` locally and `.env.example` when a template helps.
+
+## Commit discipline
+
+- **Hard constraint — every commit leaves the repo usable**: don't split a change across commits if the in-between state breaks build/run/tests.
+- **On top of that constraint, split by independent semantic increments**. A good commit expresses one intent and could be reverted on its own.
 
 ## Verification
 
