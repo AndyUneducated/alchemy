@@ -1,0 +1,145 @@
+# ============================================================================
+# Workflow kitchen sink — 写一个完整 workflow.yaml 的字段速查 + 心智模型
+# ============================================================================
+# 这是一个**可运行**的 workflow.yaml, 同时把每个字段都用上一次.
+# 每行 `#` 注释解释该字段的语义 / 取值 / 默认. 删掉所有注释即得最小可读形式.
+#
+#   cd play/
+#   python -m workflow run workflow/examples/kitchen_sink.yaml \
+#       --vars greeting=Hello \
+#       --vars n_lines=3
+#
+# 运行前提:
+#   - play/agent_engine/scenarios/roundtable.md 已存在 (P0 平迁)
+#   - workflow.examples.kitchen_sink_hooks 模块下的 echo / enrich_lines /
+#     write_md / to_yaml 已实现 (~30 行 Python, 见同目录 kitchen_sink_hooks.py)
+#
+# 不想跑 agent stage? 删掉 stages 里 discuss 那段及其下游引用即可.
+# ============================================================================
+
+# ── 顶层元信息 ─────────────────────────────────────────────────────────────
+name: kitchen_sink              # 必填. workflow 标识符. 报错信息引用这个
+description: |                  # 可选. 仅文档, runner 不消费
+  Demonstrates every field of workflow.yaml schema with inline notes.
+
+# ── vars (workflow 输入参数) ──────────────────────────────────────────────
+# 通过 CLI --vars k=v 注入. 所有 stage 通过 {{ vars.<name> }} 引用.
+# 字段:
+#   required: true   — 必传, 否则启动 sys.exit
+#   default: <val>   — 不传时回填字符串 default; 与 required 互斥; 二者必须有其一
+#   type: <kind>     — int|float|bool|str (默认 str). 仅做类型 cast, 不做数值校验
+vars:
+  greeting:
+    required: true                        # CLI 必须 --vars greeting=...
+  n_lines:
+    default: "3"
+    type: int
+  output_dir:
+    default: "/tmp/workflow_out"
+
+# ── hooks_module ──────────────────────────────────────────────────────────
+# deterministic stage 的 fn 字符串解析的默认 Python 命名空间.
+# 可选: 若每个 deterministic stage 的 fn 都用 "pkg.sub:func" 显式写, 这里可省.
+#   fn: "echo"           → import workflow.examples.kitchen_sink_hooks.echo
+#   fn: "other.pkg:foo"  → 显式包路径覆盖 (含冒号 = 完整路径, 不走 hooks_module)
+hooks_module: workflow.examples.kitchen_sink_hooks
+
+# ── stages (按列表顺序串行执行) ────────────────────────────────────────────
+# 每 stage 至少: name, type. 其余字段按 type 不同.
+#   type: deterministic   → 调用 Python 函数 (hooks_module 或显式路径)
+#   type: agent           → 调用 agent_engine.Engine.invoke()
+#
+# 共通字段:
+#   name              必填; 全局唯一
+#   output            可选; 该 stage 返回值在 stages.<output>.output 下被引用
+#                      不写时默认为 stage.name
+#
+# 变量插值 (在 args / config / scenario 字符串值里):
+#   {{ vars.<name> }}           — 上面 vars 区块定义的变量 (含必填与默认)
+#   {{ stages.<name>.output }}  — 之前某个 stage 的 output
+#   {{ pkg_dir }}               — workflow.yaml 所在目录的绝对路径
+# **不**支持表达式 / 过滤器 / 条件; 路径不存在 raise KeyError. 数据转换一律放
+# 进 hook 函数 (如下面 to_yaml stage), 不在模板里做.
+# 整字符串就是 {{ x.y }} 时, 保留原始 Python 类型 (list/dict/...); 内嵌时
+# 强制 str().
+
+stages:
+  # ── deterministic stage (基础) ──
+  - name: greet
+    type: deterministic                   # 必填: deterministic | agent
+    fn: echo                              # 必填; 解析为 hooks_module.echo
+    args:                                 # 可选; 不写则调 fn() 不传参. 值可插值
+      message: "{{ vars.greeting }}"
+      count: "{{ vars.n_lines }}"
+    output: greeting_lines                # 可选; 不写默认为 "greet"
+
+  # ── 引用前一 stage output ──
+  - name: enrich
+    type: deterministic
+    fn: enrich_lines
+    args:
+      lines: "{{ stages.greeting_lines.output }}"  # list[str], 由 echo 返回
+      tag: "[from workflow]"
+    # output 不写 → "enrich"; 形态 list[str]
+
+  # ── 显式 serialize stage (代替模板 filter) ──
+  - name: serialize
+    type: deterministic
+    fn: to_yaml                           # 把任意结构 dump 为 yaml 字符串
+    args: {obj: "{{ stages.enrich.output }}"}
+    # output → "serialize"; 形态 str (yaml-formatted)
+
+  # ── agent stage ──
+  - name: discuss
+    type: agent
+    scenario: ../../agent_engine/scenarios/roundtable.md   # 必填; 路径相对 workflow.yaml 文件
+    config:                               # 可选 dict; workflow 不解析其内容,
+                                          # 整体作为 kwargs unpack 给 Engine.invoke(**config).
+                                          # 这把 agent_engine 内部命名 (initial_artifact /
+                                          # save_transcript / callbacks) 与 workflow schema 解耦.
+      # roundtable.md 不启用 artifact, 因此 initial_artifact 不传也不会用到;
+      # 真要传, 在 scenario.artifact.enabled=true 的场景下放在 config 里:
+      # initial_artifact:
+      #   Topic: "{{ stages.serialize.output }}"
+      transcript_path: "{{ vars.output_dir }}/transcript.json"
+      # callbacks: ...                    # 也可写, 但 Callback 是 Python 对象,
+                                          # PoC 一般不在 yaml 里配 callback
+    output: discussion                    # agent stage 的 output 是 Result.artifact (dict[str, str])
+
+  # ── 收尾 deterministic stage ──
+  - name: write_summary
+    type: deterministic
+    fn: write_md
+    args:
+      sections: "{{ stages.discussion.output }}"     # discussion artifact dict
+      output_path: "{{ vars.output_dir }}/summary.md"
+      pkg_dir: "{{ pkg_dir }}"                       # workflow.yaml 所在目录
+
+# ============================================================================
+# 字段省略策略
+#   - name / stages: 必填
+#   - description / hooks_module / vars: 可选 (hooks_module 仅用 colon-fn 时可省)
+#   - args / config: 省略 → 调用 fn / Engine.invoke() 不传 kwargs
+#   - output: 省略 → 默认 stage.name
+#
+# stage 类型对照
+#   type=deterministic              type=agent
+#   ──────────────────              ──────────────────
+#   fn (必填)                        scenario (必填, 路径)
+#   args (可选, fn 的 kwargs)        config (可选, Engine.invoke 的 kwargs, 整体透传)
+#   返回值 → stages.<output>         Result.artifact → stages.<output>
+#
+# 变量插值
+#   {{ vars.<name> }} / {{ stages.<n>.output }} / {{ pkg_dir }}
+#   仅路径访问, 无表达式 / 无过滤器. 数据转换放 hook 里 (如 to_yaml stage).
+#
+# 运行时心智模型
+#   1. 一次 run = 按 stages 列表顺序展开, 串行执行. 没有并行 / 条件 / 循环.
+#   2. 每 stage 的返回值落进 state[stages.<output>.output]; 后续 stage 通过
+#      模板引用; 默认 output 与 stage.name 同名.
+#   3. 模板插值发生在调用 stage 之前, 把 args / config 里的字符串展开成实值.
+#   4. deterministic stage = 普通 Python 函数; raise 即 fail-fast, runner 不重试.
+#      需要 retry / timeout 由 hook 自己用 tenacity / signal 处理 (plan §9).
+#   5. agent stage = Engine(scenario).invoke(**config); workflow 不知 config 内容.
+#   6. CLI 默认把 stage 事件 (start / done / duration_ms) 流到 stdout 人读.
+# ============================================================================

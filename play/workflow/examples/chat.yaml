@@ -1,0 +1,20 @@
+# Minimal "agent stage only" workflow — single agent stage delegating to
+# agent_engine.scenarios.roundtable.md (no deterministic stages, no hooks).
+#
+#   cd play/
+#   python -m workflow run workflow/examples/chat.yaml --vars output_dir=/tmp/chat_out
+
+name: chat
+description: Single-agent-stage demo (reuses agent_engine roundtable scenario)
+
+vars:
+  output_dir:
+    default: "/tmp/chat_out"
+
+stages:
+  - name: discuss
+    type: agent
+    scenario: ../../agent_engine/scenarios/roundtable.md
+    config:
+      transcript_path: "{{ vars.output_dir }}/transcript.json"
+      print_stream: true
