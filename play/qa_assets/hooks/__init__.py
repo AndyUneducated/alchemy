@@ -7,6 +7,8 @@ qa_assets.hooks`` resolves bare ``fn:`` names against this package.
 
 from .load_csv import load_csv
 from .load_each_prd import load_each_prd
+from .render_csv import render_csv
+from .render_md import render_md
 from .to_yaml import to_yaml
 
-__all__ = ["load_csv", "load_each_prd", "to_yaml"]
+__all__ = ["load_csv", "load_each_prd", "render_csv", "render_md", "to_yaml"]

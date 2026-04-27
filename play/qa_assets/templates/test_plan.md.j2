@@ -1,0 +1,41 @@
+{# 测试方案 markdown 模板 (Jinja2). 由 hooks/render_md.py 渲染.
+   入参:
+     sections      — agent stage 产出的 artifact dict (dict[str, str])
+     requirements  — load_each_prd 返回的 list[dict] (req_id / title / assignee /
+                     sprint_start / sprint_end / priority / description / prd_md)
+
+   设计原则: 模板**不**改 sections 内容 (specialist agent 已写好 markdown),
+   只在顶部加一份"范围与排期" 元数据表 (sprint / assignee 作为列, plan §8 P5),
+   下面按节按顺序贴 artifact section. Critic 反馈作为附录放最后.
+#}
+# 测试方案 - {{ requirements | length }} 项需求
+
+## 范围与排期
+
+| req_id | title | assignee | priority | sprint |
+|---|---|---|---|---|
+{% for r in requirements -%}
+| {{ r.req_id }} | {{ r.title }} | {{ r.assignee }} | {{ r.priority or '?' }} | {{ r.sprint_start }} ~ {{ r.sprint_end }} |
+{% endfor %}
+
+## 原子需求
+
+{{ sections.get('原子需求', '_(decomposer 未产出)_') }}
+
+## 风险等级
+
+{{ sections.get('风险等级', '_(risk_grader 未产出)_') }}
+
+## 测试用例
+
+{{ sections.get('测试用例', '_(case_generator 未产出)_') }}
+
+## 非功能
+
+{{ sections.get('非功能', '_(nfr_planner 未产出)_') }}
+
+---
+
+## 附录: Critic 反馈
+
+{{ sections.get('Critic 反馈', '_(critic 未产出)_') }}

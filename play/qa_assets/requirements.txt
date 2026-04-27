@@ -1,0 +1,5 @@
+# qa_assets 自身的 Python 依赖 (除 agent_engine / workflow / rag 各自的之外).
+# - jinja2: render_md hook 用 Jinja2 markdown 模板渲染
+# - pyyaml: to_yaml hook 序列化 (workflow 也用, 这里显式声明)
+jinja2
+pyyaml

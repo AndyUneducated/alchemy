@@ -48,4 +48,19 @@ stages:
       print_stream: true                          # PoC: 让多 agent loop 在 CLI 里可见
     output: discussion                            # → Result.artifact dict
 
-  # P5 将在此追加 render_md + render_csv stage (md/csv 输出, 模板填充).
+  - name: render_md
+    type: deterministic
+    fn: render_md
+    args:
+      sections: "{{ stages.discussion.output }}"  # artifact dict (含 6 节)
+      requirements: "{{ stages.load_prds.output }}"   # 透传 sprint/assignee 元数据
+      template: "{{ pkg_dir }}/../templates/test_plan.md.j2"
+      output_path: "{{ vars.output_dir }}/test_plan.md"
+
+  - name: render_csv
+    type: deterministic
+    fn: render_csv                                # 解析 sections['测试用例'] 平铺为行
+    args:
+      sections: "{{ stages.discussion.output }}"
+      requirements: "{{ stages.load_prds.output }}"
+      output_path: "{{ vars.output_dir }}/cases.csv"
