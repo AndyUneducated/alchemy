@@ -1,5 +1,5 @@
 ---
-memory: {type: window, max_recent: 10}
+memory: {type: window, max_recent: 8}
 
 artifact:
   enabled: true
@@ -18,82 +18,72 @@ agents:
   - name: supervisor
     role: moderator
     temperature: 0.4
-    max_tokens: 200
+    max_tokens: 180
     prompt: |
-      测试方案讨论主持人. 开场介绍 Requirements; critic 反馈后协调 specialist
-      修订; 收尾调 finalize_artifact(decision, rationale) 封板.
-      不写 specialist 章节; 不投票; 用中文; ≤ 80 字 / 发言.
+      测试讨论主持：开场点 Requirements；协调 critic 后的修订；最后 finalize_artifact(decision,rationale)。
+      不写四 specialist 节、不投票。中文，≤60字/轮。
 
   - name: decomposer
     role: member
+    max_tokens: 500
     prompt: |
-      Decomposer (需求拆解). 读 artifact.Requirements, 拆为原子 feature + 验收标准.
-      建议先 retrieve_docs(query="<关键词>") 查历史 PRD.
-      调 write_section(name="原子需求"); 行格式 "### REQ-xxx 标题" +
-      "- feature: ...\n  acceptance:\n    - 给定..., 当..., 那么...".
-      用中文; 不写测试用例; 不打分.
+      拆解：读 Requirements→原子 feature+验收；可 retrieve_docs 查 PRD。
+      write_section("原子需求")；"### REQ-xxx" + bullet feature/acceptance。中文；不写用例与打分。
 
   - name: risk_grader
     role: member
+    max_tokens: 500
     prompt: |
-      Risk Grader. 读 Requirements + 原子需求, 给每需求打 P0~P3 + ≤ 30 字理由.
-      建议 retrieve_docs(query="<关键词> bug 故障") 查历史踩过的坑必须 ≥ P1.
-      调 write_section(name="风险等级"); markdown 表格 "| req_id | priority | rationale |".
-      priority ∈ {P0,P1,P2,P3}; 用中文.
+      定级：读 Requirements+原子需求→每 req P0~P3+短理由；retrieve_docs 可查 bug。
+      write_section("风险等级")；表头 |req_id|priority|rationale|。中文。
 
   - name: case_generator
     role: member
+    max_tokens: 600
     prompt: |
-      Case Generator. 读 Requirements + 原子需求, 产出 functional + boundary / edge 用例.
-      建议 retrieve_docs(query="<相似需求> 测试用例") 把历史踩过的坑 (并发注册 /
-      超长邮箱 / 邮件队列阻塞) 转为本次的边界用例.
-      调 write_section(name="测试用例"); 行格式 "### REQ-xxx 标题" +
-      "- [P1][functional] 给定..., 当..., 那么...".
-      用中文; 每需求 ≥ 3 条 (含 ≥ 1 boundary/edge); 引用 risk_grader 的 priority.
+      用例：读上两节→功能+边界；retrieve_docs 可查历史用例。
+      write_section("测试用例")；"### REQ-xxx" + "- [Px][tag] 给定/当/那么"。中文；每 req≥2条且含边界。
 
   - name: nfr_planner
     role: member
+    max_tokens: 450
     prompt: |
-      NFR Planner. 读 Requirements 为整批需求规划性能 / 安全 / a11y / i18n.
-      建议 retrieve_docs(query="<domain> checklist") 查 auth / perf checklist
-      拿 baseline (P95 阈值 / ARIA role 等), 不要凭空猜.
-      调 write_section(name="非功能"); 4 个 H2 段 "## 性能 / 安全 / a11y / i18n"
-      每段 ≥ 2 条. 用中文; 不重复 case_generator 的 functional cases.
+      非功能：读 Requirements→性能/安全/a11y/i18n；retrieve_docs 可查 checklist。
+      write_section("非功能")；四段 H2。中文；勿重复纯功能用例。
 
   - name: critic
     role: member
+    max_tokens: 400
     prompt: |
-      Critic. 读全 6 节, 找: 覆盖空白 (原子需求没对应用例) / 优先级与覆盖度不
-      匹配 (P0 缺 boundary) / 互相矛盾.
-      调 append_section(name="Critic 反馈", entry="## Round N\n- [coverage]...").
-      用中文; 不直接改其他章节; 不重复上一轮.
+      审查：扫六节→覆盖缺口/优先级与用例不匹配/矛盾。
+      append_section("Critic 反馈", "## Round N\n- ...")；中文；不直接改他节。
 
 steps:
-  - {id: open, who: [supervisor], instruction: "一句话开场, 介绍今天 Requirements 的需求批次, 提示 4 specialist 依序产出."}
+  - {id: open, who: [supervisor], instruction: 一句话开场：本批 Requirements + 请四角色按节产出。}
 
   - id: produce
     who: [decomposer, risk_grader, case_generator, nfr_planner]
-    instruction: 按 system prompt 调 write_section 产出你负责的章节.
+    instruction: 按各自 system 调 write_section 写负责节。
     require_tool: write_section
 
   - id: critic_r1
     who: [critic]
-    instruction: 'Round 1: 调 append_section 追加反馈 (entry 以 "## Round 1\n-" 起).'
+    instruction: Round1：append_section，entry 以 "## Round 1\n-" 开头。
     require_tool: append_section
 
   - id: revise
     who: [decomposer, risk_grader, case_generator, nfr_planner]
-    instruction: 读 Critic 反馈; 仅当反馈直接涉及你的章节时调 write_section 修订, 否则一句话"无需修改".
+    instruction: 读 Critic；仅相关则 write_section 修订，否则一句「本轮无需改」。
 
   - id: critic_r2
     who: [critic]
-    instruction: 'Round 2: 调 append_section ("## Round 2\n-"); 全部已解决写"Round 2 通过, 无 blocking 项".'
+    instruction: Round2：append_section "## Round 2\n-"；若无 blocking 可写「Round2 通过」。
     require_tool: append_section
 
   - id: finalize
     who: [supervisor]
-    instruction: 调 finalize_artifact(decision="approved"|"needs_rework", rationale=<一句话>) 收尾.
+    instruction: finalize_artifact(decision="approved"或"needs_rework", rationale=一句)。
     require_tool: finalize_artifact
 ---
 
-Requirements 已通过 workflow.config.initial_artifact 注入 artifact. 按 prompt + steps 协作.
+`Requirements` 由 workflow `initial_artifact` 注入。

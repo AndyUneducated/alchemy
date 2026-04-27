@@ -2,10 +2,9 @@
 #
 #   cd play/
 #   python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
-#       --vars csv_path=qa_assets/examples/requirements.csv
+#       --vars csv_path=qa_assets/examples/req_tracker.csv
 #
-# 4 stage (P3 范围): load → load_prds → serialize_for_agent → discuss.
-# render_md / render_csv stage 在 P5 加.
+# 6 stages: load → load_prds → serialize_for_agent → discuss → render_md → render_csv
 
 name: qa_supervisor
 description: CSV (需求 + 排期) -> 测试方案多 agent 协作 (md artifact)
