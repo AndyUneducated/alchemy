@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from typing import Callable
@@ -364,6 +365,27 @@ def _resolve_tool_owners(
     return out
 
 
+# -- frontmatter parsing -----------------------------------------------------
+
+_FRONTMATTER_RE = re.compile(
+    r"\A(?:[^\n]*\n)*?^---\s*\n(?P<meta>.*?)\n^---\s*\n?(?P<body>.*)\Z",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def _split_frontmatter(text: str) -> tuple[str | None, str]:
+    """Return ``(yaml_text, body_text)`` or ``(None, full_text)``.
+
+    Frontmatter delimiter is a line containing only ``---`` (with optional
+    trailing whitespace). Pre-frontmatter content (e.g. a leading title or
+    comment block) is allowed and discarded.
+    """
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return None, text
+    return m.group("meta"), m.group("body").strip()
+
+
 # -- public ------------------------------------------------------------------
 
 @dataclass
@@ -396,17 +418,22 @@ class Scenario:
 
     @classmethod
     def from_yaml(cls, path: str) -> "Scenario":
-        """Parse + validate a scenario .md file. Fail-fast on schema errors."""
+        """Parse + validate a scenario .md file. Fail-fast on schema errors.
+
+        Frontmatter delimiter is a **line containing only** ``---`` (anchored
+        at line start, optional trailing whitespace). String literals like
+        markdown table separators (``|---|---|---|``) inside agent prompts
+        therefore cannot prematurely close the frontmatter.
+        """
         with open(path, encoding="utf-8") as f:
             text = f.read()
 
-        parts = text.split("---", 2)
-        if len(parts) < 3:
+        meta_text, body = _split_frontmatter(text)
+        if meta_text is None:
             sys.exit(f"Error: {path} has no YAML frontmatter (--- ... ---)")
-        meta = yaml.safe_load(parts[1])
+        meta = yaml.safe_load(meta_text)
         if not isinstance(meta, dict):
             sys.exit(f"Error: {path} frontmatter is not a valid YAML mapping")
-        body = parts[2].strip()
 
         scenario_dir = os.path.dirname(os.path.abspath(path))
         scn = cls(path=path, meta=meta, body=body, scenario_dir=scenario_dir)

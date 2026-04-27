@@ -1,0 +1,51 @@
+# QA 测试方案 workflow — kitchen_sink schema 的 QA 实例 (plan §4.3)
+#
+#   cd play/
+#   python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
+#       --vars csv_path=qa_assets/examples/requirements.csv
+#
+# 4 stage (P3 范围): load → load_prds → serialize_for_agent → discuss.
+# render_md / render_csv stage 在 P5 加.
+
+name: qa_supervisor
+description: CSV (需求 + 排期) -> 测试方案多 agent 协作 (md artifact)
+
+vars:
+  csv_path:
+    required: true                                # 输入 CSV 路径
+  output_dir:
+    default: "/tmp/qa_out"
+
+hooks_module: qa_assets.hooks
+
+stages:
+  - name: load
+    type: deterministic
+    fn: load_csv
+    args: {csv_path: "{{ vars.csv_path }}"}
+    # output → "load"; 形态 list[dict]
+
+  - name: load_prds
+    type: deterministic
+    fn: load_each_prd                             # 对有 prd_doc_path 的行: Path.read_text() 写回 prd_md
+    args: {requirements: "{{ stages.load.output }}"}
+    # output → "load_prds"; 形态 list[dict]
+
+  - name: serialize_for_agent
+    type: deterministic
+    fn: to_yaml                                   # 显式序列化, 不在模板里做 (plan §4.3)
+    args: {obj: "{{ stages.load_prds.output }}"}
+    # output → "serialize_for_agent"; 形态 str (yaml-formatted)
+
+  - name: discuss
+    type: agent
+    scenario: ../scenarios/qa_discuss.md
+    config:                                       # 整体 unpack 给 Engine.invoke(**config)
+      initial_artifact:
+        Requirements: "{{ stages.serialize_for_agent.output }}"
+      artifact_path: "{{ vars.output_dir }}/test_plan_artifact.md"
+      transcript_path: "{{ vars.output_dir }}/transcript.json"
+      print_stream: true                          # PoC: 让多 agent loop 在 CLI 里可见
+    output: discussion                            # → Result.artifact dict
+
+  # P5 将在此追加 render_md + render_csv stage (md/csv 输出, 模板填充).

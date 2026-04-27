@@ -1,0 +1,3 @@
+req_id,title,description,prd_doc_path,priority,assignee,sprint_start,sprint_end
+REQ-001,用户邮箱注册,,qa_assets/examples/prd_signup.md,P1,Alice,2026-05-01,2026-05-14
+REQ-002,密码重置流程,"用户输入注册邮箱后接收验证码邮件; 密码强度 ≥ 8 字符且含数字字母; 每次重置需失效旧密码",,P2,Bob,2026-05-15,2026-05-28
