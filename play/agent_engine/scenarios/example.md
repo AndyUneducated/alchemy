@@ -1,12 +1,19 @@
-# Scenario kitchen sink — 写一个完整 scenario 的字段速查 + 心智模型
+# Scenario kitchen sink — 字段速查 + 心智模型 + 集成烟囱（同一份文件）
 
 # ============================================================================
-# 这是一个**可运行**的 scenario，同时把每个 frontmatter 字段都用上一次。
-# 每行 `#` 注释解释该字段的语义、取值、默认。删掉所有注释后即得最小可读形式。
+# 这是一个**可运行**的 scenario：frontmatter 里保留逐字段教学注释；steps 采用
+# **压缩后的集成路径**（artifact + retrieve_docs + window/full/summary +
+# require_tool nudge），用更少 turn 换更短 wall-clock，而注释仍解释「为什么
+# 这样够覆盖」。若只想最省 token，可把 agents 的 prompt 再缩短或删掉 `tools:`。
+#
+# **CI / 回归**：`ci_who_member` + `ci_who_all` 两步刻意命中 `who: member` 与
+# `who: all` 标量（与 `roundtable` / `debate` / `brainstorm` 同源写法），单文件即可
+# 验证 `_resolve_who` 四条路径；不含「无 moderator」拓扑——那仍由 `debate.md` 等
+# 轻场景覆盖。
 #
 #   python -m agent_engine scenarios/example.md
 #
-# 运行前提：`../../rag/vdb/test_vdb` 已存在（test_vdb.md 用同一份 vdb）。
+# 运行前提：`../../rag/vdb/test_vdb` 已存在（见 play/rag README 的 ingest）。
 # 不想跑 retrieve_docs？删掉 frontmatter 里的整个 `tools:` 块即可。
 # ============================================================================
 
@@ -19,10 +26,13 @@ memory:
   #   window   — 保留所有 pinned marker（topic / turn / artifact_event）+ 最近 N 条发言
   #   summary  — 把 stale 发言增量折叠成 <summary> block；近 N 条原文保留
   type: window
-  max_recent: 8
+  # 集成烟囱里 turn 数已压过一轮旧版 example；max_recent 略收紧即可配合 window，
+  # 仍足够覆盖「pinned 不剪 + 近期发言」行为。需要更宽窗口可调回 8。
+  max_recent: 6
   # 仅 window / summary 需要 max_recent（正整数）。
   #
-  # summary 还可以可选指定（这里不演示，因为 type=window）：
+  # summary 在 scenario 级还可选指定（本文件 scenario.type=window，故不在此
+  # 写 summary 块；改 scenario 为 type:summary 时可配下列键，agent 级同理）：
   #   model: <override SUMMARY_MODEL>
   #   max_tokens: <override SUMMARY_MAX_TOKENS>
   #   temperature: <override SUMMARY_TEMPERATURE>
@@ -95,32 +105,47 @@ agents:
     # `name` 在 prompt 注入、history 投影、artifact_event 的 caller 字段、
     # step.who 的 list 寻址里都用同一个字符串，必须**全场唯一**。
     prompt: |
-      你是讨论主持人。开场介绍话题，结尾总结并落定决策。
-      保持中立、简短，每次发言不超过 80 字。用中文回答。
-    temperature: 0.5  # 可选；不写则用 config.TEMPERATURE
-    max_tokens: 200   # 可选；不写则用 config.MAX_TOKENS
+      你是主持人。按 instruction 调用 artifact 工具；每次 ≤ 40 字。用中文回答。
+    temperature: 0.4
+    max_tokens: 160
+    # 可选；不写则用 config.TEMPERATURE / MAX_TOKENS
     # model: <override>  # 可选；不写则用 config.DEFAULT_MODEL（按 BACKEND 决定）
     # memory: { ... }    # 可选；按上面 memory 同结构覆盖 scenario 级默认
 
   - name: 分析师
     role: member
     prompt: |
-      你是数据分析师。你必须先调用 retrieve_docs 查文档，再回答；
-      并且把关键事实 append 到 artifact 的 notes 节。
-      每次发言不超过 80 字。用中文回答。
-    max_tokens: 200
+      你是分析师。需要查事实时先 retrieve_docs；按 instruction 用 artifact 工具。
+      每次 ≤ 40 字。用中文回答。
+    max_tokens: 160
 
   - name: 决策者
     role: member
     prompt: |
-      你是产品决策者。读取 artifact 后给出二选一立场，并在最终阶段投票。
-      每次发言不超过 80 字。用中文回答。
-    temperature: 0.6
-    max_tokens: 200
+      你是决策者。按 instruction 调用 cast_vote 等；每次 ≤ 40 字。用中文回答。
+    max_tokens: 160
     memory:
       # agent 级 memory 覆盖 scenario 级默认。这里演示给"决策者"单独用 full
-      # （他想看到全量历史，不剪窗口）。
+      # （他想看到全量 history，不剪窗口）。
       type: full
+
+  # 第四位成员专门演示 summary 策略 + summarizer 额外 LLM 调用；prompt 要求
+  # 结构化短输出，减少生成耗时，同时仍能在 transcript 里对照三 memory。
+  - name: 汇总员
+    role: member
+    prompt: |
+      你是对话可见度观察员。每次严格三行、无寒暄：
+      visible_speakers: <逗号分隔历史里见过的发言者名；没有则 none>
+      memory_type: <window|full|summary，据你 system 判断>
+      summary_seen: <yes|no，是否出现 summary 块>
+      ≤ 50 字。用中文。
+    memory:
+      type: summary
+      max_recent: 2
+      summarizer_prompt: 把多说话者对话压成不超过 60 字的中文要点，保留人名与立场。
+      summarize_instruction: 合并输入为一段紧凑摘要；若含 previous_summary 则合并改写。
+    max_tokens: 120
+    temperature: 0
 
 # ── steps（必填，扁平流程列表）──────────────────────────────────────────────
 
@@ -137,58 +162,90 @@ steps:
   # 引擎按 steps 列表顺序逐项展开成 turn：每个 step 内 who 的所有匹配 agent
   # 各自发言一次，按"agents 声明顺序"。每 turn 注入一个 pinned 的
   # <turn>turn X of N</turn> marker，让 agent 感知自己在流程中的位置。
+  #
+  # 下面 steps 相对旧版「kitchen sink」删了 deliberate/focus 等多轮闲聊，
+  # 把「检索 + append + append/write 冲突 + read + 投票 + require_tool nudge」
+  # 压进更少 step；教学含义见每步行内注释。
+  #
+  # CI：`open` 已覆盖 `who: moderator`；`mem_warm*` 覆盖 `who: [name,...]`；
+  # 下列两步补齐 scalar `member` / `all`（instruction 强制禁工具，避免污染投票段）。
 
   - id: open
     who: moderator
-    instruction: 用一句话介绍今天的话题，并提醒成员先 retrieve_docs。
+    instruction: 一句话介绍话题：是否采纳检索到的「项目代号」为正式名称。
 
-  - id: research
+  # 按 agents 声明顺序展开为：分析师 → 决策者 → 汇总员（discussion._resolve_who）。
+  - id: ci_who_member
+    who: member
+    instruction: |
+      本节为寻址烟测。只输出一字「到」，禁止调用任何工具。
+
+  # 按 agents 声明顺序展开为：主持人 → 分析师 → 决策者 → 汇总员。
+  - id: ci_who_all
+    who: all
+    instruction: |
+      本节为寻址烟测。只输出一字「全」，禁止调用任何工具。
+
+  # 两轮短答堆叠发言，触发汇总员的 SummaryMemory 折叠（见 memory.py 触发规则）。
+  - id: mem_warm
+    who: [分析师, 决策者, 汇总员]
+    instruction: |
+      严格按 system 要求的三行格式作答；不要调用工具。
+
+  - id: mem_warm2
+    who: [分析师, 决策者, 汇总员]
+    instruction: |
+      再答一轮三行格式；不要调用工具。
+
+  # 合并原 research + artifact 烟囱：retrieve_docs、append、故意 write 触发
+  # append-only 报错、read_artifact；require_tool 仍盯 append_section。
+  - id: vdb_artifact
     who: [分析师]
     # list 形态：精确点名。哪怕只有一个名字也写在 [] 里——这样 schema 校验
     # 就能用"类型 (scalar vs list)"区分"按 role 寻址"和"按 name 寻址"。
     instruction: |
-      调用 retrieve_docs 查"项目代号"，再 append_section(name="notes",
-      entry="- 项目代号: <你查到的值>") 把事实写进 artifact。
+      1) retrieve_docs 查询「项目代号」；
+      2) append_section(name="notes", entry="- 项目代号: <值>");
+      3) 故意 write_section(name="notes", content="bad") 触发 append-only 报错，用一句话承认；
+      4) read_artifact() 确认 notes 内容并一句话复述。
     require_tool: append_section
     max_retries: 1
 
-  - id: deliberate
-    who: member
-    # 按 role 命中所有 member（分析师 + 决策者，按 agents 声明顺序）。
-    instruction: |
-      围绕话题给出你的观点；分析师可继续 append notes，决策者可 read_artifact。
-
-  - id: focus
-    who: moderator
-    instruction: 用一句话提炼本轮分歧或共识。
-
-  - id: open_vote
+  - id: vote_prep
     who: moderator
     instruction: |
-      调用 propose_vote(question="是否采纳建议?", options=["采纳", "拒绝"])
-      发起最终投票，再用一句话请大家投票。
+      read_artifact()；再 propose_vote(question="是否采纳?", options=["采纳","拒绝"])；一句话请大家投票。
 
-  - id: ballot
-    who: member
+  # instruction 故意不提 cast_vote，用来测「沉默 → nudge → retry」；若模型
+  # 第一轮就投票则不会看到 retry（行为仍合法）。
+  - id: ballot_nudge
+    who: [分析师]
     require_tool: cast_vote
-    # require_tool 经典用法：强制每个 member 在最终阶段投票。
-    # 若某 member 跳过 cast_vote，引擎会 nudge 重试一次；仍跳过则 stderr WARNING。
+    max_retries: 1
     instruction: |
-      调用 cast_vote(vote_id="v1", option="采纳" 或 "拒绝", rationale="一句话理由")。
+      只用一句话打招呼，不要提 cast_vote。
+
+  # 显式 cast_vote，快速覆盖「正常投票」路径（与 ballot_nudge 对照）。
+  - id: ballot_ok
+    who: [决策者]
+    require_tool: cast_vote
+    max_retries: 1
+    instruction: |
+      cast_vote(vote_id="v1", option="采纳" 或 "拒绝", rationale="一句话")。
 
   - id: finalize
     who: moderator
     instruction: |
-      先 write_section(name="decision", content="<最终结论>"),
-      再 finalize_artifact(decision="采纳" 或 "拒绝", rationale="...")。
+      write_section(name="decision", content="结论：<与投票一致>")；
+      finalize_artifact(decision="采纳" 或 "拒绝", rationale="一句话")。
       finalize 只能调用一次，幂等保护——重复调用返回 error。
 
 # ============================================================================
 # `who` 取值形态（共四种）
-#   moderator      — scalar role；按 role 命中（要求至少 1 个 moderator）
-#   member         — scalar role；按 role 命中（要求至少 1 个 member）
-#   all            — scalar 关键字；所有 agent，按声明顺序
-#   [n1, n2, ...]  — 显式名单；按列表中给定的顺序，名字必须存在
+#   moderator      — scalar role；按 role 命中（要求至少 1 个 moderator）→ open
+#   member         — scalar role；按 role 命中（要求至少 1 个 member）→ ci_who_member
+#   all            — scalar 关键字；所有 agent，按声明顺序 → ci_who_all
+#   [n1, n2, ...]  — 显式名单；按列表中给定的顺序，名字必须存在 → mem_warm* / vdb_artifact …
 # 写错 who 在启动时报错（schema validation），不会走到运行时。
 #
 # 字段省略策略
@@ -214,7 +271,7 @@ steps:
 2. **memory 决定"哪些 history 进入投影"**。pinned 类型（topic / turn /
    artifact_event）永远不被剪，所以 turn 切换、artifact 变更对所有 memory 策略
    都可见。`window` 只额外保留最近 N 条发言；`summary` 把 stale 发言增量折叠成
-   `<summary>` block。
+   `<summary>` block（本例中由「汇总员」的 agent 级配置演示；主持人/分析师跟 scenario 默认 window，决策者用 full）。
 
 3. **artifact 视图带外注入**——每次 `respond()` 调用时，`ArtifactStore.render()`
    作为 `<artifact>…</artifact>` user 消息一次性塞进当前轮的 prompt，但**不**
@@ -225,13 +282,21 @@ steps:
 4. **require_tool 不强制，只是让"沉默违规"可见**——step 结束后扫
    `artifact.drain_events()`，若 caller 未调用指定工具，nudge 一次重试；
    仍跳过则 stderr 一行 WARNING，run 继续。这是"workshop 友好"的折中：
-   不阻塞演示，但留下可见痕迹。
+   不阻塞演示，但留下可见痕迹。本例 `ballot_nudge` 故意用「只打招呼」的
+   instruction 与 `require_tool: cast_vote` 组合，便于观察 retry。
 
 5. **tools 隐藏机制**——`tools:` 下声明的 scenario 默认参数（如 `vdb_dir`）
    会从 LLM 看到的 OpenAI tool schema 中删除，调用时由 scenario.py 注入。LLM 既
    不需要知道路径，也无法覆盖。`_path_params` 标记的路径参数还会自动按
    scenario 文件所在目录解析相对路径——scenario 因此可以从任何 cwd 调起。
 
-6. **本话题（用来跑通流程）**：
-   请围绕"是否将 retrieve_docs 查到的项目代号采纳为正式名称"展开讨论，
-   分析师先查文档把事实写进 artifact，决策者读 artifact 后投票。
+6. **本话题（用来跑通压缩后的流程）**：
+   请围绕「是否将 retrieve_docs 查到的项目代号采纳为正式名称」落定；`vdb_artifact`
+   一步内完成检索与 artifact 读写演示；`mem_warm`*2 让三 memory 同场短跑；
+   `ballot_nudge` / `ballot_ok` 分拆覆盖 nudge 与正常投票。
+
+7. **CI**：`ci_who_member` / `ci_who_all` 用极短输出验证 `who` 的标量 `member` 与
+   `all` 在整轮 run 中可正确展开；与「无 artifact」「无 moderator」类拓扑正交，
+   后者继续用 `debate.md` / `brainstorm.md` 等小文件即可。
+
+是否将文档中的项目代号定为团队对外正式名称。

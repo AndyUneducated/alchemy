@@ -1,15 +1,3 @@
-"""Zero-logic CLI adapter for ``Engine.invoke()`` (replaces legacy run.py).
-
-This file is the **only** entry point for ``python -m agent_engine``. It does
-nothing except: argparse → ``Engine(Scenario.from_yaml(path)).invoke(...)``
-→ print save confirmations. No business logic.
-
-Per plan §5.3:
-- Python API (``Engine.invoke()``) is source of truth
-- CLI never has capabilities the API lacks
-- API design is not bent for CLI ergonomics
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -21,8 +9,7 @@ from .scenario import Scenario
 
 
 def main(argv: list[str] | None = None) -> None:
-    # Line-buffer both streams so `2>&1 | tee` preserves chronological order
-    # between stdout (speaker text, tool traces) and stderr (WARNINGs).
+    # Line-buffer so `2>&1 | tee` preserves order between stdout and stderr.
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
 

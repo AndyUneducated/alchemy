@@ -1,35 +1,13 @@
-"""ConversationMemory: strategies for projecting shared history into per-agent messages.
-
-Each strategy takes the global history list (authored by Discussion) plus the
-current agent's *owner* name and returns a ``messages`` list ready for
-``_client.chat``.
-
-Three strategies ship:
-- ``FullHistory``  - keep everything (default, preserves pre-change behavior)
-- ``WindowMemory`` - keep all pinned markers + the last N speaker turns
-- ``SummaryMemory`` - fold stale speech into an incremental ``<summary>`` block
-"""
-
 from __future__ import annotations
 
 from typing import Iterable
 
 PINNED_TYPES: frozenset[str] = frozenset({"topic", "turn", "artifact_event"})
-"""Event types that must never be pruned or folded by any strategy."""
 
 
 def _render(entries: Iterable[dict], owner: str) -> list[dict]:
-    """Wrap history entries into chat messages from *owner*'s perspective.
-
-    Same logic as the original inline loop in ``Agent.respond``:
-    - no ``speaker``                -> system-injected tagged block (``<topic>`` / ``<turn>`` / ``<summary>``)
-    - ``speaker == owner``          -> assistant turn
-    - other ``speaker``             -> ``<message from="...">`` user turn
-    """
     messages: list[dict] = []
     for entry in entries:
-        # Entries flagged with visible=False (e.g. tool_call events recorded
-        # by ToolTracer) are human-only: skip them so other agents can't see.
         if entry.get("visible") is False:
             continue
         speaker = entry.get("speaker")
@@ -46,26 +24,16 @@ def _render(entries: Iterable[dict], owner: str) -> list[dict]:
 
 
 class ConversationMemory:
-    """Protocol for history-to-messages projection.
-
-    Subclasses may hold cache state internally (e.g. ``SummaryMemory``), but
-    the external contract is a pure function of ``(history, owner)``.
-    """
-
     def build_messages(self, history: list[dict], owner: str) -> list[dict]:
         raise NotImplementedError
 
 
 class FullHistory(ConversationMemory):
-    """No pruning, no summarization. Default to preserve pre-change behavior."""
-
     def build_messages(self, history: list[dict], owner: str) -> list[dict]:
         return _render(history, owner)
 
 
 class WindowMemory(ConversationMemory):
-    """Keep every pinned marker plus the last ``max_recent`` speaker turns."""
-
     def __init__(self, max_recent: int) -> None:
         self.max_recent = max_recent
 
@@ -92,17 +60,6 @@ DEFAULT_SUMMARIZE_INSTRUCTION = (
 
 
 class SummaryMemory(ConversationMemory):
-    """Fold stale speech into an incremental ``<summary>`` block.
-
-    Trigger rule: summarizer fires when the count of unsummarized stale speech
-    entries reaches ``max_recent``. Between triggers, stale entries are shown
-    verbatim (no info loss).
-
-    The LLM used for summarization is injected at construction time (``client``
-    + ``summary_model`` / ``summary_max_tokens`` / ``summary_temperature``), so
-    this module has no compile-time dependency on any specific backend.
-    """
-
     def __init__(
         self,
         max_recent: int,
@@ -115,14 +72,14 @@ class SummaryMemory(ConversationMemory):
         summarize_instruction: str = DEFAULT_SUMMARIZE_INSTRUCTION,
     ) -> None:
         self.max_recent = max_recent
-        self._client = client  # any module/object exposing a .chat(...) compatible with agent._client
+        self._client = client
         self._summary_model = summary_model
         self._summary_max_tokens = summary_max_tokens
         self._summary_temperature = summary_temperature
         self._summarizer_prompt = summarizer_prompt
         self._summarize_instruction = summarize_instruction
         self._summary_text: str = ""
-        self._summarized_up_to: int = 0  # history index; prefix [0:this) is folded
+        self._summarized_up_to: int = 0
 
     def build_messages(self, history: list[dict], owner: str) -> list[dict]:
         speech = [i for i, e in enumerate(history) if "speaker" in e]

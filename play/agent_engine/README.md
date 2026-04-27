@@ -276,10 +276,12 @@ ollama pull qwen2.5:32b
 
 ### 作为 Python 库（library, source of truth）
 
+以下路径假定当前工作目录为 **`play/`**（`import agent_engine` 能解析到本包）。
+
 ```python
 from agent_engine import Engine, Scenario
 
-scenario = Scenario.from_yaml("scenarios/roundtable.md")
+scenario = Scenario.from_yaml("agent_engine/scenarios/roundtable.md")
 engine = Engine(scenario)
 result = engine.invoke(
     initial_artifact={"PRD": "..."},          # 可选; 预填 artifact section
@@ -295,17 +297,17 @@ result.warnings     # require_tool 用尽等软失败
 
 ### 作为 CLI（thin adapter）
 
-在仓库根目录（或 `play/`）下：
+在 **`play/`** 目录下（`python -m agent_engine` 能解析包名；scenario 路径相对当前工作目录）：
 
 ```bash
 # 1. 经典圆桌（主持人 + 2 嘉宾）
-python -m agent_engine scenarios/roundtable.md
+python -m agent_engine agent_engine/scenarios/roundtable.md
 
 # 2. 决策会议（主持人 + 4 成员，11 步 25 turn，带 artifact + 投票 + finalize）
-python -m agent_engine scenarios/panel.md --save-artifact /tmp/panel.md
+python -m agent_engine agent_engine/scenarios/panel.md --save-artifact /tmp/panel.md
 
-# 3. RAG 工具烟囱测试（agents 通过 subprocess 调 rag）
-python -m agent_engine scenarios/test_vdb.md
+# 3. 集成烟囱 + CI 单文件（who 四种形态 + artifact + retrieve_docs + memory + require_tool）
+python -m agent_engine agent_engine/scenarios/example.md
 ```
 
 预期输出片段：
@@ -375,30 +377,24 @@ YAML frontmatter 字段：
 | `cast_vote`         | all（除非 tool_owners 限制） | 记录一票（按 `caller` 覆盖写）                     |
 | `finalize_artifact` | all（除非 tool_owners 限制） | 封板；幂等返回 error 防重入                        |
 
-> ⚠ 历史上 `propose_vote` / `finalize_artifact` 是硬编码的"主持人专属"。当前没有任何硬编码默认——若你想保留这个语义，**必须**在 `artifact.tool_owners` 里显式声明 `propose_vote: moderator` / `finalize_artifact: moderator`。
-
 `require_tool: <tool>` 在 step 结束后扫 `artifact.drain_events()` 验证调用是否发生；未命中追加 nudge instruction 重试，重试用尽 stderr WARNING。
 
 ## Scenario 库
 
 | 文件                  | 用途                                                       |
 | ------------------- | -------------------------------------------------------- |
-| `example.md`        | **kitchen-sink 模板**：每个 frontmatter 字段都用一遍 + 行内注释 + body 含运行时心智模型，新作者从这里开始 |
+| `example.md`        | **集成烟囱 + CI**：artifact 六工具 + `retrieve_docs` + window/full/summary + `require_tool` nudge；`ci_who_*` 两步覆盖 `who: member` / `who: all` 标量寻址；字段说明见本 README |
 | `roundtable.md`     | 主持人 + 2 嘉宾，最简流程烟囱（3 step）                                |
 | `debate.md`         | 无主持人，2 立场对辩（2 step）                                      |
 | `brainstorm.md`     | 无主持人，演示 `who: [name, ...]` 显式列表寻址（2 step）                |
 | `panel.md`          | 决策会议：主持人 + 4 成员，11 step / 26 turn，artifact + 投票 + finalize（最完整） |
-| `test_vdb.md`       | `retrieve_docs` 烟囱测试（subprocess 调 rag）                   |
-| `test_memory.md`    | 三种 memory 策略的可见度对照                                      |
-| `test_artifact.md`  | 6 个 artifact 工具 + mode 冲突 self-correct + tool_owners 过滤   |
-| `test_phase_assert.md` | `require_tool` + `max_retries` 重试闭环烟囱                  |
 
 ## 项目结构
 
 ```
 play/agent_engine/
 ├── README.md                   # 本文件
-├── DESIGN_DECISIONS.md         # 设计决策时间线（按时间顺序）
+├── CHANGELOG.md                # 变更日志 + ADR（按 git 历史日期；后续每日 ≤2 条）
 ├── requirements.txt            # anthropic / google-genai / openai / pyyaml
 ├── config.py                   # BACKEND + 各家 model/key/默认参数
 ├── __init__.py                 # 导出 Engine / Scenario / Result / Callback
@@ -422,4 +418,4 @@ play/agent_engine/
 └── scenarios/                  # 场景库（见上表）
 ```
 
-设计动机、候选方案与 trade-off 评估见 `[DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)`。
+变更日志与 ADR 归档见 `[CHANGELOG.md](CHANGELOG.md)`。

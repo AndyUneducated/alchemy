@@ -1,35 +1,19 @@
 BACKEND = "ollama"  # "ollama" | "openai" | "anthropic" | "gemini"
 
-# Ollama
-"""
-Calls the REST API directly via urllib (no ollama SDK),
-exposing OLLAMA_BASE_URL for easy debugging and learning.
-"""
+# Ollama: REST via urllib; OLLAMA_BASE_URL for debugging.
 OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "qwen2.5:32b"
 
-# OpenAI
-"""
-Uses the openai SDK, which accepts a base_url parameter,
-so it can also point to any OpenAI-compatible service (LM Studio, vLLM, etc.).
-"""
+# OpenAI-compatible SDK (LM Studio, vLLM, etc. via base_url).
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENAI_API_KEY = ""
 OPENAI_MODEL = "gpt-4o-mini"
 
-# Anthropic
-"""
-Uses the anthropic SDK, which has no custom base_url option;
-always targets the official Anthropic API, so only key and model are needed.
-"""
+# Anthropic: official API only (no custom base_url in SDK).
 ANTHROPIC_API_KEY = ""
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 
-# Gemini
-"""
-Uses the google-genai SDK (official recommended client);
-only key and model are needed.
-"""
+# Gemini: google-genai SDK.
 GEMINI_API_KEY = ""
 GEMINI_MODEL = "gemini-2.5-flash"
 

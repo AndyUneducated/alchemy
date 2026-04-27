@@ -1,10 +1,3 @@
-"""Shared helpers for tool result envelopes.
-
-A tool's "error" is canonical JSON ``{"error": "..."}`` — both the dispatcher
-and ``ArtifactStore.dispatch`` agree on this so stderr surfacing and tracer
-``ok`` stamping stay consistent.
-"""
-
 from __future__ import annotations
 
 import json
@@ -12,7 +5,6 @@ import sys
 
 
 def is_error(result: str) -> bool:
-    """Return True if *result* parses as a JSON object with an ``error`` key."""
     try:
         payload = json.loads(result)
     except (ValueError, TypeError):
@@ -21,7 +13,6 @@ def is_error(result: str) -> bool:
 
 
 def warn_if_error(name: str, result: str) -> None:
-    """Print a one-line stderr notice when *result* is ``{"error": ...}`` JSON."""
     if not is_error(result):
         return
     payload = json.loads(result)

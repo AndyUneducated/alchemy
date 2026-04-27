@@ -1,9 +1,3 @@
-"""``retrieve_docs`` reasoning tool: hybrid RAG search via subprocess to play/rag.
-
-Calls ``play/rag/query.py --json`` in a child process for OS-level isolation
-(prevents config.py / dependency cross-talk between the two sub-projects).
-"""
-
 from __future__ import annotations
 
 import json

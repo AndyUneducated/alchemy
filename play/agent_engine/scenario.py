@@ -1,17 +1,3 @@
-"""Scenario: parse + validate + assemble a runtime object graph from a .md file.
-
-Single source of truth for "what does this scenario.md mean at runtime":
-- ``Scenario.from_yaml(path)`` parses YAML frontmatter + markdown body and
-  validates schema (fail-fast per plan §12 — ``KeyError`` / ``sys.exit`` on
-  missing required fields, no friendly hints, no migration helpers).
-- ``Scenario.assemble(...)`` builds the agents / tool_handler / artifact store
-  triple consumed by ``Discussion``. ``Engine`` calls this; ``cli`` does too.
-
-This module imports from the engine's own modules with relative imports,
-so it only works when ``agent_engine`` is loaded as a package (``python -m
-agent_engine ...`` or ``import agent_engine``).
-"""
-
 from __future__ import annotations
 
 import copy
@@ -36,16 +22,6 @@ from .memory import (
 from .tools import TOOL_DEFINITIONS, dispatch
 from .tracer import ToolTracer
 
-
-# -- schema validation -------------------------------------------------------
-#
-# Two literal forms accepted by ``who`` (and by ``artifact.tool_owners``):
-#   - scalar str: "moderator" | "member" | "all"          (role / keyword addressing)
-#   - list[str]: agent name list                          (name addressing)
-#
-# Anything else is rejected at load time. Validators print one concrete error
-# and ``sys.exit`` — fail-fast so the author sees the issue before tokens
-# are spent. No friendly suggestions, no migration helpers (plan §12).
 
 VALID_ROLES = {"moderator", "member"}
 VALID_WHO_SCALARS = {"moderator", "member", "all"}
@@ -87,7 +63,6 @@ def _validate_agents(
 
 
 def _validate_who(who, agent_names: set[str], where: str) -> None:
-    """Validate a step's ``who`` form."""
     if isinstance(who, str):
         if who not in VALID_WHO_SCALARS:
             _err(
@@ -117,7 +92,6 @@ def _validate_who(who, agent_names: set[str], where: str) -> None:
 def _validate_who_role_reachability(
     who, agent_roles: dict[str, str], where: str
 ) -> None:
-    """Second pass: scalar role ``moderator``/``member`` must hit ≥1 agent."""
     if not isinstance(who, str) or who == "all":
         return
     if not any(r == who for r in agent_roles.values()):
@@ -155,7 +129,6 @@ def _validate_steps(
 
 
 def _validate_memory(cfg: dict | None, section: str) -> None:
-    """Validate a parsed ``memory`` mapping. ``None`` means unset (FullHistory)."""
     if cfg is None:
         return
     t = cfg.get("type")
@@ -177,7 +150,6 @@ def _validate_artifact(
     agent_names: set[str],
     agent_roles: dict[str, str],
 ) -> None:
-    """Validate an ``artifact`` block. ``None`` means unset (disabled)."""
     if cfg is None:
         return
     if not isinstance(cfg, dict):
@@ -220,16 +192,9 @@ def _validate_artifact(
         _validate_who_role_reachability(value, agent_roles, where)
 
 
-# -- assembly helpers --------------------------------------------------------
-
 def _build_tool_handler(
     tool_configs: list[dict], scenario_dir: str
 ) -> Callable[[str, dict], str]:
-    """Wrap ``tools.dispatch`` with scenario-level default injection.
-
-    Defaults whose key is in the tool's ``_path_params`` are resolved against
-    *scenario_dir* if relative, so scenarios are location-independent.
-    """
     path_params_by_tool: dict[str, set[str]] = {
         td["function"]["name"]: set(td.get("_path_params") or ())
         for td in TOOL_DEFINITIONS
@@ -249,9 +214,6 @@ def _build_tool_handler(
         defaults[name] = resolved
 
     def handler(name: str, arguments: dict) -> str:
-        # Scenario-level defaults win over LLM-supplied args (those keys are
-        # stripped from the schema by _resolve_tool_defs). If the LLM still
-        # hallucinates one we honor the scenario-pinned value.
         merged = {**arguments, **defaults.get(name, {})}
         return dispatch(name, merged)
 
@@ -259,12 +221,6 @@ def _build_tool_handler(
 
 
 def _resolve_tool_defs(tool_configs: list[dict]) -> list[dict]:
-    """Filter TOOL_DEFINITIONS down to those named in *tool_configs*.
-
-    Parameters supplied as scenario defaults are stripped from the OpenAI
-    schema so the LLM cannot fill them in. Internal hints (``_path_params``)
-    are also stripped so the schema is JSON-serializable.
-    """
     defaults_by_name: dict[str, set[str]] = {}
     for tc in tool_configs:
         defaults_by_name[tc["name"]] = {k for k in tc if k != "name"}
@@ -288,7 +244,6 @@ def _resolve_tool_defs(tool_configs: list[dict]) -> list[dict]:
 
 
 def _build_memory(cfg: dict | None) -> ConversationMemory:
-    """Translate a parsed ``memory`` mapping into a ConversationMemory instance."""
     if not cfg:
         return FullHistory()
     t = cfg["type"]
@@ -343,13 +298,6 @@ def _resolve_tool_owners(
     agents: list[dict],
     agent_roles: dict[str, str],
 ) -> dict[str, list[str]]:
-    """Expand owner expressions into flat ``{tool: [agent_name, ...]}`` allowlists.
-
-    Mirrors the ``who`` literal forms accepted by step.who:
-    - scalar "moderator" / "member" → all agents with that role, in declaration order
-    - scalar "all" → every agent, in declaration order
-    - list[str] → name list as written
-    """
     if not owners_cfg:
         return {}
     declared_order = [a["name"] for a in agents]
@@ -365,8 +313,6 @@ def _resolve_tool_owners(
     return out
 
 
-# -- frontmatter parsing -----------------------------------------------------
-
 _FRONTMATTER_RE = re.compile(
     r"\A(?:[^\n]*\n)*?^---\s*\n(?P<meta>.*?)\n^---\s*\n?(?P<body>.*)\Z",
     re.DOTALL | re.MULTILINE,
@@ -374,27 +320,14 @@ _FRONTMATTER_RE = re.compile(
 
 
 def _split_frontmatter(text: str) -> tuple[str | None, str]:
-    """Return ``(yaml_text, body_text)`` or ``(None, full_text)``.
-
-    Frontmatter delimiter is a line containing only ``---`` (with optional
-    trailing whitespace). Pre-frontmatter content (e.g. a leading title or
-    comment block) is allowed and discarded.
-    """
     m = _FRONTMATTER_RE.match(text)
     if not m:
         return None, text
     return m.group("meta"), m.group("body").strip()
 
 
-# -- public ------------------------------------------------------------------
-
 @dataclass
 class Assembly:
-    """Runtime object graph emitted by ``Scenario.assemble``.
-
-    ``Engine`` and ``cli`` consume this to construct a ``Discussion``.
-    """
-
     agents: list[Agent]
     agent_roles: dict[str, str]
     steps: list[dict]
@@ -405,26 +338,16 @@ class Assembly:
 
 @dataclass
 class Scenario:
-    """A parsed + validated scenario, ready to be assembled into a runtime graph."""
-
     path: str
     meta: dict
     body: str
     scenario_dir: str
 
-    # Validated, derived state populated by ``from_yaml``:
     agent_names: set[str] = field(default_factory=set)
     agent_roles: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, path: str) -> "Scenario":
-        """Parse + validate a scenario .md file. Fail-fast on schema errors.
-
-        Frontmatter delimiter is a **line containing only** ``---`` (anchored
-        at line start, optional trailing whitespace). String literals like
-        markdown table separators (``|---|---|---|``) inside agent prompts
-        therefore cannot prematurely close the frontmatter.
-        """
         with open(path, encoding="utf-8") as f:
             text = f.read()
 
@@ -450,7 +373,6 @@ class Scenario:
         return scn
 
     def assemble(self) -> Assembly:
-        """Build the runtime object graph (agents, artifact, tracer) from the parsed meta."""
         agents_cfg = self.meta["agents"]
         scenario_mem_cfg = self.meta.get("memory")
 
@@ -473,8 +395,6 @@ class Scenario:
                 tool_owners=resolved_owners,
             )
 
-        # One tracer per assembly; handed to both per-agent handler (record)
-        # and Discussion (drain into history). Kept None when no scenario tools.
         tracer = ToolTracer() if base_handler is not None else None
 
         def _agent_bundle(agent_name: str):
@@ -486,8 +406,6 @@ class Scenario:
 
             def handler(name: str, args: dict, *, _caller=agent_name) -> str:
                 if store is not None and name in ARTIFACT_TOOL_NAMES:
-                    # Artifact tools have their own emoji print + artifact_event
-                    # channel — don't double-record via tracer.
                     return store.dispatch(name, args, caller=_caller)
                 if base_handler is None:
                     return json.dumps({"error": f"Unknown tool: {name}"})
