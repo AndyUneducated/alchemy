@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""CLI tool: read documents (txt/md/pdf), chunk, embed via Ollama, persist to ChromaDB."""
-
 from __future__ import annotations
 
 import argparse
@@ -31,7 +29,6 @@ SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 
 def _read_file(path: str) -> str:
-    """Extract text from a file; dispatches on extension."""
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pdf":
         doc = fitz.open(path)
@@ -41,7 +38,6 @@ def _read_file(path: str) -> str:
 
 
 def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
-    """Return a list of (relative_path, text) for files and/or directories."""
     docs: list[tuple[str, str]] = []
     for path in paths:
         if os.path.isfile(path):
@@ -72,7 +68,6 @@ def ingest(
     model: str = EMBED_MODEL,
     collection_name: str | None = None,
 ) -> None:
-    """Read docs from *doc_paths*, chunk, embed, and persist a ChromaDB VDB."""
     docs = _collect_docs(doc_paths)
     if not docs:
         sys.exit(f"No supported files found in: {', '.join(doc_paths)}")

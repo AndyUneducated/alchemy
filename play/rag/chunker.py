@@ -1,5 +1,3 @@
-"""Paragraph-aware text chunking with overlap."""
-
 from __future__ import annotations
 
 from config import CHUNK_SIZE, CHUNK_OVERLAP
@@ -10,12 +8,6 @@ def split_text(
     chunk_size: int = CHUNK_SIZE,
     overlap: int = CHUNK_OVERLAP,
 ) -> list[str]:
-    """Split *text* into chunks of roughly *chunk_size* characters.
-
-    The algorithm respects paragraph boundaries (double newlines) so that a
-    chunk never starts or ends in the middle of a paragraph when avoidable.
-    Adjacent chunks share *overlap* characters of trailing/leading context.
-    """
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     if not paragraphs:
         return []
@@ -36,7 +28,7 @@ def split_text(
             current_len = 0
             continue
 
-        sep_len = 2 if current else 0  # "\n\n" separator
+        sep_len = 2 if current else 0
         if current_len + sep_len + para_len > chunk_size and current:
             chunks.append("\n\n".join(current))
             current, current_len = _carry_overlap(current, overlap)
@@ -53,7 +45,6 @@ def split_text(
 def _carry_overlap(
     parts: list[str], overlap: int
 ) -> tuple[list[str], int]:
-    """Return trailing paragraphs whose total length <= *overlap*."""
     carry: list[str] = []
     total = 0
     for part in reversed(parts):
@@ -65,7 +56,6 @@ def _carry_overlap(
 
 
 def _split_long(text: str, chunk_size: int, overlap: int) -> list[str]:
-    """Hard-split a single oversized paragraph by character boundaries."""
     chunks: list[str] = []
     start = 0
     while start < len(text):

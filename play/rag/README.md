@@ -257,7 +257,7 @@ vdb/test_vdb/
 ```
 play/rag/
 ├── README.md                   # 本文件
-├── DESIGN_DECISIONS.md         # 设计决策时间线
+├── CHANGELOG.md                # 变更日志 + ADR（按 git 历史日期；后续每日 ≤2 条）
 ├── requirements.txt            # chromadb + pymupdf + ollama + rank-bm25 + tokenizers + sentence-transformers + torch
 ├── config.py                   # EMBED_MODEL / CHUNK_SIZE / RRF_K / RERANKER_MODEL 等默认值
 ├── chunker.py                  # 段落感知切分（split_text）

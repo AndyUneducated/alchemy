@@ -1,10 +1,3 @@
-"""HuggingFace tokenizer wrapper for BM25 ingestion / query.
-
-Reuses the embedding model's tokenizer so BM25 and dense retrieval share the
-same lexical view. Only `tokenizer.json` (~10MB) is downloaded; model weights
-are not pulled.
-"""
-
 from __future__ import annotations
 
 from functools import lru_cache
@@ -20,12 +13,6 @@ def _tokenizer(name: str) -> Tokenizer:
 
 
 def tokenize(text: str, name: str | None = None) -> list[str]:
-    """Tokenize *text* into a list of normalized subword strings for BM25.
-
-    *name* lets the query side pass the tokenizer recorded in the VDB's
-    metadata.json (sentinel pattern). Defaults to `EMBED_TOKENIZER` for
-    ingestion.
-    """
     encoded = _tokenizer(name or EMBED_TOKENIZER).encode(text)
     out: list[str] = []
     for t in encoded.tokens:

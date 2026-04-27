@@ -1,22 +1,16 @@
-# Play/rag — 设计决策记录
+# Changelog
 
-本文档记录 `play/rag/` 的系统设计决策，按时间顺序积累，聚焦**技术选型**："为什么是这个，不是那个"。每节包含背景、候选方案、选择依据、行业光谱位置，以及按统一工程维度的评估。维度定义见 `../agent_engine/DESIGN_DECISIONS.md` 的附录。
-
-> 历史包名：`play/multiagent/` 已于 2026-04 重构为 `play/agent_engine/`（双层架构 v2）。下文叙述中"multiagent"在历史决策记录里保留原文不变；当前对应包名为 `agent_engine`。
-
-## 指导原则
+`CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录使用 `## n. 变更标题`，下一行写 `- 日期：...`，再写正文。后续每个自然日建议最多追加 1～2 条 tech decision。
+### Project conventions / ADR vocabulary
+### 指导原则
 
 1. **VDB 自描述**：embedding-model、chunk 参数、tokenizer 跟数据走，消除"用错模型查对的库"的静默失败
 2. **Library API 先于 CLI**：先设计可被程序化调用的函数，CLI 是薄包装
 3. **抽象滞后于第二个使用者**：单 backend 就不留 `if/elif` 分支
 4. **优先库自带能力，不造轮子**：ChromaDB 官方提供的就不自写
 
----
-
 ## 1. 技术栈：ChromaDB + Ollama
-
-- **日期**：2026-04-15
-
+- 日期：2026-04-15
 ### Context
 
 本地可跑、一 agent 一库、可被工具链调用、workshop 可复现。要给 multiagent 的 panel/brainstorm 角色喂私有背景。
@@ -67,12 +61,8 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 | 学习曲线 | 低——两个 CLI，每个 ≤5 参数 |
 | 可测试性 | 高——纯函数 pipeline，可独立验证 |
 
----
-
 ## 2. 段落感知 chunker
-
-- **日期**：2026-04-15
-
+- 日期：2026-04-15
 ### Context
 
 中文 profile 文档（角色档案、事实清单等结构化纯文本）切得"不破坏语义单元"。Chunking 直接决定召回上限。
@@ -112,12 +102,8 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 
 **对结构化纯文本效果好；对长篇无段落 PDF（OCR 产物、法律合同）会大量回退字符硬切，召回下降**。那种场景应换 LangChain `RecursiveCharacterTextSplitter` 或 semantic chunking——现阶段 YAGNI。
 
----
-
 ## 3. 结构化 search API + `--json` subprocess 契约
-
-- **日期**：2026-04-16
-
+- 日期：2026-04-16
 ### Context
 
 初版 `query(...)` 直接 `print()` 到 stdout——CLI 能用，但 multiagent 工具集成要程序化调用。需要明确两端数据契约。
@@ -167,12 +153,8 @@ def query(...) -> None:  pretty_print(search(...))
 | 学习曲线 | 低——多一个 `--json` flag，脚本化使用者无感 |
 | 可测试性 | 高——`search()` 纯函数 + TypedDict 返回，断言容易 |
 
----
-
 ## 4. Hybrid retrieval：dense + BM25 + RRF
-
-- **日期**：2026-04-25
-
+- 日期：2026-04-25
 ### Context
 
 纯 dense embedding 在三种场景上跌跤：
@@ -250,12 +232,8 @@ def query(...) -> None:  pretty_print(search(...))
 - **Score 跨 mode 不可比**：dense 是 `1/(1+dist)`、bm25 是原始分（可能为负）、hybrid 是 RRF（~0.01-0.05）；同一次调用内排序正确，但跨 mode 阈值不可迁移
 - **BM25 不做增量**：每次 ingest 全量重建——简化心智，YAGNI
 
----
-
 ## 5. Cross-encoder reranker
-
-- **日期**：2026-04-25
-
+- 日期：2026-04-25
 ### Context
 
 Hybrid retrieval（§4）改善召回，但 top-K 内**排序**仍受限：

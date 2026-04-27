@@ -1,9 +1,4 @@
-"""One-time HuggingFace asset prefetch. Run on every fresh dev machine.
-
-Pulls the BM25 tokenizer (~10MB) and the cross-encoder reranker (~1.2GB) into
-the user-level HF cache (~/.cache/huggingface/) so subsequent ingest / query
-calls run offline.
-"""
+from __future__ import annotations
 
 from tokenizers import Tokenizer
 from sentence_transformers import CrossEncoder

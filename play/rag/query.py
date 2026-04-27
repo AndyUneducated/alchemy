@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""CLI tool & programmatic API: query a ChromaDB VDB (hybrid retrieval)."""
-
 from __future__ import annotations
 
 import argparse
@@ -28,7 +26,6 @@ SearchMode = Literal["dense", "bm25", "hybrid"]
 
 
 class SearchResult(TypedDict):
-    """Provider-agnostic retrieval result (not tied to ChromaDB)."""
     content: str
     score: float
     source: str
@@ -46,7 +43,6 @@ def _load_meta(vdb_dir: str) -> dict:
 def _materialize(
     collection, scored_ids: list[tuple[str, float]], mode: SearchMode,
 ) -> list[SearchResult]:
-    """Fetch content + metadata for ranked ids and wrap as SearchResults."""
     if not scored_ids:
         return []
 
@@ -85,18 +81,6 @@ def search(
     model: str | None = None,
     collection_name: str | None = None,
 ) -> list[SearchResult]:
-    """Return the *top_k* most relevant chunks.
-
-    *mode* selects the retrieval strategy:
-      - "hybrid" (default): dense + BM25 fused via RRF
-      - "dense" / "bm25": single retriever, for diagnostics
-
-    *rerank* enables a cross-encoder pass: retrieves a wider candidate pool
-    (`RERANK_CANDIDATES`) then re-scores down to *top_k*.
-
-    `bm25.pkl` is required for every mode (its presence implies a healthy
-    VDB; missing means the VDB was built with an old ingest).
-    """
     bm25_path = os.path.join(vdb_dir, "bm25.pkl")
     if not os.path.exists(bm25_path):
         raise FileNotFoundError(
@@ -168,7 +152,6 @@ def query(
     model: str | None = None,
     collection_name: str | None = None,
 ) -> None:
-    """Pretty-print search results to stdout (CLI entry-point)."""
     hits = search(
         vdb_dir, query_text,
         top_k=top_k, mode=mode, rerank=rerank,

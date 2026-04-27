@@ -1,10 +1,3 @@
-"""Cross-encoder reranker for the candidate pool produced by hybrid retrieval.
-
-The model is loaded lazily on first call (single shared instance per process).
-Score is the cross-encoder's relevance logit; range varies by model but is
-strictly monotonic — only ordering matters.
-"""
-
 from __future__ import annotations
 
 from functools import lru_cache
@@ -26,7 +19,6 @@ def _model(name: str = RERANKER_MODEL) -> CrossEncoder:
 def rerank(
     query_text: str, hits: list["SearchResult"], top_k: int,
 ) -> list["SearchResult"]:
-    """Re-score *hits* with a cross-encoder and return the top *top_k*."""
     if not hits:
         return []
 
