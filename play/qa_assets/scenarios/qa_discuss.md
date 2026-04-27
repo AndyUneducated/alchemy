@@ -29,6 +29,17 @@ artifact:
   # tool_owners 留空 = 全员都能调任意 artifact 工具——纪律靠 prompt 维持
   # (plan §6 二分类 + §12 不做 runtime allowlist)
 
+# QA 知识库检索: P4 接入 (plan §8 P4)
+#   语料 = play/qa_assets/kb 下的 4 类: prds / testcases / bugs / checklists
+#   ingest 命令 (从 play/rag/ 跑): 
+#     python ingest.py --docs ../qa_assets/kb --output ../qa_assets/vdb/qa_kb
+#   vdb_dir 路径相对本 scenario.md, scenario.py 自动解析为绝对路径
+tools:
+  - name: retrieve_docs
+    vdb_dir: ../vdb/qa_kb
+    top_k: 3
+    # mode / rerank 留给 LLM 决定 (default hybrid + no rerank)
+
 agents:
   - name: supervisor
     role: moderator
@@ -49,6 +60,8 @@ agents:
       你是需求拆解 specialist (Decomposer).
       读 artifact.Requirements (yaml 字符串), 把每个需求拆为原子 feature
       + 验收标准 (acceptance criteria).
+      建议: **先**调一次 retrieve_docs(query="<需求关键词>") 查历史 PRD,
+      看相似需求的拆解结构 + 已有教训, 再产出本次的拆解.
       产出: 调用 write_section(name="原子需求", content="<markdown>") 一次性
       写入. 格式:
         ### REQ-001 用户邮箱注册
@@ -65,6 +78,8 @@ agents:
       你是风险打分 specialist (Risk Grader).
       读 artifact.Requirements + 原子需求, 给每个需求打 P0~P3 风险等级 + 一句话
       理由 (业务影响 / 故障频度 / 数据敏感度).
+      建议: 调 retrieve_docs(query="<需求关键词> bug 故障") 查历史 bug /
+      postmortem, 历史踩过坑的方向必须升级为 P0/P1.
       产出: 调用 write_section(name="风险等级", content="<markdown>") 一次性
       写入. 格式:
         | req_id | priority | rationale |
@@ -78,6 +93,9 @@ agents:
       你是测试用例 specialist (Case Generator).
       读 artifact.Requirements + 原子需求, 为每个需求产出 functional + edge /
       boundary cases.
+      建议: 调 retrieve_docs(query="<相似需求> 测试用例") 查历史 testcase 与
+      bug, 把别人踩过的坑直接转化为本次的边界 / 异常用例 (例如 "并发注册"
+      "超长邮箱" "邮件队列阻塞" 都是历史踩过的).
       产出: 调用 write_section(name="测试用例", content="<markdown>") 一次性
       写入. 格式:
         ### REQ-001 用户邮箱注册
@@ -93,6 +111,9 @@ agents:
       你是非功能需求 specialist (NFR Planner).
       读 artifact.Requirements, 为整批需求规划性能 / 安全 / a11y / i18n
       非功能测试点.
+      建议: 调 retrieve_docs(query="<domain> checklist") 查域内 checklist
+      (如 auth_checklist / perf_checklist), 用 SLO 与 baseline 项填充本节,
+      不要凭空猜阈值.
       产出: 调用 write_section(name="非功能", content="<markdown>") 一次性
       写入. 格式:
         ## 性能

@@ -14,3 +14,7 @@ venv/
 *.egg-info/
 .idea/
 *.log
+
+# RAG VDB outputs (chroma sqlite + bm25 pickle + metadata) — large, regenerable.
+play/*/vdb/
+play/qa_assets/vdb/
