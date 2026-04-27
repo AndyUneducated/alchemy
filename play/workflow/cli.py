@@ -1,5 +1,3 @@
-"""Zero-logic CLI for ``Workflow.run`` (``python -m workflow run <file>``)."""
-
 from __future__ import annotations
 
 import argparse

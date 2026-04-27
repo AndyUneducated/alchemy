@@ -1,16 +1,3 @@
-"""``Workflow``: parse + run a workflow.yaml.
-
-A Workflow is the outer deterministic pipeline (plan §2.1). It runs a list
-of stages in declaration order, threading state through interpolation:
-
-- ``vars.<name>`` — workflow inputs (CLI ``--vars k=v`` or YAML default)
-- ``stages.<name>.output`` — previous stage's return value
-- ``pkg_dir`` — workflow.yaml's parent dir (for resolving template paths)
-
-No conditional / parallel / loop / retry / DAG (plan §9). Stage failures
-propagate as exceptions; runner does not catch.
-"""
-
 from __future__ import annotations
 
 import os
@@ -37,8 +24,6 @@ _VAR_CASTS = {
 
 @dataclass
 class Workflow:
-    """Parsed workflow.yaml ready to ``run(vars_dict)``."""
-
     path: str
     name: str
     description: str | None
@@ -65,7 +50,6 @@ class Workflow:
         )
 
     def run(self, vars_input: dict[str, str]) -> dict[str, Any]:
-        """Execute every stage in order; return the final state dict."""
         resolved_vars = self._resolve_vars(vars_input)
         state: dict[str, Any] = {
             "vars": resolved_vars,
@@ -86,10 +70,7 @@ class Workflow:
               flush=True)
         return state
 
-    # -- internals ----------------------------------------------------------
-
     def _resolve_vars(self, vars_input: dict[str, str]) -> dict[str, Any]:
-        """Apply required / default / type cast per ``vars`` spec."""
         out: dict[str, Any] = {}
         for vname, spec in self.vars_spec.items():
             if vname in vars_input:
@@ -103,7 +84,6 @@ class Workflow:
                 raw = spec.get("default", "")
             cast = _VAR_CASTS[spec.get("type", "str")]
             out[vname] = cast(raw)
-        # Allow extra keys the schema didn't declare — pass through as str.
         for vname in vars_input:
             if vname not in out:
                 out[vname] = vars_input[vname]
@@ -124,7 +104,6 @@ class Workflow:
             config = interpolate(stage.get("config", {}) or {}, state)
             value = agent_exec.run(stage, config, workflow_dir=self.workflow_dir)
         else:
-            # Unreachable: schema validator rejects other types.
             sys.exit(f"Error: stage '{sname}': unknown type {stype!r}.")
 
         dt_ms = int((time.monotonic() - t0) * 1000)

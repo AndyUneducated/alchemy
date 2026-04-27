@@ -16,11 +16,18 @@
 
 ### Python
 
+以下路径假定当前工作目录为 **`play/`**（与 `python -m workflow run ...` 一致）。
+
 ```python
 from workflow import Workflow
 
-wf = Workflow.from_yaml("workflows/qa_supervisor.yaml")
-state = wf.run({"csv_path": "examples/requirements.csv"})
+wf = Workflow.from_yaml("qa_assets/workflows/qa_supervisor.yaml")
+state = wf.run(
+    {
+        "csv_path": "qa_assets/examples/req_tracker.csv",
+        "output_dir": "/tmp/qa_out",
+    }
+)
 # state["stages"]["render_csv"]["output"]  # 末段 stage 输出
 ```
 
@@ -51,6 +58,7 @@ play/workflow/
 │   └── chat.yaml                                     纯 agent 单 stage
 ├── __init__.py           导出 Workflow
 ├── __main__.py           python -m workflow
+├── CHANGELOG.md          变更日志 + ADR（按 git 历史日期；后续每日 ≤2 条）
 └── README.md             本文件
 ```
 

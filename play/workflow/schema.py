@@ -1,13 +1,3 @@
-"""Minimal workflow.yaml schema validation.
-
-Per plan §12 fail-fast philosophy: detect programmer errors at first failure
-point, no friendly hints, no migration helpers, no smart inference. The
-validator only catches "missing required field" / "wrong shape" mistakes.
-Anything else (missing referenced stage, unknown function, runtime KeyError
-in template) is allowed to surface as a normal Python exception when the
-runner reaches it.
-"""
-
 from __future__ import annotations
 
 import sys
@@ -23,7 +13,6 @@ def _err(msg: str) -> None:
 
 
 def validate(meta: dict[str, Any]) -> None:
-    """Validate top-level ``workflow.yaml`` shape; fail-fast on missing fields."""
     if not isinstance(meta, dict):
         _err("top-level YAML must be a mapping.")
 

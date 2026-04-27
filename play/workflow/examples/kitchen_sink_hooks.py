@@ -1,12 +1,3 @@
-"""Demo hooks for kitchen_sink.yaml — minimal Python to make the example runnable.
-
-Each function demonstrates one canonical use:
-- echo            → produces a value (list[str]) for downstream stages
-- enrich_lines    → consumes one stage's output, transforms, returns
-- to_yaml         → serialize structured data to a string (replaces template filter)
-- write_md        → consume artifact + write to disk (terminal stage side-effect)
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,12 +19,6 @@ def to_yaml(obj: Any) -> str:
 
 
 def write_md(sections: dict[str, str], output_path: str, pkg_dir: str) -> str:
-    """Write artifact dict as a flat markdown file. Returns *output_path*.
-
-    *pkg_dir* (workflow.yaml's directory) is accepted but unused here — kept
-    in the signature to demonstrate ``{{ pkg_dir }}`` interpolation in the
-    kitchen-sink demo.
-    """
     body_parts = (
         [f"## {k}\n\n{v}" for k, v in sections.items()] if sections else ["_(no sections)_"]
     )
