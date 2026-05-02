@@ -46,15 +46,15 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 
 ### 工程维度评估
 
-| 维度 | 评估 |
+|维度|评估|
 |---|---|
-| 内聚度 | 高——`ingest` / `query` 各司其职 |
-| 耦合度 | 低——只依赖 `chromadb` + `pymupdf`；Ollama 走 HTTP 解耦 |
-| 可观测性 / 可审计性 | 中——stdout 打 chunk 数、embedding 进度，无结构化 log |
-| LLM 不确定性容忍 | N/A |
-| 向后兼容 / 演化友好 | 项目起点；目录式 VDB 可直接 `rm -rf` 重来 |
-| 学习曲线 | 低——两个 CLI，每个 ≤5 参数 |
-| 可测试性 | 高——纯函数 pipeline，可独立验证 |
+|内聚度|高——`ingest` / `query` 各司其职|
+|耦合度|低——只依赖 `chromadb` + `pymupdf`；Ollama 走 HTTP 解耦|
+|可观测性 / 可审计性|中——stdout 打 chunk 数、embedding 进度，无结构化 log|
+|LLM 不确定性容忍|N/A|
+|向后兼容 / 演化友好|项目起点；目录式 VDB 可直接 `rm -rf` 重来|
+|学习曲线|低——两个 CLI，每个 ≤5 参数|
+|可测试性|高——纯函数 pipeline，可独立验证|
 
 ## 2. 段落感知 chunker
 
@@ -86,14 +86,14 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 
 ### 工程维度评估
 
-| 维度 | 评估 |
+|维度|评估|
 |---|---|
-| 内聚度 | 高——`chunker.py` 独立无状态函数 |
-| 耦合度 | 极低——只从 config 读默认参数 |
-| 可观测性 / 可审计性 | 中——ingest 打印"file: N chunks"；chunk 可 `query --top-k` 目检 |
-| 向后兼容 / 演化友好 | 完全兼容——参数化 |
-| 学习曲线 | 低——`chunk_size` / `overlap` 两个语义明确的旋钮 |
-| 可测试性 | 高——纯函数，易 property test |
+|内聚度|高——`chunker.py` 独立无状态函数|
+|耦合度|极低——只从 config 读默认参数|
+|可观测性 / 可审计性|中——ingest 打印"file: N chunks"；chunk 可 `query --top-k` 目检|
+|向后兼容 / 演化友好|完全兼容——参数化|
+|学习曲线|低——`chunk_size` / `overlap` 两个语义明确的旋钮|
+|可测试性|高——纯函数，易 property test|
 
 ### 持续 trade-off
 
@@ -142,15 +142,15 @@ def query(...) -> None:  pretty_print(search(...))
 
 ### 工程维度评估
 
-| 维度 | 评估 |
+|维度|评估|
 |---|---|
-| 内聚度 | 高——`search` 返回数据、`query` 负责视图、`main` 负责 CLI，三层分明 |
-| 耦合度 | 低——`SearchResult` 只依赖 `TypedDict` 内建；multiagent 侧无需 `import rag` |
-| 可观测性 / 可审计性 | 中——multiagent 侧 ToolTracer 能记 stdin/stdout；rag 自己无结构化 log |
-| LLM 不确定性容忍 | 间接升——LLM 收到规范 JSON 比自由文本更容易正确引用 |
-| 向后兼容 / 演化友好 | 加法式——`SearchResult` 可加字段；CLI 原行为保持 |
-| 学习曲线 | 低——多一个 `--json` flag，脚本化使用者无感 |
-| 可测试性 | 高——`search()` 纯函数 + TypedDict 返回，断言容易 |
+|内聚度|高——`search` 返回数据、`query` 负责视图、`main` 负责 CLI，三层分明|
+|耦合度|低——`SearchResult` 只依赖 `TypedDict` 内建；multiagent 侧无需 `import rag`|
+|可观测性 / 可审计性|中——multiagent 侧 ToolTracer 能记 stdin/stdout；rag 自己无结构化 log|
+|LLM 不确定性容忍|间接升——LLM 收到规范 JSON 比自由文本更容易正确引用|
+|向后兼容 / 演化友好|加法式——`SearchResult` 可加字段；CLI 原行为保持|
+|学习曲线|低——多一个 `--json` flag，脚本化使用者无感|
+|可测试性|高——`search()` 纯函数 + TypedDict 返回，断言容易|
 
 ## 4. Hybrid retrieval：dense + BM25 + RRF
 
@@ -217,15 +217,15 @@ def query(...) -> None:  pretty_print(search(...))
 
 ### 工程维度评估
 
-| 维度 | 评估 |
+|维度|评估|
 |---|---|
-| 内聚度 | 高——`bm25.py` 三个纯函数 + 一个 cache helper；`tokenizer.py` 单一职责；`search()` 编排 |
-| 耦合度 | 中——`bm25.py` 不 import HF / config 业务参数（只 RRF_K）；query 端负责 tokenize 后传 tokens 进来 |
-| 可观测性 / 可审计性 | 中升——envelope `meta` 暴露 mode / reranked / vdb；per-hit `metadata.retrieval` 下游可对账 |
-| LLM 不确定性容忍 | 升——稀有专名 / 编号召回率显著高于纯 dense |
-| 向后兼容 / 演化友好 | 加法式 + 一处 BREAKING——`search()` 函数签名加可选参数；CLI `--json` 改 envelope 是刻意 BREAKING（solo project 不付兼容税；为未来加 pagination / timing / version 一次到位） |
-| 学习曲线 | 低——CLI 只多 `--mode` 一个选项，默认即是 hybrid |
-| 可测试性 | 高——`tokenize` / `rrf_fuse` / `bm25_search` / `dense_search` 都是纯函数 |
+|内聚度|高——`bm25.py` 三个纯函数 + 一个 cache helper；`tokenizer.py` 单一职责；`search()` 编排|
+|耦合度|中——`bm25.py` 不 import HF / config 业务参数（只 RRF_K）；query 端负责 tokenize 后传 tokens 进来|
+|可观测性 / 可审计性|中升——envelope `meta` 暴露 mode / reranked / vdb；per-hit `metadata.retrieval` 下游可对账|
+|LLM 不确定性容忍|升——稀有专名 / 编号召回率显著高于纯 dense|
+|向后兼容 / 演化友好|加法式 + 一处 BREAKING——`search()` 函数签名加可选参数；CLI `--json` 改 envelope 是刻意 BREAKING（solo project 不付兼容税；为未来加 pagination / timing / version 一次到位）|
+|学习曲线|低——CLI 只多 `--mode` 一个选项，默认即是 hybrid|
+|可测试性|高——`tokenize` / `rrf_fuse` / `bm25_search` / `dense_search` 都是纯函数|
 
 ### 持续 trade-off
 
@@ -287,15 +287,15 @@ Hybrid retrieval（§4）改善召回，但 top-K 内**排序**仍受限：
 
 ### 工程维度评估
 
-| 维度 | 评估 |
+|维度|评估|
 |---|---|
-| 内聚度 | 高——`reranker.py` 一个职责（CrossEncoder 包装）；`search()` 一行 if 编排 |
-| 耦合度 | 低——`reranker.py` 不知道 hybrid / dense / bm25；输入输出都是 `SearchResult` |
-| 可观测性 / 可审计性 | 升——每条 hit 有 `reranked` 标识，envelope `meta` 同步 |
-| LLM 不确定性容忍 | 升——top-K 排序质量提升直接降低 LLM 选错段落的概率 |
-| 向后兼容 / 演化友好 | 加法式——`rerank` 参数有默认值；不开就跟纯 hybrid 检索完全等价 |
-| 学习曲线 | 低——CLI 多一个 `--rerank` flag；首次跑会自动下载，无需手动安装 |
-| 可测试性 | 高——`rerank()` 是纯函数（除了模型加载副作用） |
+|内聚度|高——`reranker.py` 一个职责（CrossEncoder 包装）；`search()` 一行 if 编排|
+|耦合度|低——`reranker.py` 不知道 hybrid / dense / bm25；输入输出都是 `SearchResult`|
+|可观测性 / 可审计性|升——每条 hit 有 `reranked` 标识，envelope `meta` 同步|
+|LLM 不确定性容忍|升——top-K 排序质量提升直接降低 LLM 选错段落的概率|
+|向后兼容 / 演化友好|加法式——`rerank` 参数有默认值；不开就跟纯 hybrid 检索完全等价|
+|学习曲线|低——CLI 多一个 `--rerank` flag；首次跑会自动下载，无需手动安装|
+|可测试性|高——`rerank()` 是纯函数（除了模型加载副作用）|
 
 ### 持续 trade-off
 

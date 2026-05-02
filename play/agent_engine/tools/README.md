@@ -11,9 +11,9 @@ agent_engine 的 `tools/` 包**只**放推理性 tool：
 
 ## 现有 tool
 
-| 文件 | 性质 | 说明 |
+|文件|性质|说明|
 |---|---|---|
-| `retrieve_docs.py` | Reasoning | LLM 动态决策 query/mode/rerank 的语义搜索；subprocess 调用 `play/rag/query.py --json` |
+|`retrieve_docs.py`|Reasoning|LLM 动态决策 query/mode/rerank 的语义搜索；subprocess 调用 `play/rag/query.py --json`|
 
 `artifact.py`（位于 agent_engine 根目录）的 6 个 artifact 工具（`read/write/append/propose_vote/cast_vote/finalize`）是**进程内副作用**（写 ArtifactStore 内存对象），不属于 external I/O，留在 agent_engine。
 

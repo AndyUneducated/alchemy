@@ -19,13 +19,13 @@ Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatt
 
 贯穿本项目的 5 条原则：
 
-| # | 原则 | 说明 |
-| --- | --- | --- |
-| 1 | **Shared transcript + per-agent projection** | 对话数据只有一份权威视图，各 agent 按自身需求投影 |
-| 2 | **显式优于隐式** | 配置能声明的不靠代码推断；LLM 行为能结构化约束的不靠 prompt 约定 |
-| 3 | **承认 LLM 不确定性** | 不把 LLM 当确定性函数，容错设计（retry / self-correct / audit）优先于强制 |
-| 4 | **装配点集中** | `Scenario.assemble()` 产出运行时对象图，`Engine.invoke()` 负责单次运行的编排与落盘；`cli.py` 只做 argparse → 上述 API。讨论内核不依赖 CLI 或脚本入口 |
-| 5 | **抽象引入滞后于第二个具体案例** | 不为未来需求预留抽象，等第二个使用者出现时再抽 |
+|#|原则|说明|
+|---|---|---|
+|1|**Shared transcript + per-agent projection**|对话数据只有一份权威视图，各 agent 按自身需求投影|
+|2|**显式优于隐式**|配置能声明的不靠代码推断；LLM 行为能结构化约束的不靠 prompt 约定|
+|3|**承认 LLM 不确定性**|不把 LLM 当确定性函数，容错设计（retry / self-correct / audit）优先于强制|
+|4|**装配点集中**|`Scenario.assemble()` 产出运行时对象图，`Engine.invoke()` 负责单次运行的编排与落盘；`cli.py` 只做 argparse → 上述 API。讨论内核不依赖 CLI 或脚本入口|
+|5|**抽象引入滞后于第二个具体案例**|不为未来需求预留抽象，等第二个使用者出现时再抽|
 
 ## 架构
 
@@ -87,16 +87,16 @@ flowchart TB
     io -. live tail .- tool
 ```
 
-| 层 | 本项目里的具体落地 |
-| --- | --- |
-| **UI / 用户接口** | Python API `Engine.invoke(...)` (库 SoT) + `cli.py` 作为 thin adapter (`python -m agent_engine`) ；scenario `.md` 输入；stdout 流式发言 + emoji 实时事件、stderr WARNING；`artifact_path` / `transcript_path` 落盘 |
-| **Orchestration / 编排** | `scenario.Scenario` (schema 校验 + 装配)；`engine.Engine` 库化壳子；`discussion.py` Discussion 引擎（steps → turns + `<turn X of N>` marker + retry 闭环） |
-| **Planning / 规划** | scenario `steps` 声明式列表；`who` 路由（role/all/name）；`require_tool` + `max_retries` 行为约束 |
-| **Reasoning / 推理** | `Agent.respond()` + persona system prompt + per-step instruction；backend client 内的 tool-use loop（多轮 function calling） |
-| **Memory / 记忆** | shared transcript（`Discussion.history` 唯一权威）+ per-agent `Memory.build_messages` 投影；`Full / Window / Summary` 三策略可换 |
-| **Tool Use / 工具** | `tools/` 包 dispatch + scenario default 注入 + path 解析；`ArtifactStore` 6 工具（`read/write/append/propose/cast/finalize`）+ `tool_owners` ACL |
-| **LLM Core / 大模型核心** | 4 个 pluggable backend client（ollama / openai / anthropic / gemini），`config.BACKEND` 一行切换；`config.py` 集中模型 / temperature / max_tokens / 各家 API key |
-| **Infrastructure / 基础设施** | Subprocess 沙箱（`subprocess.run([python, rag/query.py, --json])` 隔离 `config.py` / 依赖）；`play/rag/` 提供 Vector DB + BM25；`ToolTracer` 双 sink + `artifact_event` 流 + JSON transcript 落盘 |
+|层|本项目里的具体落地|
+|---|---|
+|**UI / 用户接口**|Python API `Engine.invoke(...)` (库 SoT) + `cli.py` 作为 thin adapter (`python -m agent_engine`) ；scenario `.md` 输入；stdout 流式发言 + emoji 实时事件、stderr WARNING；`artifact_path` / `transcript_path` 落盘|
+|**Orchestration / 编排**|`scenario.Scenario` (schema 校验 + 装配)；`engine.Engine` 库化壳子；`discussion.py` Discussion 引擎（steps → turns + `<turn X of N>` marker + retry 闭环）|
+|**Planning / 规划**|scenario `steps` 声明式列表；`who` 路由（role/all/name）；`require_tool` + `max_retries` 行为约束|
+|**Reasoning / 推理**|`Agent.respond()` + persona system prompt + per-step instruction；backend client 内的 tool-use loop（多轮 function calling）|
+|**Memory / 记忆**|shared transcript（`Discussion.history` 唯一权威）+ per-agent `Memory.build_messages` 投影；`Full / Window / Summary` 三策略可换|
+|**Tool Use / 工具**|`tools/` 包 dispatch + scenario default 注入 + path 解析；`ArtifactStore` 6 工具（`read/write/append/propose/cast/finalize`）+ `tool_owners` ACL|
+|**LLM Core / 大模型核心**|4 个 pluggable backend client（ollama / openai / anthropic / gemini），`config.BACKEND` 一行切换；`config.py` 集中模型 / temperature / max_tokens / 各家 API key|
+|**Infrastructure / 基础设施**|Subprocess 沙箱（`subprocess.run([python, rag/query.py, --json])` 隔离 `config.py` / 依赖）；`play/rag/` 提供 Vector DB + BM25；`ToolTracer` 双 sink + `artifact_event` 流 + JSON transcript 落盘|
 
 ### 组件总览
 
@@ -261,12 +261,12 @@ flowchart LR
     eT -.->|skipped| mb1
 ```
 
-| 来源 entry | 投影规则 |
-| --- | --- |
-| `type=topic / turn / artifact_event / summary` | 包成 `<tag>...</tag>` 的 user 消息 |
-| `speaker == owner` | `assistant` 消息 |
-| `speaker != owner` | 包成 `<message from="X">...</message>` 的 user 消息 |
-| `visible=False`（`tool_call` from `ToolTracer`） | 所有 agent 投影时跳过；仅 `--save-transcript` 落盘可见 |
+|来源 entry|投影规则|
+|---|---|
+|`type=topic / turn / artifact_event / summary`|包成 `<tag>...</tag>` 的 user 消息|
+|`speaker == owner`|`assistant` 消息|
+|`speaker != owner`|包成 `<message from="X">...</message>` 的 user 消息|
+|`visible=False`（`tool_call` from `ToolTracer`）|所有 agent 投影时跳过；仅 `--save-transcript` 落盘可见|
 
 > Pinned 类型（`topic / turn / artifact_event`）永不被任何 memory 策略剪掉——会议纪要级信息丢了对话就破。`<artifact>` 视图每 turn 带外注入，不进 history，因此既"总是最新"又不占 memory 配额。
 
@@ -340,66 +340,66 @@ python -m agent_engine agent_engine/scenarios/example.md
 
 > 完整说明见 `python -m agent_engine --help`。
 
-| 参数 | 必选 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `scenario` | 是 | — | scenario `.md` 文件路径 |
-| `--no-stream` | flag | `False` | 关闭流式输出（CLI 默认开；库调用默认关） |
-| `--save-artifact` | 否 | — | 把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效） |
-| `--save-transcript` | 否 | — | 落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON |
+|参数|必选|默认|说明|
+|---|---|---|---|
+|`scenario`|是|—|scenario `.md` 文件路径|
+|`--no-stream`|flag|`False`|关闭流式输出（CLI 默认开；库调用默认关）|
+|`--save-artifact`|否|—|把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效）|
+|`--save-transcript`|否|—|落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON|
 
 ## Scenario schema
 
 YAML frontmatter 字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `agents` | list | 必填，至少 1 项；每项 `{name, role, prompt}`，可选 `model / temperature / max_tokens / memory`；`role` ∈ {moderator, member} |
-| `steps` | list | 必填，至少 1 项；每项 `{who, instruction, id?, require_tool?, max_retries?}`；按列表顺序展开成 turn |
-| `memory` | dict | scenario 级默认 memory 配置；agent 级 `memory` 字段可覆盖 |
-| `tools` | list | 每项 `{name: <tool>, ...defaults}`；scenario 级默认值会从 LLM schema 中隐藏并注入到 dispatch |
-| `artifact` | dict | `{enabled, initial_sections?, tool_owners?}`；section 项可声明 `mode: replace\|append`；`tool_owners` 限制可调用方 |
+|字段|类型|说明|
+|---|---|---|
+|`agents`|list|必填，至少 1 项；每项 `{name, role, prompt}`，可选 `model / temperature / max_tokens / memory`；`role` ∈ {moderator, member}|
+|`steps`|list|必填，至少 1 项；每项 `{who, instruction, id?, require_tool?, max_retries?}`；按列表顺序展开成 turn|
+|`memory`|dict|scenario 级默认 memory 配置；agent 级 `memory` 字段可覆盖|
+|`tools`|list|每项 `{name: <tool>, ...defaults}`；scenario 级默认值会从 LLM schema 中隐藏并注入到 dispatch|
+|`artifact`|dict|`{enabled, initial_sections?, tool_owners?}`；section 项可声明 `mode: replace\|append`；`tool_owners` 限制可调用方|
 
 `who` 取值（共四种）：
 
-| 形态 | 含义 |
-| --- | --- |
-| `moderator` | scalar role：所有 role=moderator 的 agent，按声明顺序 |
-| `member` | scalar role：所有 role=member 的 agent，按声明顺序 |
-| `all` | scalar 关键字：全员，按声明顺序 |
-| `[name1, name2]` | 显式名单：按列表顺序，每个 name 必须存在；单点也写成 `[name]` |
+|形态|含义|
+|---|---|
+|`moderator`|scalar role：所有 role=moderator 的 agent，按声明顺序|
+|`member`|scalar role：所有 role=member 的 agent，按声明顺序|
+|`all`|scalar 关键字：全员，按声明顺序|
+|`[name1, name2]`|显式名单：按列表顺序，每个 name 必须存在；单点也写成 `[name]`|
 
 `<artifact>` 视图在每次发言前带外注入（不进 history）。`<turn>turn X of N</turn>` 在每 turn 前 pinned 注入，让 agent 自感位置。
 
 ### Memory 策略
 
-| `type` | 必填字段 | 行为 |
-| --- | --- | --- |
-| `full` | — | 默认；保留全量 history |
-| `window` | `max_recent` | 保留所有 pinned marker + 最近 N 条发言 |
-| `summary` | `max_recent` + 可选 `model / max_tokens / temperature / summarizer_prompt / summarize_instruction` | stale 发言增量折叠进 `<summary>` block；client 由 `Engine.invoke()` 装配时注入 |
+|`type`|必填字段|行为|
+|---|---|---|
+|`full`|—|默认；保留全量 history|
+|`window`|`max_recent`|保留所有 pinned marker + 最近 N 条发言|
+|`summary`|`max_recent` + 可选 `model / max_tokens / temperature / summarizer_prompt / summarize_instruction`|stale 发言增量折叠进 `<summary>` block；client 由 `Engine.invoke()` 装配时注入|
 
 ### Artifact 工具
 
-| 工具 | 默认可见性 | 作用 |
-| --- | --- | --- |
-| `read_artifact` | all（除非 tool_owners 限制） | 返回当前 markdown 视图 |
-| `write_section` | all（受 mode 限） | 覆盖式写 section；`append` 节调用返回 error |
-| `append_section` | all（受 mode 限） | 追加 entry；`replace` 节调用返回 error |
-| `propose_vote` | all（除非 tool_owners 限制） | 注册结构化投票，返回 `vote_id` |
-| `cast_vote` | all（除非 tool_owners 限制） | 记录一票（按 `caller` 覆盖写） |
-| `finalize_artifact` | all（除非 tool_owners 限制） | 封板；幂等返回 error 防重入 |
+|工具|默认可见性|作用|
+|---|---|---|
+|`read_artifact`|all（除非 tool_owners 限制）|返回当前 markdown 视图|
+|`write_section`|all（受 mode 限）|覆盖式写 section；`append` 节调用返回 error|
+|`append_section`|all（受 mode 限）|追加 entry；`replace` 节调用返回 error|
+|`propose_vote`|all（除非 tool_owners 限制）|注册结构化投票，返回 `vote_id`|
+|`cast_vote`|all（除非 tool_owners 限制）|记录一票（按 `caller` 覆盖写）|
+|`finalize_artifact`|all（除非 tool_owners 限制）|封板；幂等返回 error 防重入|
 
 `require_tool: <tool>` 在 step 结束后扫 `artifact.drain_events()` 验证调用是否发生；未命中追加 nudge instruction 重试，重试用尽 stderr WARNING。
 
 ## Scenario 库
 
-| 文件 | 用途 |
-| --- | --- |
-| `example.md` | **集成烟囱 + CI**：artifact 六工具 + `retrieve_docs` + window/full/summary + `require_tool` nudge；`ci_who_*` 两步覆盖 `who: member` / `who: all` 标量寻址；字段说明见本 README |
-| `roundtable.md` | 主持人 + 2 嘉宾，最简流程烟囱（3 step） |
-| `debate.md` | 无主持人，2 立场对辩（2 step） |
-| `brainstorm.md` | 无主持人，演示 `who: [name, ...]` 显式列表寻址（2 step） |
-| `panel.md` | 决策会议：主持人 + 4 成员，11 step / 26 turn，artifact + 投票 + finalize（最完整） |
+|文件|用途|
+|---|---|
+|`example.md`|**集成烟囱 + CI**：artifact 六工具 + `retrieve_docs` + window/full/summary + `require_tool` nudge；`ci_who_*` 两步覆盖 `who: member` / `who: all` 标量寻址；字段说明见本 README|
+|`roundtable.md`|主持人 + 2 嘉宾，最简流程烟囱（3 step）|
+|`debate.md`|无主持人，2 立场对辩（2 step）|
+|`brainstorm.md`|无主持人，演示 `who: [name, ...]` 显式列表寻址（2 step）|
+|`panel.md`|决策会议：主持人 + 4 成员，11 step / 26 turn，artifact + 投票 + finalize（最完整）|
 
 ## 项目结构
 

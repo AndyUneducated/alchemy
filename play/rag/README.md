@@ -18,12 +18,12 @@
 
 贯穿本项目的 4 条原则：
 
-| # | 原则 | 说明 |
-| --- | --- | --- |
-| 1 | **VDB 自描述** | embedding-model / chunk 参数 / tokenizer 跟数据走，消除"用错模型查对的库"的静默失败 |
-| 2 | **Library API 先于 CLI** | 先设计可被程序化调用的函数，CLI 是薄包装 |
-| 3 | **抽象滞后于第二个使用者** | 单 backend 就不留 `if/elif` 分支 |
-| 4 | **优先库自带能力，不造轮子** | ChromaDB 官方提供的就不自写 |
+|#|原则|说明|
+|---|---|---|
+|1|**VDB 自描述**|embedding-model / chunk 参数 / tokenizer 跟数据走，消除"用错模型查对的库"的静默失败|
+|2|**Library API 先于 CLI**|先设计可被程序化调用的函数，CLI 是薄包装|
+|3|**抽象滞后于第二个使用者**|单 backend 就不留 `if/elif` 分支|
+|4|**优先库自带能力，不造轮子**|ChromaDB 官方提供的就不自写|
 
 ## 架构总览
 
@@ -158,27 +158,27 @@ python query.py --vdb vdb/test_vdb --query "项目代号" --json --rerank
 
 ### `ingest.py`
 
-| 参数 | 必选 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `--docs` | 是 | — | 一个或多个文件/目录，递归收集 `.txt/.md/.pdf` |
-| `--output` | 是 | — | VDB 输出目录（自动创建） |
-| `--chunk-size` | 否 | `512` | 单 chunk 目标字符数 |
-| `--overlap` | 否 | `64` | 相邻 chunk 段落级回带字符上限 |
-| `--model` | 否 | `qwen3-embedding:8b` | Ollama embedding 模型，写入 metadata 作哨兵 |
-| `--collection` | 否 | `basename(--output)` | ChromaDB collection 名 |
+|参数|必选|默认|说明|
+|---|---|---|---|
+|`--docs`|是|—|一个或多个文件/目录，递归收集 `.txt/.md/.pdf`|
+|`--output`|是|—|VDB 输出目录（自动创建）|
+|`--chunk-size`|否|`512`|单 chunk 目标字符数|
+|`--overlap`|否|`64`|相邻 chunk 段落级回带字符上限|
+|`--model`|否|`qwen3-embedding:8b`|Ollama embedding 模型，写入 metadata 作哨兵|
+|`--collection`|否|`basename(--output)`|ChromaDB collection 名|
 
 ### `query.py`
 
-| 参数 | 必选 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `--vdb` | 是 | — | VDB 目录（`ingest --output` 产物，必须含 `bm25.pkl`） |
-| `--query` | 是 | — | 查询文本 |
-| `--top-k` | 否 | `5` | 返回前 N 个最相似 chunk |
-| `--mode` | 否 | `hybrid` | 检索策略：`dense` / `bm25` / `hybrid`；后两者仅诊断用 |
-| `--rerank` | flag | `False` | 启用 cross-encoder 精排（首次 ~5s 加载 ~1.2GB） |
-| `--model` | 否 | metadata 中的 stored model | 显式覆盖 embedding 模型；不一致仅 stderr WARNING |
-| `--collection` | 否 | 第一个 collection | 多 collection VDB 必须显式指定 |
-| `--json` | flag | `False` | stdout 输出 `{query, data, meta}` envelope |
+|参数|必选|默认|说明|
+|---|---|---|---|
+|`--vdb`|是|—|VDB 目录（`ingest --output` 产物，必须含 `bm25.pkl`）|
+|`--query`|是|—|查询文本|
+|`--top-k`|否|`5`|返回前 N 个最相似 chunk|
+|`--mode`|否|`hybrid`|检索策略：`dense` / `bm25` / `hybrid`；后两者仅诊断用|
+|`--rerank`|flag|`False`|启用 cross-encoder 精排（首次 ~5s 加载 ~1.2GB）|
+|`--model`|否|metadata 中的 stored model|显式覆盖 embedding 模型；不一致仅 stderr WARNING|
+|`--collection`|否|第一个 collection|多 collection VDB 必须显式指定|
+|`--json`|flag|`False`|stdout 输出 `{query, data, meta}` envelope|
 
 ### `prefetch.py`
 
@@ -202,12 +202,12 @@ for h in hits:
 
 返回 `list[SearchResult]`，字段：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `content` | `str` | chunk 文本 |
-| `score` | `float` | 相似度分数；**跨 mode 不可比**（dense=`1/(1+dist)`、bm25=原始分、hybrid=RRF、rerank=CE logit） |
-| `source` | `str` | 文件相对路径 |
-| `metadata` | `dict` | 含 `chunk_index / retrieval / reranked` 等 |
+|字段|类型|说明|
+|---|---|---|
+|`content`|`str`|chunk 文本|
+|`score`|`float`|相似度分数；**跨 mode 不可比**（dense=`1/(1+dist)`、bm25=原始分、hybrid=RRF、rerank=CE logit）|
+|`source`|`str`|文件相对路径|
+|`metadata`|`dict`|含 `chunk_index / retrieval / reranked` 等|
 
 `search()` 是纯函数，`query()` 是它的 pretty-print 包装；CLI 的 `--json` 路径包装成 envelope 后 `print` 到 stdout。
 
@@ -253,13 +253,13 @@ vdb/test_vdb/
 
 `metadata.json` 字段：
 
-| 字段 | 含义 |
-| --- | --- |
-| `embedding_model` | ingest 时用的模型；query 默认沿用 |
-| `tokenizer` | BM25 用的 HF tokenizer；query 默认沿用 |
-| `chunk_size` / `chunk_overlap` | 切分参数 |
-| `doc_count` / `chunk_count` | 入库统计 |
-| `created_at` | UTC ISO 时间戳 |
+|字段|含义|
+|---|---|
+|`embedding_model`|ingest 时用的模型；query 默认沿用|
+|`tokenizer`|BM25 用的 HF tokenizer；query 默认沿用|
+|`chunk_size` / `chunk_overlap`|切分参数|
+|`doc_count` / `chunk_count`|入库统计|
+|`created_at`|UTC ISO 时间戳|
 
 > 缺 `bm25.pkl` 时 `query.py` 直接 `FileNotFoundError` 提示重 ingest——单人项目不为不存在的"老 VDB"付兼容税。
 
