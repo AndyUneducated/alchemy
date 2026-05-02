@@ -1,0 +1,30 @@
+{"id": "s01", "input": "Shipped fast and fits perfectly.", "target": "positive"}
+{"id": "s02", "input": "This is terrible, do not buy.", "target": "negative"}
+{"id": "s03", "input": "Looked nice, but the build is awful.", "target": "negative"}
+{"id": "s04", "input": "Not good at all, very disappointed.", "target": "negative"}
+{"id": "s05", "input": "Saved me hours last week.", "target": "positive"}
+{"id": "s06", "input": "I love this product, it works great.", "target": "positive"}
+{"id": "s07", "input": "Expensive, but absolutely worth it.", "target": "positive"}
+{"id": "s08", "input": "Weighs about 200 grams.", "target": "neutral"}
+{"id": "s09", "input": "Packaged in a good-looking box.", "target": "neutral"}
+{"id": "s10", "input": "Had to return it after two days.", "target": "negative"}
+{"id": "s11", "input": "It's okay, does the job.", "target": "neutral"}
+{"id": "s12", "input": "Compatible with most systems.", "target": "neutral"}
+{"id": "s13", "input": "Average product, works as described.", "target": "neutral"}
+{"id": "s14", "input": "This is amazing, love every detail.", "target": "positive"}
+{"id": "s15", "input": "Advertised as great, but completely useless.", "target": "negative"}
+{"id": "s16", "input": "Makes my mornings easier.", "target": "positive"}
+{"id": "s17", "input": "Comes in three colors.", "target": "neutral"}
+{"id": "s18", "input": "Everyone in the office borrows it.", "target": "positive"}
+{"id": "s19", "input": "Worst purchase ever, awful quality.", "target": "negative"}
+{"id": "s20", "input": "It arrived on Tuesday.", "target": "neutral"}
+{"id": "s21", "input": "Wasn't sure at first, but now impressed.", "target": "positive"}
+{"id": "s22", "input": "Price is in line with competitors.", "target": "neutral"}
+{"id": "s23", "input": "Arrived with visible scratches.", "target": "negative"}
+{"id": "s24", "input": "Support never replied to my emails.", "target": "negative"}
+{"id": "s25", "input": "Not bad at all, I actually adore it.", "target": "positive"}
+{"id": "s26", "input": "Absolutely great experience overall.", "target": "positive"}
+{"id": "s27", "input": "Broke within a week, total garbage.", "target": "negative"}
+{"id": "s28", "input": "Runs on USB-C.", "target": "neutral"}
+{"id": "s29", "input": "Really bad, waste of money.", "target": "negative"}
+{"id": "s30", "input": "Ships from the EU.", "target": "neutral"}

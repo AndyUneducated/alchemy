@@ -18,3 +18,6 @@ venv/
 # RAG VDB outputs (chroma sqlite + bm25 pickle + metadata) — large, regenerable.
 play/*/vdb/
 play/qa_assets/vdb/
+
+# Evaluation run artifacts (per-run result/samples + cross-run index) — regenerable from `python -m evals score/run`.
+play/evals/runs/
