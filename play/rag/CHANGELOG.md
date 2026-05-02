@@ -1,16 +1,11 @@
 # Changelog
 
-`CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录使用 `## n. 变更标题`，下一行写 `- 日期：...`，再写正文。后续每个自然日建议最多追加 1～2 条 tech decision。
-### Project conventions / ADR vocabulary
-### 指导原则
-
-1. **VDB 自描述**：embedding-model、chunk 参数、tokenizer 跟数据走，消除"用错模型查对的库"的静默失败
-2. **Library API 先于 CLI**：先设计可被程序化调用的函数，CLI 是薄包装
-3. **抽象滞后于第二个使用者**：单 backend 就不留 `if/elif` 分支
-4. **优先库自带能力，不造轮子**：ChromaDB 官方提供的就不自写
+`CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录以 `## n. 变更标题` 开头，紧接一行 `- **日期**：...`，heading 前后留空行。后续每个自然日建议最多追加 1～2 条 tech decision。
 
 ## 1. 技术栈：ChromaDB + Ollama
-- 日期：2026-04-15
+
+- **日期**：2026-04-15
+
 ### Context
 
 本地可跑、一 agent 一库、可被工具链调用、workshop 可复现。要给 multiagent 的 panel/brainstorm 角色喂私有背景。
@@ -62,7 +57,9 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 | 可测试性 | 高——纯函数 pipeline，可独立验证 |
 
 ## 2. 段落感知 chunker
-- 日期：2026-04-15
+
+- **日期**：2026-04-15
+
 ### Context
 
 中文 profile 文档（角色档案、事实清单等结构化纯文本）切得"不破坏语义单元"。Chunking 直接决定召回上限。
@@ -103,7 +100,9 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 **对结构化纯文本效果好；对长篇无段落 PDF（OCR 产物、法律合同）会大量回退字符硬切，召回下降**。那种场景应换 LangChain `RecursiveCharacterTextSplitter` 或 semantic chunking——现阶段 YAGNI。
 
 ## 3. 结构化 search API + `--json` subprocess 契约
-- 日期：2026-04-16
+
+- **日期**：2026-04-16
+
 ### Context
 
 初版 `query(...)` 直接 `print()` 到 stdout——CLI 能用，但 multiagent 工具集成要程序化调用。需要明确两端数据契约。
@@ -154,7 +153,9 @@ def query(...) -> None:  pretty_print(search(...))
 | 可测试性 | 高——`search()` 纯函数 + TypedDict 返回，断言容易 |
 
 ## 4. Hybrid retrieval：dense + BM25 + RRF
-- 日期：2026-04-25
+
+- **日期**：2026-04-25
+
 ### Context
 
 纯 dense embedding 在三种场景上跌跤：
@@ -202,7 +203,7 @@ def query(...) -> None:  pretty_print(search(...))
 
 - **Hybrid 默认开启**；`mode={dense, bm25}` 留作诊断（不是兼容层）
 - **HF tokenizer 复用 embedding 模型同款 BPE**：分词层一致性提前还掉
-- **Tokenizer sentinel**：ingest 写入 `metadata.json["tokenizer"]`，query 读回——VDB 自描述（指导原则 #1）的延伸
+- **Tokenizer sentinel**：ingest 写入 `metadata.json["tokenizer"]`，query 读回——VDB 自描述（README 指导原则 #1）的延伸
 - **召回 oversample**：dense / bm25 各召 `top_k * HYBRID_OVERSAMPLE`（=4）进 RRF，截 `top_k`
 - **CLI `--json` envelope 格式（BREAKING）**：从裸数组 `[hit, ...]` 升到 `{query, data, meta}`，对齐 OpenAI Vector Store / Pinecone / Cohere 共同子集；`search()` Python API 不变（仍返 `list[SearchResult]`），envelope 仅在 CLI 层包装——OpenAI SDK 同款 HTTP envelope ↔ SDK 解列表的两层分工
 - **Per-hit `metadata.retrieval` / `metadata.reranked`**：标注每条结果的来源路径，下游不依赖 envelope `meta` 也能识别 provenance
@@ -233,7 +234,9 @@ def query(...) -> None:  pretty_print(search(...))
 - **BM25 不做增量**：每次 ingest 全量重建——简化心智，YAGNI
 
 ## 5. Cross-encoder reranker
-- 日期：2026-04-25
+
+- **日期**：2026-04-25
+
 ### Context
 
 Hybrid retrieval（§4）改善召回，但 top-K 内**排序**仍受限：

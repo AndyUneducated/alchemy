@@ -57,7 +57,7 @@ python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
 
 ## 输入契约 (CSV schema)
 
-详见 plan §4.1. 列定义:
+列定义：
 
 | 列 | 必填 | 含义 |
 |---|---|---|
