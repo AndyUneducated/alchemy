@@ -6,31 +6,24 @@ alwaysApply: true
 
 ## Repo layout
 
-| Path | Use |
-|------|-----|
-| `play/` | Default for new spikes, scripts, disposable demos |
-| `grow/` | Longer-lived mini-apps promoted from `play/` |
-| `stash/` | Paused WIP |
-| `refs/` | Copied reference snippets, not first-class product code |
-| `_archive/` | Retired experiments |
+|Path|Use|
+|---|---|
+|`play/`|Default for new spikes, scripts, disposable demos|
+|`grow/`|Longer-lived mini-apps promoted from `play/`|
+|`stash/`|Paused WIP|
+|`refs/`|Copied reference snippets, not first-class product code|
+|`_archive/`|Retired experiments|
 
 Unless the user names another path, **create new experiments under `play/`**.
 
 ## Editing discipline
 
 - **Minimal diffs**: only what the task needs; no drive-by refactors, unrelated files, or rewrites of untouched sections.
-- **Match locals**: in code (naming, imports, types, formatting, comment density) and docs (section style, natural language).
-- **Docs**: when a change alters something an existing project-level doc describes (CLI flags, public API, choice rationale), update that doc in the same turn; don't create new README/markdown the user didn't ask for.
-- **Secrets**: never commit real credentials; use `.env` locally and `.env.example` when a template helps.
-
-## Commit discipline
-
-- **Hard constraint — every commit leaves the repo usable**: don't split a change across commits if the in-between state breaks build/run/tests.
-- **On top of that constraint, split by independent semantic increments**. A good commit expresses one intent and could be reverted on its own.
-
-## Verification
-
-If the subproject defines checks (`package.json`, `Makefile`, `pyproject.toml`, etc.), run the appropriate lint/test/build after non-trivial edits. If nothing exists, skip.
+- **Docs**: after a change, check existing docs (README, CHANGELOG, etc.) for items that need updating and update them in the same turn; only add new entries (sections, list items, new doc files) when the user asks.
+- **Doc formatting**: default to tables for any content with 2+ parallel items (enumerations, lists, comparisons, option sets); use bullets/lists only when items aren't parallel or share no dimensions.
+- **Markdown**: CommonMark / GFM conventions; compact tables (minimum separator dashes, no cell padding).
+- **No new tooling**: don't add lint/test/build infrastructure where none exists; if checks are already defined, run them after non-trivial edits.
+- **Commits**: split by independent semantic increments, but never at the cost of an unusable intermediate state.
 
 ## Language
 
