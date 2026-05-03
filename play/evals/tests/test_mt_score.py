@@ -1,6 +1,6 @@
-"""mt task offline scoring：6 指标在 4 份故事化 predictions 上的核心断言.
+"""mt task score 模式：6 指标在 4 份故事化 predictions 上的核心断言.
 
-对比 sentiment_clf 的 test_runner_offline.py，这里多了一个故事点——
+对比 sentiment_clf 的 test_runner_score.py，这里多了一个故事点——
 **paraphrase** 这份 prediction：BLEU 暴跌但 BERTScore 救场，是 embedding tier
 （vs lexical tier）的可执行证明。`test_paraphrase_bertscore_saves_meaning`
 这条断言绿 = README 没在吹牛。
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from evals.runner import evaluate_offline
+from evals.runner import evaluate_score
 from evals.tasks.mt import MT
 
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
@@ -25,7 +25,7 @@ PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions
 
 def _score(name: str) -> dict[str, float]:
     task = MT()
-    r = evaluate_offline(task, PRED_DIR / f"{name}.jsonl")
+    r = evaluate_score(task, PRED_DIR / f"{name}.jsonl")
     assert r.mode == "score"
     assert r.n == 30
     return r.aggregated

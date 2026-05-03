@@ -54,7 +54,7 @@ class Response:
 
     `text` 和 `loglikelihoods` 互斥，由 request_type 决定哪个有值。
     `latency_ms` 即使 Phase 1 不用也预留，为 Phase 10 efficiency 维度埋点。
-    offline 模式下 text 字段从 predictions JSONL 读进来。
+    score 模式下 text 字段从 predictions JSONL 读进来。
     """
 
     doc_id: str
@@ -84,7 +84,7 @@ class EvalResult:
     外层包内层：`per_sample: list[SampleResult]` 提供 drill-down 入口。
     `aggregated` 装必须看全集才能算的指标（f1_macro / kappa / NDCG...）。
     `mode` 区分 score / run，让 storage 能按模式过滤。
-    `num_fewshot` 仅 active 路径有意义（offline 永远 0）；默认值保证旧 result.json 反序列化兼容。
+    `num_fewshot` 仅 run 路径有意义（score 永远 0）；默认值保证旧 result.json 反序列化兼容。
     """
 
     task: str

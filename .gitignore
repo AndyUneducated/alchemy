@@ -2,16 +2,12 @@
 .env
 .env.*
 !.env.example
-node_modules/
-dist/
 build/
-.next/
-.turbo/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 .venv/
 venv/
-*.egg-info/
 .idea/
 *.log
 

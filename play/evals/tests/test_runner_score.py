@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.runner import evaluate_offline
+from evals.runner import evaluate_score
 from evals.tasks.sentiment_clf import SentimentClf
 
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "predictions"
@@ -17,7 +17,7 @@ PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "pred
 
 def _score(name: str) -> dict[str, float]:
     task = SentimentClf()
-    r = evaluate_offline(task, PRED_DIR / f"{name}.jsonl")
+    r = evaluate_score(task, PRED_DIR / f"{name}.jsonl")
     assert r.mode == "score"
     assert r.n == 30
     return r.aggregated
@@ -62,7 +62,7 @@ def test_score_keyword_rule_middle_ground():
 
 def test_score_limit_parameter():
     task = SentimentClf()
-    r = evaluate_offline(task, PRED_DIR / "perfect.jsonl", limit=10)
+    r = evaluate_score(task, PRED_DIR / "perfect.jsonl", limit=10)
     assert r.n == 10
     assert r.aggregated["accuracy"] == 1.0  # perfect 下仍全对
 
@@ -70,8 +70,8 @@ def test_score_limit_parameter():
 def test_score_missing_prediction_raises(tmp_path):
     """predictions 里缺 doc_id → 严格报错（phase 1 默认行为）."""
     task = SentimentClf()
-    # 只放 1 条 pred，gold 80 条 → 第一个 lookup 就应该命中不了
+    # 只放 1 条 pred（且 id 故意不在 gold 里），gold 30 条 → 第一个 lookup 就应该命中不了
     partial = tmp_path / "partial.jsonl"
     partial.write_text('{"id": "sNONE", "prediction": "neutral"}\n', encoding="utf-8")
     with pytest.raises(KeyError):
-        evaluate_offline(task, partial)
+        evaluate_score(task, partial)

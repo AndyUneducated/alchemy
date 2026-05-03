@@ -1,5 +1,5 @@
 """play/evals — 双模式 LLM 评测框架.
 
-- score 模式 (offline): 吃 predictions JSONL + gold，纯离线打分
-- run 模式 (active): 驱动 LM 跑 prompt，harness 风格
+- score 模式：吃 predictions JSONL + gold，纯文件打分（不驱动 LM）
+- run 模式：驱动 LM 跑 prompt，harness 风格
 """

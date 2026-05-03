@@ -75,7 +75,7 @@ class SentimentClf(Task):
     name: ClassVar[str] = "sentiment_clf"
     output_type: ClassVar[str] = "generate_until"
 
-    # 允许测试/Runner 覆盖数据源（offline 模式下 Runner 不会用，但保留接口一致）
+    # 允许测试/Runner 覆盖数据源（score 模式下 Runner 不会用，但保留接口一致）
     data_path: Path = DATA_PATH
 
     def docs(self) -> Iterable[Doc]:

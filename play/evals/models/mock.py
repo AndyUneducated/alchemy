@@ -1,7 +1,7 @@
 """MockLM：零 API key、确定性、四种教学 mode.
 
 四种 mode 和 data/sentiment/predictions/*.jsonl 四份预录一一对应；
-`test_runner_active.py` 的 parity test 证明两路径聚合数值完全一致。
+`test_runner_run.py` 的 parity test 证明两路径聚合数值完全一致。
 
   - gold       偷看 target → 100% acc            ≡ predictions/perfect.jsonl
   - noisy(p)   p 概率替换成随机 label (seed 固定) ≡ predictions/noisy_0.3.jsonl

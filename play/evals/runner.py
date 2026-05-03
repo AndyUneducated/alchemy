@@ -4,12 +4,12 @@
   - Runner 不看 task 内部类型，只通过 Task ABC 调方法
   - Runner 不看 lm 是谁，只通过三种 request_type 调
   - Runner 不 import metrics/，所有指标调用通过 task.aggregation() 间接进入
-  - Task.process_results 不区分 run/score 来源：统一吃 Response；offline 路径用
+  - Task.process_results 不区分 run/score 来源：统一吃 Response；score 路径用
     JSONL 查表顶替 LM 调用，其它完全一致
 
 等价性：
-  evaluate_offline(task, preds) ≡ evaluate_active(task, PrerecordedLM(preds))
-  具体由 test_runner_active.py::test_active_gold_equals_offline_perfect 验证。
+  evaluate_score(task, preds) ≡ evaluate_run(task, PrerecordedLM(preds))
+  具体由 test_runner_run.py::test_run_gold_equals_score_perfect 验证。
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def _finalize(
     )
 
 
-def evaluate_offline(
+def evaluate_score(
     task: Task,
     predictions_path: str | Path,
     *,
@@ -146,7 +146,7 @@ def evaluate_offline(
       2. 读预测 + 直接评分：preds[doc.id] → Response(text=pred) → process_results
       3. 合流：_finalize 做聚合 + 打包
 
-    语义等价于 evaluate_active(task, PrerecordedLM(predictions_path))。
+    语义等价于 evaluate_run(task, PrerecordedLM(predictions_path))。
     """
     started_at = _iso_now()
     t0 = time.perf_counter()
@@ -179,7 +179,7 @@ def evaluate_offline(
     )
 
 
-def evaluate_active(
+def evaluate_run(
     task: Task,
     lm: LM,
     *,

@@ -7,7 +7,7 @@
   - doc_to_text          构造 prompt（只在 run 模式被调用）
   - doc_to_target        gold 答案（和 doc_to_text 对称，few-shot 场景留口子）
   - doc_to_choice        MCQ 专用，默认 None
-  - process_results      per-sample 评分（统一吃 Response，offline/active 共用）
+  - process_results      per-sample 评分（统一吃 Response，score/run 共用）
   - aggregation          per-sample → 全局聚合的函数字典，延迟求值
   - higher_is_better     指标方向（show UI / 多 run 排序用）
 
