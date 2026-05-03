@@ -1,0 +1,30 @@
+{"id": "mt01", "input": "Hello, world.", "target": "你好，世界。"}
+{"id": "mt02", "input": "How are you today?", "target": "你今天怎么样？"}
+{"id": "mt03", "input": "I love coffee in the morning.", "target": "我喜欢早上喝咖啡。"}
+{"id": "mt04", "input": "The weather is very nice today.", "target": "今天天气很好。"}
+{"id": "mt05", "input": "Time flies when you are having fun.", "target": "玩得开心时光飞逝。"}
+{"id": "mt06", "input": "Better late than never.", "target": "迟到总比不到好。"}
+{"id": "mt07", "input": "Practice makes perfect.", "target": "熟能生巧。"}
+{"id": "mt08", "input": "A picture is worth a thousand words.", "target": "一图胜千言。"}
+{"id": "mt09", "input": "Where is the nearest train station?", "target": "最近的火车站在哪里？"}
+{"id": "mt10", "input": "Please call me when you arrive.", "target": "你到了请给我打电话。"}
+{"id": "mt11", "input": "The book is on the table.", "target": "书在桌子上。"}
+{"id": "mt12", "input": "She speaks three languages fluently.", "target": "她流利地说三种语言。"}
+{"id": "mt13", "input": "I will see you tomorrow.", "target": "我明天见你。"}
+{"id": "mt14", "input": "Coffee tastes better with friends.", "target": "咖啡和朋友一起喝更好喝。"}
+{"id": "mt15", "input": "The cat sat on the mat.", "target": "猫坐在垫子上。"}
+{"id": "mt16", "input": "Please close the door behind you.", "target": "请随手关门。"}
+{"id": "mt17", "input": "Can you help me with this problem?", "target": "你能帮我解决这个问题吗？"}
+{"id": "mt18", "input": "The early bird catches the worm.", "target": "早起的鸟儿有虫吃。"}
+{"id": "mt19", "input": "Don't judge a book by its cover.", "target": "不要以貌取人。"}
+{"id": "mt20", "input": "Actions speak louder than words.", "target": "事实胜于雄辩。"}
+{"id": "mt21", "input": "Money cannot buy happiness.", "target": "金钱买不到幸福。"}
+{"id": "mt22", "input": "Knowledge is power.", "target": "知识就是力量。"}
+{"id": "mt23", "input": "An apple a day keeps the doctor away.", "target": "一天一苹果，医生远离我。"}
+{"id": "mt24", "input": "Rome was not built in a day.", "target": "罗马不是一天建成的。"}
+{"id": "mt25", "input": "All that glitters is not gold.", "target": "闪光的不都是金子。"}
+{"id": "mt26", "input": "When in Rome, do as the Romans do.", "target": "入乡随俗。"}
+{"id": "mt27", "input": "Two heads are better than one.", "target": "三个臭皮匠顶个诸葛亮。"}
+{"id": "mt28", "input": "Where there is a will, there is a way.", "target": "有志者事竟成。"}
+{"id": "mt29", "input": "The pen is mightier than the sword.", "target": "笔比剑更有力。"}
+{"id": "mt30", "input": "Birds of a feather flock together.", "target": "物以类聚。"}

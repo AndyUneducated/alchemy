@@ -1,3 +1,16 @@
+# phase 1
 numpy
 pytest
 scikit-learn
+
+# phase 2 lexical metrics
+sacrebleu
+rouge_score
+nltk
+
+# phase 2 embedding metric (BERTScore)
+# torch wheel 较大 (~200MB)；mBERT/bert-base-chinese 首次 ~400MB 下载
+torch
+transformers
+bert-score
+certifi
