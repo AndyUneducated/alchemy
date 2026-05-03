@@ -2,6 +2,38 @@
 
 `CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录以 `## n. 变更标题` 开头，紧接一行 `- **日期**：...`，heading 前后留空行。后续每个自然日建议最多追加 1～2 条 tech decision。
 
+## 2. few-shot 范式落点
+
+- **日期**：2026-05-02
+
+Phase 2 引入 `num_fewshot` 时，决定**谁负责 example 抽样 + prompt 拼装**。
+
+### Context
+
+lm-eval 原版 `Task` 暴露 `fewshot_docs()` + `format_fewshot_example()`，Runner 拿到 `num_fewshot=K` 后从 pool 抽 K 条 example、排除自身、拼到 query 前。两个候选切法：
+
+- **A. Task 一把梭**：`Task` 直接吐拼好的 prompt（含 K-shot），Runner 不知道有没有 fewshot
+- **B. Task 出料 + Runner 抽样**（lm-eval 原版风格）：Task 只暴露"我有哪些 example 可用 + 一条 example 怎么显示"，Runner 负责 K、抽样、排除自身、拼接
+
+### Decision
+
+走 B。Task ABC 加两个**默认实现**（非 abstract）：
+
+- `fewshot_docs()` 默认 `return self.docs()` —— 子类可 override 指 held-out split
+- `format_fewshot_example(doc)` 默认 `f"{doc_to_text(doc)} {doc_to_target(doc)}"` —— 子类可改分隔符 / 多段结构
+
+Runner 加 `_build_prompt(task, doc, num_fewshot, pool, rng)`，`num_fewshot=0` 时直 return `task.doc_to_text(doc)`（字节与 Phase 1 相同），`>0` 时抽 K 条非自身 example 用 `\n\n` 拼接。
+
+`evaluate_active` 多收 `num_fewshot=0, fewshot_seed=0` 两个参数；`EvalResult` 加 `num_fewshot: int = 0` 字段并落到 `result.json` / `index.jsonl`，事后能区分 zero-shot vs K-shot 跑分。`score` 子命令不接 `--num-fewshot`：offline predictions 是预先生成的字符串，runtime 拼 fewshot 没有意义（YAGNI）。
+
+### Consequences
+
+- 与 lm-eval 原版语义一致，未来抄 task 配置零摩擦
+- Task 仍然纯粹（不知道自己被 zero-shot 还是 K-shot 调用），换 N 一句 CLI flag 搞定
+- `num_fewshot=0` parity 经 `test_zero_shot_equals_no_fewshot` 焊死，旧 `test_active_*_equals_offline_*` 全绿
+- 抽样需要的"排除自身 + 同 seed 复现 + pool 不够不抛错"三条契约由 `test_fewshot.py` 兜底
+- offline predictions 命名不变（`gold.jsonl` = 数据集；`predictions/perfect.jsonl` = 满分 baseline）；mt task 复用同一 schema
+
 ## 1. Phase 0 架构 & 叙事决策
 
 - **日期**：2026-04-30
