@@ -36,6 +36,7 @@ def _index_row(r: EvalResult) -> dict:
         "created_at": r.created_at,
         "n": r.n,
         "elapsed_ms": r.elapsed_ms,
+        "num_fewshot": r.num_fewshot,
         "aggregated": dict(r.aggregated),
     }
 

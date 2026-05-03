@@ -96,9 +96,19 @@ def cmd_score(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     task = get_task(args.task)
     lm = parse_model_spec(args.model, task)
-    result = evaluate_active(task, lm, limit=args.limit, seed=args.seed)
+    result = evaluate_active(
+        task,
+        lm,
+        limit=args.limit,
+        seed=args.seed,
+        num_fewshot=args.num_fewshot,
+        fewshot_seed=args.fewshot_seed,
+    )
     save(result, runs_dir=args.runs_dir)
-    print(f"# run_id={result.run_id}  mode=run  model={result.model}  n={result.n}  elapsed={result.elapsed_ms:.1f}ms")
+    print(
+        f"# run_id={result.run_id}  mode=run  model={result.model}  n={result.n}  "
+        f"num_fewshot={result.num_fewshot}  elapsed={result.elapsed_ms:.1f}ms"
+    )
     for k, v in result.aggregated.items():
         print(f"  {k:<16} {v:.4f}")
     return 0
@@ -152,6 +162,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--model", required=True, help="model spec，如 mock:gold / mock:noisy:0.3 / mock:constant:neutral")
     p_run.add_argument("--limit", type=int, default=None)
     p_run.add_argument("--seed", type=int, default=0)
+    p_run.add_argument(
+        "--num-fewshot",
+        type=int,
+        default=0,
+        help="prompt 前拼 K 条 example（lm-eval 风格 K-shot）；0=zero-shot 与 Phase 1 字节相同",
+    )
+    p_run.add_argument(
+        "--fewshot-seed",
+        type=int,
+        default=0,
+        help="few-shot 抽样 RNG seed；只控 example 抽样不影响其它路径",
+    )
     p_run.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     p_run.set_defaults(func=cmd_run)
 

@@ -84,6 +84,7 @@ class EvalResult:
     外层包内层：`per_sample: list[SampleResult]` 提供 drill-down 入口。
     `aggregated` 装必须看全集才能算的指标（f1_macro / kappa / NDCG...）。
     `mode` 区分 score / run，让 storage 能按模式过滤。
+    `num_fewshot` 仅 active 路径有意义（offline 永远 0）；默认值保证旧 result.json 反序列化兼容。
     """
 
     task: str
@@ -95,3 +96,4 @@ class EvalResult:
     run_id: str
     created_at: str  # ISO8601
     elapsed_ms: float
+    num_fewshot: int = 0

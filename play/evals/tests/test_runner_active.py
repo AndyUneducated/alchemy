@@ -11,9 +11,11 @@ from pathlib import Path
 
 from evals.models.mock import MockLM
 from evals.runner import evaluate_active, evaluate_offline
+from evals.tasks.mt import MT
 from evals.tasks.sentiment_clf import SentimentClf
 
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "predictions"
+MT_PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
 
 
 def test_active_gold_runs_full_accuracy():
@@ -72,3 +74,32 @@ def test_active_rule_matches_predictions_file():
     r_offline = evaluate_offline(task, PRED_DIR / "keyword_rule.jsonl")
 
     assert r_active.aggregated == r_offline.aggregated
+
+
+def test_active_mt_gold_equals_offline_perfect():
+    """族 2 (mt) 上的 parity：mock:gold ≡ score predictions/perfect.jsonl.
+
+    族 1 已有同名测试，但 mt 引入了 6 个生成指标（含 BERTScore）和不同 task schema，
+    在新 task 上重新焊一次双模式等价性，避免回归。"""
+    task = MT()
+    docs = list(task.docs())
+
+    r_active = evaluate_active(task, MockLM(mode="gold", docs=docs))
+    r_offline = evaluate_offline(task, MT_PRED_DIR / "perfect.jsonl")
+
+    assert r_active.aggregated == r_offline.aggregated
+    assert r_active.n == r_offline.n
+    a_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_active.per_sample]
+    o_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_offline.per_sample]
+    assert a_pairs == o_pairs
+
+
+def test_active_mt_with_fewshot_records_num_fewshot():
+    """num_fewshot=2 时 EvalResult.num_fewshot 字段被正确记录."""
+    task = MT()
+    docs = list(task.docs())
+
+    r = evaluate_active(task, MockLM(mode="gold", docs=docs), num_fewshot=2, fewshot_seed=0)
+    assert r.num_fewshot == 2
+    # gold mode 下答案和 target 一字不差，K-shot 不影响 perfect score
+    assert r.aggregated["exact_match"] == 1.0

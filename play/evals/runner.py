@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import time
 from collections.abc import Iterable
 from datetime import datetime, timezone
@@ -49,9 +50,33 @@ def _collect_docs(task: Task, limit: int | None) -> list[Doc]:
     return list(it)
 
 
-def _build_request(task: Task, doc: Doc) -> Request:
-    """根据 task.output_type 构造 Request。Phase 1 只处理 generate_until."""
-    prompt = task.doc_to_text(doc)
+def _build_prompt(
+    task: Task,
+    doc: Doc,
+    num_fewshot: int,
+    pool: list[Doc],
+    rng: random.Random,
+) -> str:
+    """拼出最终 prompt：N 段 example + query.
+
+    `num_fewshot=0` 直接返回 `task.doc_to_text(doc)`，与 Phase 1 字节相同
+    （旧 parity test 的根基）。`>0` 时从 pool 抽 K 条**非自身** example，
+    用 `task.format_fewshot_example` 格式化，"\\n\\n" 分隔后拼到 query 前。
+
+    抽样耗尽（pool 不够）时不报错，能抽几条算几条——避免小 dataset 边界 case。
+    """
+    if num_fewshot <= 0:
+        return task.doc_to_text(doc)
+    candidates = [d for d in pool if d.id != doc.id]
+    k = min(num_fewshot, len(candidates))
+    examples = rng.sample(candidates, k)
+    parts = [task.format_fewshot_example(ex) for ex in examples]
+    parts.append(task.doc_to_text(doc))
+    return "\n\n".join(parts)
+
+
+def _build_request(task: Task, doc: Doc, prompt: str) -> Request:
+    """根据 task.output_type + 已拼好的 prompt 构造 Request。Phase 1 只处理 generate_until."""
     if task.output_type == "generate_until":
         return Request(
             doc_id=doc.id,
@@ -87,6 +112,7 @@ def _finalize(
     started_at: str,
     elapsed_ms: float,
     run_id: str,
+    num_fewshot: int = 0,
 ) -> EvalResult:
     """共享尾段：聚合 + 打包 EvalResult。score / run 两路径的合流点."""
     aggregated = {
@@ -102,6 +128,7 @@ def _finalize(
         run_id=run_id,
         created_at=started_at,
         elapsed_ms=elapsed_ms,
+        num_fewshot=num_fewshot,
     )
 
 
@@ -158,20 +185,31 @@ def evaluate_active(
     *,
     limit: int | None = None,
     seed: int = 0,
+    num_fewshot: int = 0,
+    fewshot_seed: int = 0,
 ) -> EvalResult:
     """run 路径：harness 6 步.
 
       1. 取数据
-      2. 建请求
+      2. 建请求（按 num_fewshot 拼 prompt）
       3. 批调模型  <-- 未来并发在这里：asyncio.gather + semaphore
       4. per-sample 评分
       5-6. 合流（_finalize 负责）
+
+    `num_fewshot=0` 时 prompt 与 Phase 1 字节相同（_build_prompt 早 return）。
+    `num_fewshot>0` 时从 `task.fewshot_docs()` 抽 K 条**非自身** example 拼到前面。
+    `fewshot_seed` 只控抽样，不影响其它路径——便于 sweep 不同 N 但保持其它一致。
     """
     started_at = _iso_now()
     t0 = time.perf_counter()
 
     docs = _collect_docs(task, limit)
-    requests = [_build_request(task, doc) for doc in docs]
+    pool = list(task.fewshot_docs()) if num_fewshot > 0 else []
+    rng = random.Random(fewshot_seed)
+    requests = [
+        _build_request(task, doc, _build_prompt(task, doc, num_fewshot, pool, rng))
+        for doc in docs
+    ]
 
     # Phase 1 串行。Phase 2+ 在此处做 asyncio.gather / thread pool / rate-limit。
     responses: list[Response] = lm.generate_until(requests)
@@ -196,4 +234,5 @@ def evaluate_active(
         started_at=started_at,
         elapsed_ms=elapsed_ms,
         run_id=run_id,
+        num_fewshot=num_fewshot,
     )

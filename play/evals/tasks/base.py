@@ -10,6 +10,10 @@
   - process_results      per-sample 评分（统一吃 Response，offline/active 共用）
   - aggregation          per-sample → 全局聚合的函数字典，延迟求值
   - higher_is_better     指标方向（show UI / 多 run 排序用）
+
+两个 few-shot 默认方法（Phase 2 加入）：
+  - fewshot_docs              example 池，默认 = self.docs()，子类可指 held-out split
+  - format_fewshot_example    一条 example 的字符串形式，默认 doc_to_text + doc_to_target
 """
 
 from __future__ import annotations
@@ -47,6 +51,22 @@ class Task(ABC):
     def doc_to_choice(self, doc: Doc) -> tuple[str, ...] | None:
         """MCQ 专用，默认 None."""
         return None
+
+    def fewshot_docs(self) -> Iterable[Doc]:
+        """few-shot example 池。默认就是 self.docs()——抽样时由 Runner 排除当前 query.
+
+        子类如果有独立 held-out split（HF dataset 的 train/dev/test 风格），
+        override 此方法返回另一份 Iterable[Doc] 即可。
+        """
+        return self.docs()
+
+    def format_fewshot_example(self, doc: Doc) -> str:
+        """单条 example 拼成 prompt 前缀的字符串。默认 = doc_to_text + ' ' + doc_to_target.
+
+        与 lm-eval 的默认 `target_delimiter=' '` 一致；任务可 override 改分隔符
+        / 多段结构 / 删指令保留 input→output 短形式。
+        """
+        return f"{self.doc_to_text(doc)} {self.doc_to_target(doc)}"
 
     @abstractmethod
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
