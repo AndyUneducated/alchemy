@@ -23,7 +23,7 @@ Unless the user names another path, **create new experiments under `play/`**.
 - **Doc formatting**: default to tables for any content with 2+ parallel items (enumerations, lists, comparisons, option sets); use bullets/lists only when items aren't parallel or share no dimensions.
 - **Markdown**: CommonMark / GFM conventions; compact tables (minimum separator dashes, no cell padding).
 - **No new tooling**: don't add lint/test/build infrastructure where none exists; if checks are already defined, run them after non-trivial edits.
-- **Commits**: split by independent semantic increments, but never at the cost of an unusable intermediate state.
+- **Commits**: split by independent semantic increments, but never at the cost of an unusable intermediate state; commit messages must be in English only.
 
 ## Language
 
