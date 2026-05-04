@@ -57,7 +57,7 @@ class Response:
     """LM 的返回.
 
     `text` 和 `loglikelihoods` 互斥，由 request_type 决定哪个有值。
-    `latency_ms` 即使 Phase 1 不用也预留，为 Phase 10 efficiency 维度埋点。
+    `latency_ms` 即使 Phase 1 不用也预留，为 Phase 6 efficiency 维度埋点。
     score 模式下 text 字段从 predictions JSONL 读进来。
     """
 

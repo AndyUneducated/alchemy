@@ -3,7 +3,7 @@
 对齐 lm-evaluation-harness 的三种请求：
   - generate_until          自由生成直到 stop seq，90% task 用这个
   - loglikelihood           给 prompt + continuation 算 logp，MCQ + calibration 基础
-  - loglikelihood_rolling   整段 rolling perplexity，Phase 7 calibration 用
+  - loglikelihood_rolling   整段 rolling perplexity，Phase 9 calibration 用
 
 只有 run 模式用到；score 模式完全绕过这一层。
 
@@ -35,5 +35,5 @@ class LM(ABC):
         raise NotImplementedError("loglikelihood not implemented in phase 1")
 
     def loglikelihood_rolling(self, requests: list[Request]) -> list[Response]:
-        """整段 rolling perplexity. Phase 7 calibration 用."""
+        """整段 rolling perplexity. Phase 9 calibration 用."""
         raise NotImplementedError("loglikelihood_rolling not implemented in phase 1")

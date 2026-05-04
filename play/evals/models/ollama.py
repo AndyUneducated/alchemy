@@ -5,7 +5,7 @@
   user/assistant role + system prompt，破坏 prompt 字面可复现；/api/generate 直拨 raw prompt.
 
 只实现 generate_until（phase 3 唯一用到的 request type）；loglikelihood 走 ABC default
-抛 NotImplementedError——phase 7 calibration 再开（届时 ollama 端用 /api/embeddings 或
+抛 NotImplementedError——phase 9 calibration 再开（届时 ollama 端用 /api/embeddings 或
 HF transformers tokenizer 直算）.
 
 为什么不复用 play/agent_engine/ollama_client.py：

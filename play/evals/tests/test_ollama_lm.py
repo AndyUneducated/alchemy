@@ -8,7 +8,7 @@
   - max_tokens 上界生效
   - batched 顺序独立
   - name 字段格式
-  - loglikelihood 抛 NotImplementedError（phase 7 calibration 再开）
+  - loglikelihood 抛 NotImplementedError（phase 9 calibration 再开）
 
 按 plan §二.4 6 条断言；#5 / #6 是结构性测试不依赖 live，但保留在本文件以集中"OllamaLM 单元".
 """
@@ -94,7 +94,7 @@ def test_ollama_lm_name_includes_model_tag(ollama_model: str):
 
 
 def test_ollama_loglikelihood_not_implemented(ollama_model: str):
-    """loglikelihood 走 ABC 默认抛 NotImplementedError；phase 7 calibration 再开.
+    """loglikelihood 走 ABC 默认抛 NotImplementedError；phase 9 calibration 再开.
 
     结构性测试.
     """
