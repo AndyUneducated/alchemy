@@ -1,0 +1,8 @@
+{"id":"r01","input":"赵铁军的管理风格有什么特点？","gold_doc_ids":["ceo_zhao_tiejun.txt"]}
+{"id":"r02","input":"林晚晴反对关停星云平台的核心论据有哪些？","gold_doc_ids":["vp_lin_wanqing.txt"]}
+{"id":"r03","input":"钱正清对星云平台的财务分析得出什么结论？","gold_doc_ids":["cfo_qian_zhengqing.txt"]}
+{"id":"r04","input":"破晓项目目前的种子客户数量和 NPS 是多少？","gold_doc_ids":["biz_sun_weilai.txt"]}
+{"id":"r05","input":"马千里在会议中真实的内心立场是什么？","gold_doc_ids":["sales_ma_qianli.txt"]}
+{"id":"r06","input":"瀚海科技这次会议讨论的核心议题是什么？","gold_doc_ids":["story_background.txt"]}
+{"id":"r07","input":"林晚晴和钱正清之间的关系是什么样的？","gold_doc_ids":["vp_lin_wanqing.txt","cfo_qian_zhengqing.txt"]}
+{"id":"r08","input":"星云平台的销售业绩在 2022 年达到了多少？","gold_doc_ids":["sales_ma_qianli.txt"]}

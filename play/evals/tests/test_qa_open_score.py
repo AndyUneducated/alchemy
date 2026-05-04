@@ -23,7 +23,7 @@ import pytest
 from evals.models.base import LM
 from evals.runner import evaluate_score
 from evals.tasks.qa_open import QAOpen
-from evals.tests.test_judge import FakeJudgeLM
+from evals.tests.test_judge_core import FakeJudgeLM
 
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "qa_open" / "predictions"
 

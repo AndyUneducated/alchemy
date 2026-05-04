@@ -28,17 +28,24 @@ from .models.base import LM
 from .tasks.base import Task
 
 
-def _load_predictions(path: str | Path) -> dict[str, str]:
-    """读 {id, prediction} JSONL → {doc_id: prediction} 字典."""
+def _load_predictions(path: str | Path) -> dict[str, dict]:
+    """读 predictions JSONL → {doc_id: row}（整行 dict，phase 4 起改为整 row）.
+
+    旧实现只取 row['prediction']，phase 4 起改为整 row 字典——把"如何从 row 提
+    取字段"的责任下放给 `task.load_prediction(doc, row)`，让 RAG task 等能定义
+    自己的 row schema（含 contexts / retrieved_ids 等额外字段）。
+
+    向后兼容：默认 `Task.load_prediction` 只取 row['prediction']，老 task 字节级 parity。
+    """
     p = Path(path)
-    preds: dict[str, str] = {}
+    preds: dict[str, dict] = {}
     with p.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
-            preds[row["id"]] = row["prediction"]
+            preds[row["id"]] = row
     return preds
 
 
@@ -161,8 +168,10 @@ def evaluate_score(
                 f"predictions file missing doc_id={doc.id!r} "
                 f"(found {len(preds)} preds for {len(docs)} docs); strict join required"
             )
-        response = Response(doc_id=doc.id, text=preds[doc.id])
-        sample_results.append(task.process_results(doc, response))
+        # phase 4：让 task 自定 row → (doc', response) 翻译.
+        # 默认 Task.load_prediction 只取 row['prediction']，与 phase 1 字节相同.
+        enriched_doc, response = task.load_prediction(doc, preds[doc.id])
+        sample_results.append(task.process_results(enriched_doc, response))
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     model_label = source_label or f"preds:{Path(predictions_path).stem}"
@@ -204,33 +213,44 @@ def evaluate_run(
     t0 = time.perf_counter()
 
     docs = _collect_docs(task, limit)
-    pool = list(task.fewshot_docs()) if num_fewshot > 0 else []
-    rng = random.Random(fewshot_seed)
-    requests = [
-        _build_request(task, doc, _build_prompt(task, doc, num_fewshot, pool, rng))
-        for doc in docs
-    ]
+    # phase 4：LM 调用前的 docs 前置加工 hook（默认 identity 透传，老 task 不影响）。
+    # 典型用法：RAG task 在此 batch 调 retrieve_fn，把 retrieved_ids/contexts pin 进 doc.metadata.
+    docs = list(task.process_docs(docs))
 
-    # Phase 1 串行。Phase 2+ 在此处做 asyncio.gather / thread pool / rate-limit。
-    responses: list[Response] = lm.generate_until(requests)
+    if task.output_type == "none":
+        # phase 4：声明无 LM 调用的 task（如 rag_retrieval）——直接生成占位 Response.
+        # 不走 _build_prompt / _build_request / lm.generate_until 任何一步.
+        responses: list[Response] = [Response(doc_id=d.id) for d in docs]
+        model_label = lm.name
+    else:
+        pool = list(task.fewshot_docs()) if num_fewshot > 0 else []
+        rng = random.Random(fewshot_seed)
+        requests = [
+            _build_request(task, doc, _build_prompt(task, doc, num_fewshot, pool, rng))
+            for doc in docs
+        ]
 
-    if len(responses) != len(docs):
-        raise RuntimeError(
-            f"LM returned {len(responses)} responses for {len(docs)} requests"
-        )
+        # Phase 1 串行。Phase 2+ 在此处做 asyncio.gather / thread pool / rate-limit。
+        responses = lm.generate_until(requests)
+        model_label = lm.name
+
+        if len(responses) != len(docs):
+            raise RuntimeError(
+                f"LM returned {len(responses)} responses for {len(docs)} requests"
+            )
 
     sample_results = [
         task.process_results(doc, resp) for doc, resp in zip(docs, responses)
     ]
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
-    run_id = _generate_run_id(task.name, lm.name, seed)
+    run_id = _generate_run_id(task.name, model_label, seed)
 
     return _finalize(
         task,
         sample_results,
         mode="run",
-        model_label=lm.name,
+        model_label=model_label,
         started_at=started_at,
         elapsed_ms=elapsed_ms,
         run_id=run_id,

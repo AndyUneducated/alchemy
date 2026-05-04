@@ -141,3 +141,76 @@
 - **metrics 模块化**：phase 3 触发首次新建 `metrics/judge.py`（README 指导原则 #3 的"跨 task 复用 + 无库可用"双重信号）
 - **task 选型**：`qa_open` 简单且能承载 pointwise 强故事；其它 3 个 judge 主舞台在 metric 单元层
 - **测试 gate**：live ollama 测试 auto-probe（服务 + 模型双层），不可达自动 skip + 友好提示
+
+## 4. Phase 4 实现：族 4 RAG 完全体（retrieval + grounding 双 task + 3 个新 metrics 模块）
+
+- **日期**：2026-05-03
+
+### Scope
+
+|模块|内容|
+|---|---|
+|`api.py` 契约扩展|① `Doc.target` 由 `str` 放宽为 `str \| None`（rag_retrieval 用 None 替代 "" 占位污染）；② `SampleResult.artifacts: dict[str, Any]` 新增（per-sample 非标量产物专用 bucket，与 `metrics: dict[str, float]` 形成 MLflow/W&B 风格 scalar/non-scalar 对偶）|
+|`tasks/base.py` Task ABC 扩展|3 个对齐 lm-eval 的 hook（全 default 实现）：① `load_prediction(doc, row)` score 路径自定 JSONL row schema；② `process_docs(docs)` run 路径 LM 调用前的 docs 前置加工；③ `output_type` literal 加 `"none"` 让 runner 跳过 LM 调用|
+|`runner.py` 双路径分支|`_load_predictions` 返回 `dict[str, dict]`（整 row）；`evaluate_score` 调 `task.load_prediction`；`evaluate_run` 在 LM 前调 `task.process_docs`、按 `output_type` 分支|
+|`metrics/` 拆分|`metrics/judge.py` 重命名 `metrics/judge_core.py`（4 个范式：pointwise/pairwise/g_eval/self_consistency）；新建 `metrics/judge_rag.py`（5 个 RAG judge：faithfulness / answer_correctness / context_precision / context_recall / answer_relevancy + parse_statement_list / parse_tp_fp_fn 两个 RAG 专用 parser）；新建 `metrics/retrieval.py`（5 个 IR 指标 ranx 直调封装：recall@k / precision@k / mrr / ndcg@k / map@k）|
+|`models/rag_retrieve.py`|`make_retrieve_fn(vdb, ...)` 工厂：subprocess 调 `play/rag/query.py --json`，解析 JSON envelope → `(query) -> (ids, contents)` 闭包；同源 chunk 去重保 rank|
+|新 task `rag_retrieval`|8 条针对 `play/rag/docs/panel/*.txt` 的检索 query + 4 份 stub predictions（perfect / good_rerank / weak / garbage）；`output_type='none'` 跳 LM；`process_docs` 注入 `retrieved_ids` 到 `doc.metadata`|
+|新 task `rag_qa`|8 条端到端 QA + 4 份 stub predictions（perfect / paraphrase / wrong_fact / garbage）；`process_docs` 注入 contexts/retrieved_ids；`doc_to_text` 纯字符串构造（0 IO）；`judge_lm` 可选（None=lexical baseline / 给则挂 5 个 RAG 维度）|
+|`cli.py` 扩展|`_build_task_with_optional_judge` 重命名为 `_build_task_with_optional_deps`（保留旧名作向后兼容别名），加 4 个 RAG flag（`--vdb` / `--retrieve-top-k` / `--retrieve-mode` / `--rerank`）；`cmd_run` 在 `output_type='none'` 时允许省 `--model`，自动用 `retriever:<vdb>:<mode>` 标签|
+|测试套（74 条新断言）|`test_api_contract_extension.py`(6) / `test_runner_task_hooks_compat.py`(5) / `test_output_type_none_dispatch.py`(2) / `test_retrieval_metrics.py`(11) / `test_judge_rag.py`(20) / `test_rag_retrieval_score.py`(9) / `test_doc_metadata_injection.py`(5) / `test_rag_retrieve_factory.py`(5) / `test_rag_qa_score.py`(8) / `test_cli_spec.py`(7 新 dispatch) / `test_rag_live.py`(3 live，过 ollama+vdb 双 probe gate)|
+|`conftest.py` VDB probe gate|`panel_vdb_required` / `sample_vdb_required` skip marker + `panel_vdb_path` / `sample_vdb_path` fixture：缺 VDB 友好提示用户跑 `play/rag/ingest.py`|
+
+### Implementation
+
+|侧面|做法|
+|---|---|
+|`Doc.target: str \| None`|rag_retrieval 没有字符串 gold，旧实现强迫写 `target=""` 占位污染语义；放宽到 `Optional` 后既不破老 task（仍传 str），又让 retrieval task 显式声明"无字符串 target"。`asdict` JSON 序列化天然支持 None|
+|`SampleResult.artifacts`|`metrics: dict[str, float]` 严守 scalar；retrieval IDs / trajectory steps / tool_calls 等非标量进 `artifacts`。命名对齐 MLflow / W&B 的 metrics(scalar) vs artifacts(non-scalar) 二分。文档 + 测试明示防垃圾桶纪律|
+|`load_prediction` hook|默认实现 `(doc, row) -> (doc, Response(text=row['prediction']))` 与旧 `_load_predictions[id]` 字节相同——所有老 task 自动免改|
+|`process_docs` hook|对齐 lm-eval 同名 callable（按"what"命名抗"垃圾桶"演化）；默认 identity；签名约束 `list[Doc] -> list[Doc]`，副作用纪律写在 docstring|
+|`output_type='none'`|runner 在该分支生成占位 `Response(doc_id=d.id)`，不调 `lm.generate_until`；CLI 用 `_RetrieverOnlyLM` name-only stub 充当 EvalResult.model 标签源|
+|`metrics/judge_core.py` + `judge_rag.py` 拆分|按"评分方法学" vs "评分对象（RAG pipeline 各环节）"两层正交切分；判 LM 范式扩展第 5 个不会拖累 RAG 维度演化（CHANGELOG §3 单文件膨胀的预防）|
+|`judge_rag.py` 自实现而非 import RAGAS|RAGAS 引入 langchain / openai / 数据科学全家桶（~30 个传递依赖）；本项目已有 LM ABC + closure 工厂模式，~150 行就把 5 个维度的 NLI/F1/extract 通路跑通；保留 prompt 字面字符串可控（lm-eval 不变量）|
+|`models/rag_retrieve.py` subprocess 调用|遵循 monorepo 解耦原则（workshops.mdc）：`play/` sub-projects 不互相 import，跨项目走 CLI + JSON envelope；`play/rag` 自带的 chromadb / fastparquet 依赖不污染 evals 进程；同接口 future remote retriever 平滑迁移|
+|路径 B+C 数据契约|`Response` 只装 LM-side 输出（保持 phase 0 契约纯净）；pipeline 产物（retrieved_ids / contexts）住 `Doc.metadata`。score 路径 `load_prediction` 写、run 路径 `process_docs` 写；`process_results` 双路径都从 `doc.metadata` 读，零分支|
+|RAG IR 指标聚合|`metrics/retrieval.py` 工厂返回 `(list[SampleResult]) -> float`；从 `SampleResult.artifacts.{pred_ids, gold_ids}` 拉数据 → 构造 ranx Qrels/Run → `evaluate(qrels, run, metric_name)`；空数据 / 缺字段 → 0.0 优雅降级|
+|向后兼容回归|3 类 parity test 覆盖：① `test_api_contract_extension`（Doc.target / artifacts 形状）；② `test_runner_task_hooks_compat`（老 task 用 default hook 字节级 parity）；③ `test_output_type_none_dispatch`（用 spy LM 验证 `output_type='none'` 真没被调）|
+
+### Options considered
+
+**RAG corpus 来源**：
+- **复用 `play/rag/docs/panel/*.txt`**（选择）—— 公司治理叙事天然有"5 个角色 × 6 篇"的 doc-level 区分度，做 retrieval gold 自然清晰；零额外数据成本
+- 自建 corpus —— 排除：phase 4 时间预算优先放在指标 + task + 测试上
+- 用 BEIR / MS MARCO 等公开 IR dataset —— 排除：太大，phase 4 教学叙事用不上；中文场景适配麻烦
+
+**`metrics/` 模块布局**：
+- **预期式 split**：`judge_core.py` + `judge_rag.py` + `retrieval.py`（选择）—— phase 4 是"评分方法学 + 评分对象"两轴并存的临界点，先 split 一次后续不破文件结构；与 ragas 平铺布局对齐
+- 全平铺 ragas 风格 —— 暂排除：本项目体量小，5-7 个 metric 模块平铺 OK，但当前 phase 文件数还不到这一步
+- 不拆继续 `judge.py` —— 排除：5 个 RAG 维度 + parser 加进去后单文件超 500 行，难以演化
+
+**与 `play/rag` 的依赖方式**：
+- **subprocess + JSON envelope**（选择）—— 严守 monorepo 解耦原则；evals 进程不被 chromadb/ollama 客户端污染；接口同型 future HTTP retriever 平滑迁移
+- 直接 `from play.rag.query import search` —— 排除：违反 workshops.mdc；evals 进程被强制带上 chromadb/fastparquet/torch 等依赖；无法在 evals 测试 mock 真 IO 边界
+- HTTP service —— 排除：过度工程；phase 4 体量不需要
+
+**`Response` 是否装 RAG-side 数据**：
+- **路径 B+C：Response 只装 LM-side，pipeline 产物住 `Doc.metadata`**（选择）—— `Response` 跨 task 复用通用契约，不被某一类 task 的特殊产物污染；遵循 lm-eval `Doc.metadata` 作 free-form bucket 的惯例
+- 路径 A：Response 加 `retrieved_ids: tuple[str, ...]` 字段 —— 排除：契约层为 RAG 一类 task 让步；老 task 必须默认 None 处理，加密了 Response 的语义
+
+**RAG 维度是 import RAGAS 还是自实现**：
+- **自实现 5 维度（选择）**—— 复用本项目已有的 LM ABC + closure 工厂；prompt 字面字符串可控（lm-eval 不变量）；~150 行就跑通；测试 stub 极简
+- 直接 `pip install ragas` —— 排除：传递依赖膨胀（langchain/openai/全家桶 ~500MB）；prompt 黑盒；与 evals 的 LM 适配层冲突
+
+**rag_retrieval 是否走 LM 调用 fake adapter**：
+- **`output_type='none'` literal**（选择）—— Task ABC 加一个枚举 + runner 一个分支，干净；表达力："这个 task 不要 LM"是 task 自己的属性
+- `RetrieveOnlyLM(LM)` 假 LM adapter —— 排除：`generate_until` 永远抛 NotImplementedError；用 LM 假装 retriever 是接口污染
+- 在 `doc_to_text` 里做 retrieve I/O —— 排除：违反"`doc_to_text` 是纯字符串构造"的 lm-eval 不变量；与 score 路径无法对齐
+
+### Decision
+
+- **数据契约**：`Doc.target: str | None` + `SampleResult.artifacts: dict[str, Any]`；`Response` 不动
+- **Task ABC**：3 个 default-implemented hook（`load_prediction` / `process_docs`）+ 1 个 literal 扩展（`output_type="none"`），全部向后兼容
+- **metrics 拆分**：`judge_core.py`（4 个范式）+ `judge_rag.py`（5 个 RAG 维度，自实现）+ `retrieval.py`（5 个 IR 指标 ranx 直调）
+- **`play/rag` 依赖**：subprocess + JSON envelope，遵循 monorepo 解耦
+- **测试 gate**：复用 ollama-probe + 加 vdb-probe 双层；缺任一即 skip + 友好提示

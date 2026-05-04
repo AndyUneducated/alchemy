@@ -14,3 +14,7 @@ torch
 transformers
 bert-score
 certifi
+
+# phase 4 RAG IR metrics (ranx：trec_eval 的 numba JIT Python 包装)
+# 拉一系列重依赖（numba / pyarrow / fastparquet 等），但避免自实现 IR 公式
+ranx

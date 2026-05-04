@@ -1,0 +1,8 @@
+{"id":"q01","prediction":"今天天气不错，我去公园散步遇到了一只可爱的橘猫。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：豆腐脑南北甜咸之争由来已久。"]}
+{"id":"q02","prediction":"机器学习模型的训练通常需要大量标注数据。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：太极拳起源于河南陈家沟。"]}
+{"id":"q03","prediction":"昨晚的足球比赛比分是2比1，主队取胜。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：长江全长约6300公里。"]}
+{"id":"q04","prediction":"咖啡豆主要分阿拉比卡和罗布斯塔两大类。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：唐诗三百首由蘅塘退士编选。"]}
+{"id":"q05","prediction":"周末计划去爬山，希望天气晴朗。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：英语单词abandon表示放弃的意思。"]}
+{"id":"q06","prediction":"葡萄牙位于伊比利亚半岛西部。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：水的密度约为1克每立方厘米。"]}
+{"id":"q07","prediction":"五线谱由意大利人圭多发明。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：海带是日本料理常用食材。"]}
+{"id":"q08","prediction":"摄影中黄金时刻指日出后日落前的时段。","retrieved_ids":["bogus.txt"],"contexts":["与本问题无关的随机文本：地铁是城市重要的公共交通方式。"]}

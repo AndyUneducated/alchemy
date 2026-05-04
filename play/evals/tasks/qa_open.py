@@ -25,7 +25,7 @@ from collections.abc import Iterable
 from typing import Callable, ClassVar
 
 from ..api import Doc, Response, SampleResult
-from ..metrics.judge import (
+from ..metrics.judge_core import (
     judge_pointwise as _judge_pointwise_factory,
     self_consistency as _self_consistency,
 )
@@ -50,7 +50,7 @@ QA_OPEN_JUDGE_TEMPLATE = (
     "Score (1-5):"
 )
 # 中英 mixed template 是有意为之：FakeJudgeLM 的 Jaccard 规则按 "Reference answer: " /
-# "Response: " 字面切割 prompt（与 metrics/judge.DEFAULT_POINTWISE_TEMPLATE 同 anchor），
+# "Response: " 字面切割 prompt（与 metrics/judge_core.DEFAULT_POINTWISE_TEMPLATE 同 anchor），
 # 真 LLM judge 看中文部分即可正常打分。两路径 anchor 都齐.
 
 DATA_PATH = __import__("pathlib").Path(__file__).resolve().parent.parent / "data" / "qa_open" / "gold.jsonl"

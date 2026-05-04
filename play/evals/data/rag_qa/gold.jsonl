@@ -1,0 +1,8 @@
+{"id":"q01","input":"谁创办了瀚海科技？是哪一年？","target":"瀚海科技由赵铁军在2011年创办。","gold_doc_ids":["ceo_zhao_tiejun.txt"]}
+{"id":"q02","input":"瀚海科技在2016年达到了什么里程碑？","target":"瀚海科技在2016年年收入突破1亿，完成了B轮融资。","gold_doc_ids":["ceo_zhao_tiejun.txt"]}
+{"id":"q03","input":"钱正清统计的星云平台连续亏损金额是多少？","target":"钱正清统计星云平台连续三季度亏损5800万。","gold_doc_ids":["cfo_qian_zhengqing.txt"]}
+{"id":"q04","input":"破晓项目目前的种子客户数量和NPS分别是多少？","target":"破晓项目目前有8家种子客户，NPS评分为72。","gold_doc_ids":["biz_sun_weilai.txt"]}
+{"id":"q05","input":"星云平台2022年达到了多少年收入？","target":"星云销售团队在2022年创造了8000万年收入的巅峰成绩。","gold_doc_ids":["sales_ma_qianli.txt"]}
+{"id":"q06","input":"林晚晴是哪一年加入瀚海科技的？","target":"林晚晴在2018年加入瀚海科技。","gold_doc_ids":["vp_lin_wanqing.txt"]}
+{"id":"q07","input":"赵铁军创办瀚海科技时的初始团队规模和首笔融资金额是多少？","target":"赵铁军创办瀚海科技时初始团队8人，首笔融资500万。","gold_doc_ids":["ceo_zhao_tiejun.txt"]}
+{"id":"q08","input":"破晓项目目前的团队规模是多少人？组成情况如何？","target":"破晓项目团队12人，包括6名工程师、3名产品和3名运营。","gold_doc_ids":["biz_sun_weilai.txt"]}

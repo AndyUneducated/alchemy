@@ -14,6 +14,11 @@
 两个 few-shot 默认方法（Phase 2 加入）：
   - fewshot_docs              example 池，默认 = self.docs()，子类可指 held-out split
   - format_fewshot_example    一条 example 的字符串形式，默认 doc_to_text + doc_to_target
+
+三个 Phase 4 引入的"对齐 lm-eval"hook（全 default 实现，不破老 task）：
+  - load_prediction(doc, row)  score 路径自定 JSONL row → (Doc, Response) 翻译
+  - process_docs(docs)         run 路径 LM 调用前的 docs 前置加工（RAG retrieve / column rename）
+  - output_type = "none"       新增 literal，告诉 Runner 跳过 LM 调用（rag_retrieval 用）
 """
 
 from __future__ import annotations
@@ -24,7 +29,12 @@ from typing import Callable, ClassVar, Literal
 
 from ..api import Doc, Response, SampleResult
 
-OutputType = Literal["generate_until", "multiple_choice", "loglikelihood"]
+OutputType = Literal[
+    "generate_until",
+    "multiple_choice",
+    "loglikelihood",
+    "none",  # phase 4：声明该 task 不需要 LM 调用（runner 跳 lm.generate_until）
+]
 
 
 class Task(ABC):
@@ -95,3 +105,37 @@ class Task(ABC):
     def higher_is_better(self) -> dict[str, bool]:
         """{metric_name: True 表示越大越好}. show UI 和多 run 对比排序用."""
         ...
+
+    # ---- Phase 4 新增 hooks ----------------------------------------------
+
+    def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
+        """score 路径：把 predictions JSONL 一行翻译成 `(enriched_doc, response)`.
+
+        默认实现：仅取 `row['prediction']` 作 Response.text，doc 不动——与 Phase 1
+        旧 `_load_predictions` 行为字节相同。
+
+        子类 override 时把 row 里的 pipeline 数据（如 retrieved_ids / contexts）注入
+        `doc.metadata`，把 LM-side 数据装 `Response`——遵循 path B+C：Response 只
+        装 LM-side，pipeline 产物住 doc 一侧.
+        """
+        from dataclasses import replace as _replace
+
+        # 默认 doc 不动；子类如需注入 metadata 应在 override 内自行 _replace.
+        _ = _replace  # silence vulture
+        return doc, Response(doc_id=doc.id, text=row.get("prediction"))
+
+    def process_docs(self, docs: list[Doc]) -> list[Doc]:
+        """run 路径：LM 调用前对 docs 做前置加工（对齐 lm-eval 同名 hook）.
+
+        典型用法：
+        - RAG task 在此调 retrieve_fn，把 retrieved_ids/contexts 注入 doc.metadata
+        - 任意 task 做 batch tokenize / 字段映射 / column rename / normalize
+
+        默认实现：identity 透传——老 task 不受影响.
+
+        ⚠️ 纯加工纪律（防垃圾桶）：
+        - 签名约束：必须 `list[Doc] -> list[Doc]`，**不许带"任务执行"语义**
+        - 副作用（日志 / metric 上报 / 状态写入）应放在 metric 闭包或 process_results 内
+        - 与 doc 加工无关的初始化（资源准备 / 缓存预热）应放在 task __init__
+        """
+        return docs

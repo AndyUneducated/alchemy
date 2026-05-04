@@ -1,4 +1,4 @@
-"""metrics/judge.py 单元层：4 个 judge + 解析 + 去偏机制 共 12 条断言.
+"""metrics/judge_core.py 单元层：4 个 judge + 解析 + 去偏机制 共 12 条断言.
 
 零网络。FakeJudgeLM 接受 `list[str]`（按调用 cursor 推进）或 `Callable[[prompt], text]`
 （规则函数），保证测试完全确定性、CI 友好。
@@ -17,7 +17,7 @@ from typing import Callable
 import pytest
 
 from evals.api import Doc, Request, Response
-from evals.metrics.judge import (
+from evals.metrics.judge_core import (
     g_eval,
     judge_pairwise,
     judge_pointwise,

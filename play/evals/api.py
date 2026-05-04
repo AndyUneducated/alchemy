@@ -22,12 +22,16 @@ class Doc:
     """数据集一行，Task 产出。
 
     `id` 用于 de-dup 和 per-sample 追踪 / join predictions。
-    Phase 1 `target` 用 str，未来可扩为 Any（MCQ 用 int index，RAG 用 list[str]）。
+    `target` 由 str 放宽为 `str | None`（Phase 4 引入）：兼顾"老 task 仍传 str"
+    与"rag_retrieval / 任何无字符串 gold 的 task 显式传 None"两侧——避免用 ""
+    占位污染语义。`metadata` 是 task / pipeline 互通的 free-form bucket：RAG 在
+    `process_docs` hook 里把检索产物（retrieved_ids / contexts）注入这里，
+    `Response` 保持只装 LM-side 输出（path B+C 决策，详见 CHANGELOG §4）。
     """
 
     id: str
     input: str
-    target: str
+    target: str | None = None
     choices: tuple[str, ...] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -67,14 +71,27 @@ class Response:
 class SampleResult:
     """单样本评分结果，粒度 = 1 条样本.
 
-    `metrics` 只装 per-sample 可算完的数值（acc=0/1, EM, 单条 BLEU）.
-    需要全集统计的（F1、kappa）留给 aggregation，原始 pred/target 用 `_` 前缀私有键传下去。
+    `metrics` 严守 per-sample 标量（acc=0/1, EM, 单条 BLEU）；F1/kappa 这种需要
+    全集才能算的留 aggregation 拉原始 pred/target 自己算。
+
+    `artifacts`（Phase 4 引入）装 per-sample **非标量**产物：
+      - retrieval task 的 `pred_ids` / `gold_ids`（aggregation 用 ranx 拉）
+      - 未来 agent task 的 trajectory steps / tool_calls
+      - 任何 diagnostic dump 而非 metric 数值
+
+    与 metrics 的 dict[str, float] 形成 MLflow / W&B 风格的 scalar/non-scalar 对偶——
+    防止把 `list[str]` 偷偷塞进 `metrics` 里破坏类型契约。
+
+    防垃圾桶纪律：
+      - 装"per-sample 非标量产物"，aggregation 输入 + diagnostic dump 用途
+      - 不许装：与 metric 计算无关的状态（log/上报放 metric 闭包内；task 状态走 __init__）
     """
 
     doc_id: str
     prediction: str
     target: str
     metrics: dict[str, float]
+    artifacts: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

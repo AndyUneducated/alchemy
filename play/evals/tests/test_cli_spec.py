@@ -88,5 +88,68 @@ def test_build_task_with_judge_injects_judge_lm():
 
 def test_build_task_judge_on_non_qa_open_raises_systemexit():
     """非 qa_open + judge_model → SystemExit（fail-fast 而非 silently 忽略）."""
-    with pytest.raises(SystemExit, match="qa_open"):
+    with pytest.raises(SystemExit, match="qa_open|rag_qa"):
         _build_task_with_optional_judge("sentiment_clf", "mock:gold")
+
+
+# ---------- Phase 4 dispatch (_build_task_with_optional_deps) -----------------
+
+from evals.cli import _build_task_with_optional_deps  # noqa: E402
+from evals.tasks.rag_qa import RagQA  # noqa: E402
+from evals.tasks.rag_retrieval import RagRetrieval  # noqa: E402
+
+
+def test_build_rag_retrieval_with_vdb_injects_retrieve_fn():
+    """rag_retrieval + --vdb → 注入 retrieve_fn（callable）."""
+    t = _build_task_with_optional_deps(
+        "rag_retrieval", vdb="/tmp/fake_vdb", retrieve_top_k=3, retrieve_mode="dense",
+    )
+    assert isinstance(t, RagRetrieval)
+    assert t._retrieve_fn is not None
+    assert callable(t._retrieve_fn)
+    assert t._top_k == 3
+
+
+def test_build_rag_retrieval_without_vdb_returns_naked_task():
+    """rag_retrieval 无 --vdb（score 路径用法）→ task 本体，retrieve_fn=None."""
+    t = _build_task_with_optional_deps("rag_retrieval")
+    assert isinstance(t, RagRetrieval)
+    assert t._retrieve_fn is None
+
+
+def test_build_rag_retrieval_with_judge_raises_systemexit():
+    """rag_retrieval + --judge-model → SystemExit（rag_retrieval 没有 LM-side 输出可判）."""
+    with pytest.raises(SystemExit, match="rag_retrieval"):
+        _build_task_with_optional_deps("rag_retrieval", judge_model_spec="mock:gold")
+
+
+def test_build_rag_qa_with_vdb_and_judge_injects_both():
+    """rag_qa + --vdb + --judge-model → retrieve_fn + judge_lm 双注入."""
+    t = _build_task_with_optional_deps(
+        "rag_qa",
+        vdb="/tmp/fake_vdb",
+        judge_model_spec="mock:gold",
+    )
+    assert isinstance(t, RagQA)
+    assert t._retrieve_fn is not None
+    assert t._judge_lm is not None
+
+
+def test_build_rag_qa_without_judge_lexical_only():
+    """rag_qa + --vdb 无 --judge-model → 仅 lexical baseline."""
+    t = _build_task_with_optional_deps("rag_qa", vdb="/tmp/fake_vdb")
+    assert isinstance(t, RagQA)
+    assert t._retrieve_fn is not None
+    assert t._judge_lm is None
+
+
+def test_build_qa_open_with_vdb_raises_systemexit():
+    """qa_open + --vdb → SystemExit（qa_open 不接 RAG flag）."""
+    with pytest.raises(SystemExit, match="qa_open|rag"):
+        _build_task_with_optional_deps("qa_open", vdb="/tmp/fake_vdb")
+
+
+def test_build_sentiment_clf_with_vdb_raises_systemexit():
+    """非 RAG task + --vdb → SystemExit（fail-fast）."""
+    with pytest.raises(SystemExit, match="rag"):
+        _build_task_with_optional_deps("sentiment_clf", vdb="/tmp/fake_vdb")

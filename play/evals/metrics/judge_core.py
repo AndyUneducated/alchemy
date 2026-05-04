@@ -1,7 +1,10 @@
-"""族 3 LLM-as-judge 完全体（4 个 judge metric + 解析 + 去偏 wrapper）.
+"""族 3 LLM-as-judge 核心范式（pointwise / pairwise / g_eval / self_consistency）.
 
 按 README 指导原则 #3 触发新建：跨 task 复用（qa_open / 未来 summarization / writing 都会用）
 + 无成熟库可调（RAGAS 是 RAG 专用、deepeval 与本项目 task-decoupled 不兼容）.
+
+phase 4 起拆为 `judge_core.py`（本文件）+ `judge_rag.py`（RAG 接地维度），
+理由：核心范式是"评分方法学"，RAG 维度是"评分对象"，两层正交，避免单文件膨胀.
 
 四个 judge 的主舞台分配（详见 plan §六）：
   - judge_pointwise   task 层主舞台（任务上 lexical vs judge 分歧叙事）
