@@ -346,6 +346,7 @@ python -m agent_engine agent_engine/scenarios/example.md
 |`--no-stream`|flag|`False`|关闭流式输出（CLI 默认开；库调用默认关）|
 |`--save-artifact`|否|—|把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效）|
 |`--save-transcript`|否|—|落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON|
+|`--save-result-json`|否|—|落盘完整 `Result` envelope（`{transcript, artifact, warnings, success}`，`dataclasses.asdict` 直出）。机器消费格式，与上两个 human format 并列；`play/evals` phase 5 trajectory eval 通过此 flag 走 subprocess + JSON envelope 接 agent_engine（详见 [`DECISIONS §11`](DECISIONS.md)）|
 
 ## Scenario schema
 

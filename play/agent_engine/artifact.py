@@ -140,6 +140,7 @@ def _h_write_section(store: ArtifactStore, args: dict, caller: str) -> str:
         "type": "artifact_event",
         "tool": "write_section",
         "caller": caller,
+        "arguments": dict(args),
         "content": f"{caller} wrote section '{name}' ({n} chars)",
         "ts": time.time(),
     })
@@ -165,6 +166,7 @@ def _h_append_section(store: ArtifactStore, args: dict, caller: str) -> str:
         "type": "artifact_event",
         "tool": "append_section",
         "caller": caller,
+        "arguments": dict(args),
         "content": f"{caller} appended to '{name}' ({n} chars)",
         "ts": time.time(),
     })
@@ -187,6 +189,7 @@ def _h_propose_vote(store: ArtifactStore, args: dict, caller: str) -> str:
         "type": "artifact_event",
         "tool": "propose_vote",
         "caller": caller,
+        "arguments": {"question": question, "options": list(options)},
         "content": f"{caller} proposed vote {vid}: '{question}'",
         "ts": time.time(),
     })
@@ -210,6 +213,7 @@ def _h_cast_vote(store: ArtifactStore, args: dict, caller: str) -> str:
         "type": "artifact_event",
         "tool": "cast_vote",
         "caller": caller,
+        "arguments": dict(args),
         "content": f"{caller} cast {vid} → {option}",
         "ts": time.time(),
     })
@@ -233,6 +237,7 @@ def _h_finalize_artifact(store: ArtifactStore, args: dict, caller: str) -> str:
         "type": "artifact_event",
         "tool": "finalize_artifact",
         "caller": caller,
+        "arguments": dict(args),
         "content": f"{caller} finalized: {decision}",
         "ts": time.time(),
     })

@@ -256,3 +256,24 @@
 
 - 保留 `run.py` 旁路加 api.py 薄封装 / 只抽 `Engine` 留散落函数 / `Scenario` + `Engine` + 极薄 CLI / 一次性上 async ainvoke + stream → DECISIONS §10
 - async / stream 推迟：与"抽象引入滞后于第二个具体案例"对齐——先有同步 `invoke` 嵌入方，再为 async/stream 选模型（LangGraph 式 event stream vs 简单 queue）
+
+## 2026-05-03 — Phase 5 evals 接口落地：`--save-result-json` envelope + artifact_event 加 `arguments`
+
+### 功能
+
+- 新增 CLI flag `--save-result-json PATH`：把 `Result` 用 `dataclasses.asdict` 序列化成 JSON envelope（`{transcript, artifact, warnings, success}`）落盘；同 `--save-transcript`（人类 JSON list）/ `--save-artifact`（人类 markdown）并列，是机器消费格式专用 channel
+- artifact_event 5 个 handler（write_section / append_section / propose_vote / cast_vote / finalize_artifact）现在在事件 dict 里保留原始 `arguments`，让 transcript 永久持有 agent 当时调了什么的完整快照，pre-phase 5 仅留人类可读 `content` 字符串的信息丢失被补回
+- 与 [`play/evals` phase 5](../evals/DECISIONS.md) cross-link：evals 通过 `subprocess + JSON envelope` 接 agent_engine，不 `from agent_engine import Engine`，遵循 monorepo 解耦原则（evals DECISIONS §4 / agent_engine DECISIONS §4 同源）
+
+### 技术
+
+- envelope 构造：`dataclasses.asdict(result) → json.dump(... , ensure_ascii=False, indent=2)`；`Result` 已是 frozen dataclass，无需再加薄 `to_dict()`，dataclass 自身就是单点信息源
+- envelope 走 file 而非 stdout：agent_engine 整段讨论会刷 stdout（streaming + 工具调用反馈），envelope 不能寄生 stdout——这是与 `play/rag/query.py --json`（短查询输出）形态分叉的根本原因
+- artifact_event `arguments` 字段是纯 additive 改造（5 处 ~5 行），老消费者忽略未知键；evals 端 `argument_correctness` metric 依赖此字段在 run 路径有真数据，`test_agent_traj_envelope.py` 锁字段集合断言抓回归
+- envelope schema 同源：evals 端 `dataclasses.fields(Result) == {artifact, transcript, success, warnings}` 断言，agent_engine 改字段名时 evals CI 即时 fail——zero-cost cross-project 契约监控
+
+### 取舍
+
+- envelope 走 file flag 而非 stdout；与 `play/rag` 的 `--json` 分叉（agent_engine stdout 已被 streaming 占满）→ DECISIONS §11
+- artifact_event 加 `arguments` 是 phase 5 evals 驱动的小幅 additive 改造；`Discussion` 层不另存 `tool_log`（避免双 SoT）→ DECISIONS §11
+- `Result` 不加 `to_dict()` 薄方法；`dataclasses.asdict` 直出，避免维护双份序列化规则 → DECISIONS §11
