@@ -58,7 +58,8 @@ play/workflow/
 │   └── chat.yaml                                     纯 agent 单 stage
 ├── __init__.py           导出 Workflow
 ├── __main__.py           python -m workflow
-├── CHANGELOG.md          变更日志 + ADR（按 git 历史日期；后续每日 ≤2 条）
+├── DECISIONS.md          ADR 归档（每条架构决策一个条目，含 Status / Date / 取舍）
+├── JOURNAL.md            每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
 └── README.md             本文件
 ```
 

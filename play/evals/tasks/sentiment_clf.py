@@ -8,7 +8,7 @@
   - kappa ≈ 0 / accuracy > 0 → "靠运气"的部分，kappa 剔除掉了
 
 aggregation 里三个 callable 从 SampleResult 提取 y_true/y_pred 后直接调
-sklearn.metrics——Phase 1 没有专门的 metric 抽象层，理由见 CHANGELOG ADR #2。
+sklearn.metrics——Phase 1 没有专门的 metric 抽象层，理由见 DECISIONS §1（Phase 0 架构）。
 """
 
 from __future__ import annotations

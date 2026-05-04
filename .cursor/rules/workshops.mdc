@@ -19,11 +19,28 @@ Unless the user names another path, **create new experiments under `play/`**.
 ## Editing discipline
 
 - **Minimal diffs**: only what the task needs; no drive-by refactors, unrelated files, or rewrites of untouched sections.
-- **Docs**: after a change, check existing docs (README, CHANGELOG, etc.) for items that need updating and update them in the same turn; only add new entries (sections, list items, new doc files) when the user asks.
+- **Docs**: after a change, check existing docs (README, DECISIONS, JOURNAL, etc.) for items that need updating and update them in the same turn; only add new entries (sections, list items, new doc files) when the user asks. Two exceptions where appending is mandatory rather than gated on user request: a non-trivial technical decision always warrants a new ADR entry in `DECISIONS.md`, and a working day's substantive progress always warrants ≤2 milestone entries in `JOURNAL.md` (see "Decision & journal logs" below).
 - **Doc formatting**: default to tables for any content with 2+ parallel items (enumerations, lists, comparisons, option sets); use bullets/lists only when items aren't parallel or share no dimensions.
 - **Markdown**: CommonMark / GFM conventions; compact tables (minimum separator dashes, no cell padding).
 - **No new tooling**: don't add lint/test/build infrastructure where none exists; if checks are already defined, run them after non-trivial edits.
 - **Commits**: split by independent semantic increments, but never at the cost of an unusable intermediate state; commit messages must be in English only.
+
+## Decision & journal logs
+
+Each `play/` (or `grow/`) sub-project with non-trivial design choices keeps two append-only logs alongside the README:
+
+|File|Unit|Records|
+|---|---|---|
+|`DECISIONS.md`|one architecture decision|`Status` + `Date` metadata, then `Context` / `Options considered` / `Decision` / `Consequences` (ADR-style, MADR-flavored). Sub-projects may keep their own section headings (e.g. `Scope` / `Implementation` for `play/evals` phase entries) as long as the metadata lines are present.|
+|`JOURNAL.md`|one milestone (≤2 per working day)|`## YYYY-MM-DD — title` heading; **功能** / **技术** sections required; **取舍** section optional and should reference `DECISIONS §N` instead of duplicating rationale.|
+
+Discipline:
+
+- **Every important technical decision** (architecture, contract, dependency choice, explicit non-goal, supersession of an earlier decision) must land as a new entry in the sub-project's `DECISIONS.md`. Don't bury rationale only in commit messages or code comments.
+- **Append only.** When a decision is replaced, update its `- **Status**: superseded by §M (...)` line rather than deleting; old entries stay readable for the supersession trail.
+- **Functional + technical both required in the journal.** A milestone is what made today different from yesterday — describe it on both axes; a journal entry without 技术 collapses into a release note, without 功能 collapses into a refactor diary.
+- **Cross-project decisions** (e.g. an envelope contract shared by `play/rag` and `play/agent_engine`) get one ADR per sub-project, with each entry cross-linking the others.
+- New sub-projects only need these files once a non-trivial decision or milestone exists; one-shot scratch demos are exempt.
 
 ## Language
 

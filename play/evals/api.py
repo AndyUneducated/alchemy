@@ -26,7 +26,7 @@ class Doc:
     与"rag_retrieval / 任何无字符串 gold 的 task 显式传 None"两侧——避免用 ""
     占位污染语义。`metadata` 是 task / pipeline 互通的 free-form bucket：RAG 在
     `process_docs` hook 里把检索产物（retrieved_ids / contexts）注入这里，
-    `Response` 保持只装 LM-side 输出（path B+C 决策，详见 CHANGELOG §4）。
+    `Response` 保持只装 LM-side 输出（path B+C 决策，详见 DECISIONS §4）。
     """
 
     id: str

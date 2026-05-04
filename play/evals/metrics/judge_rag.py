@@ -3,7 +3,7 @@
 为什么单独建 `judge_rag.py` 而不是塞进 `judge_core.py`：
   - judge_core 是"评分方法学"（pointwise / pairwise / g_eval / self_consistency）
   - judge_rag  是"评分对象 = RAG pipeline 各环节"（faithfulness / answer_correctness / ...）
-  两层正交：判 LM 范式扩展到第 5 个不会拖累 judge_rag 的演化（CHANGELOG §4 决策）.
+  两层正交：判 LM 范式扩展到第 5 个不会拖累 judge_rag 的演化（DECISIONS §4 决策）.
 
 5 个维度对齐 RAGAS 主框架（faithfulness / answer_correctness / context_precision /
 context_recall / answer_relevancy），但**不直接 import ragas**：
@@ -11,7 +11,7 @@ context_recall / answer_relevancy），但**不直接 import ragas**：
   - 我们已有 LM ABC 与 closure 工厂模式，自实现 ~150 行就把同一通路跑通
   - 锁住 prompt 字面字符串（lm-eval 不变量），ragas 内部 prompt 是黑盒
 
-数据契约（path B+C，见 CHANGELOG §4）：
+数据契约（path B+C，见 DECISIONS §4）：
   - `response.text` 装 LM-side 输出（answer 字符串）
   - `doc.metadata['contexts']` 装 retrieval 产物（list[str]，by rag_qa.process_docs 注入）
   - `doc.target` 装 gold 答案（answer_correctness / context_recall 用）

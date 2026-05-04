@@ -1,7 +1,7 @@
 """RAG retrieval 闭包工厂：subprocess 调 `play/rag/query.py --json`，零 Python import.
 
 为什么 subprocess 而非直接 `from play.rag.query import search`：
-  - 遵循 monorepo 解耦原则（详见 CHANGELOG §4 / workshops.mdc）：
+  - 遵循 monorepo 解耦原则（详见 DECISIONS §4 / workshops.mdc）：
     `play/` 下的 sub-projects 不互相 Python import，跨项目通信走 CLI + JSON envelope.
   - `play/rag` 自带的依赖（chromadb / ollama / fastparquet 等）不污染 `evals` 进程
   - 同一组接口对 future remote retriever（HTTP service）平滑迁移：换 transport

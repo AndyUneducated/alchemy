@@ -406,7 +406,8 @@ YAML frontmatter 字段：
 ```
 play/agent_engine/
 ├── README.md                   # 本文件
-├── CHANGELOG.md                # 变更日志 + ADR（按 git 历史日期；后续每日 ≤2 条）
+├── DECISIONS.md                # ADR 归档（每条架构决策一个条目，含 Status / Date / 取舍）
+├── JOURNAL.md                  # 每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
 ├── requirements.txt            # anthropic / google-genai / openai / pyyaml
 ├── config.py                   # BACKEND + 各家 model/key/默认参数
 ├── __init__.py                 # 导出 Engine / Scenario / Result / Callback
@@ -430,4 +431,4 @@ play/agent_engine/
 └── scenarios/                  # 场景库（见上表）
 ```
 
-变更日志与 ADR 归档见 [`CHANGELOG.md`](CHANGELOG.md)。
+架构决策见 [`DECISIONS.md`](DECISIONS.md)；每日进展（按里程碑）见 [`JOURNAL.md`](JOURNAL.md)。
