@@ -1,10 +1,11 @@
-# Changelog
+# Decisions
 
-`CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录以 `## n. 变更标题` 开头，紧接一行 `- **日期**：...`，heading 前后留空行。后续每个自然日建议最多追加 1～2 条 tech decision。
+ADR（Architecture Decision Record）归档。每条以 `## n. 标题` 开头，紧接 `- **Status**` + `- **Date**` 元信息；正文沿用 `Scope / Implementation / Options considered / Decision` 四段（lm-eval phase-driven 体例）。**新决策追加到末尾，被取代的条目改 Status；不删旧条目**。日常进度（按里程碑） 见 [`JOURNAL.md`](JOURNAL.md)。
 
 ## 1. Phase 0 架构 & 叙事决策
 
-- **日期**：2026-04-30
+- **Status**: accepted
+- **Date**: 2026-04-30
 
 ### Scope
 
@@ -58,7 +59,8 @@
 
 ## 2. Phase 2 实现：mt task + 6 生成指标 + few-shot 机制
 
-- **日期**：2026-05-02
+- **Status**: accepted
+- **Date**: 2026-05-02
 
 ### Scope
 
@@ -84,7 +86,8 @@
 
 ## 3. Phase 3 实现：族 3 LLM-as-judge 完全体 + 真 LM 适配层 + 首个 metrics/ 模块
 
-- **日期**：2026-05-03
+- **Status**: accepted（`metrics/judge.py` 在 §4 重命名为 `metrics/judge_core.py`，行为不变）
+- **Date**: 2026-05-03
 
 ### Scope
 
@@ -144,7 +147,8 @@
 
 ## 4. Phase 4 实现：族 4 RAG 完全体（retrieval + grounding 双 task + 3 个新 metrics 模块）
 
-- **日期**：2026-05-03
+- **Status**: accepted
+- **Date**: 2026-05-03
 
 ### Scope
 
@@ -170,7 +174,7 @@
 |`load_prediction` hook|默认实现 `(doc, row) -> (doc, Response(text=row['prediction']))` 与旧 `_load_predictions[id]` 字节相同——所有老 task 自动免改|
 |`process_docs` hook|对齐 lm-eval 同名 callable（按"what"命名抗"垃圾桶"演化）；默认 identity；签名约束 `list[Doc] -> list[Doc]`，副作用纪律写在 docstring|
 |`output_type='none'`|runner 在该分支生成占位 `Response(doc_id=d.id)`，不调 `lm.generate_until`；CLI 用 `_RetrieverOnlyLM` name-only stub 充当 EvalResult.model 标签源|
-|`metrics/judge_core.py` + `judge_rag.py` 拆分|按"评分方法学" vs "评分对象（RAG pipeline 各环节）"两层正交切分；判 LM 范式扩展第 5 个不会拖累 RAG 维度演化（CHANGELOG §3 单文件膨胀的预防）|
+|`metrics/judge_core.py` + `judge_rag.py` 拆分|按"评分方法学" vs "评分对象（RAG pipeline 各环节）"两层正交切分；判 LM 范式扩展第 5 个不会拖累 RAG 维度演化（§3 单文件膨胀的预防）|
 |`judge_rag.py` 自实现而非 import RAGAS|RAGAS 引入 langchain / openai / 数据科学全家桶（~30 个传递依赖）；本项目已有 LM ABC + closure 工厂模式，~150 行就把 5 个维度的 NLI/F1/extract 通路跑通；保留 prompt 字面字符串可控（lm-eval 不变量）|
 |`models/rag_retrieve.py` subprocess 调用|遵循 monorepo 解耦原则（workshops.mdc）：`play/` sub-projects 不互相 import，跨项目走 CLI + JSON envelope；`play/rag` 自带的 chromadb / fastparquet 依赖不污染 evals 进程；同接口 future remote retriever 平滑迁移|
 |路径 B+C 数据契约|`Response` 只装 LM-side 输出（保持 phase 0 契约纯净）；pipeline 产物（retrieved_ids / contexts）住 `Doc.metadata`。score 路径 `load_prediction` 写、run 路径 `process_docs` 写；`process_results` 双路径都从 `doc.metadata` 读，零分支|

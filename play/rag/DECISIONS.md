@@ -1,10 +1,11 @@
-# Changelog
+# Decisions
 
-`CHANGELOG.md` 同时承担变更日志与 ADR 归档。每条记录以 `## n. 变更标题` 开头，紧接一行 `- **日期**：...`，heading 前后留空行。后续每个自然日建议最多追加 1～2 条 tech decision。
+ADR（Architecture Decision Record）归档。每条以 `## n. 标题` 开头，紧接 `- **Status**` + `- **Date**` 元信息；正文沿用 `Context / Options considered / Decision / 行业光谱 / 工程维度评估 / 持续 trade-off` 段落。**新决策追加到末尾，被取代的条目改 Status；不删旧条目**。日常进度（按里程碑）见 [`JOURNAL.md`](JOURNAL.md)。
 
 ## 1. 技术栈：ChromaDB + Ollama
 
-- **日期**：2026-04-15
+- **Status**: accepted
+- **Date**: 2026-04-15
 
 ### Context
 
@@ -58,7 +59,8 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 
 ## 2. 段落感知 chunker
 
-- **日期**：2026-04-15
+- **Status**: accepted
+- **Date**: 2026-04-15
 
 ### Context
 
@@ -101,7 +103,8 @@ ChromaDB + Ollama 是 local-first RAG 教程的最大公约数（LangChain / Lla
 
 ## 3. 结构化 search API + `--json` subprocess 契约
 
-- **日期**：2026-04-16
+- **Status**: accepted（CLI envelope 在 §4 由裸数组改为 `{query, data, meta}` 的破坏性升级；`search()` Python API 不变）
+- **Date**: 2026-04-16
 
 ### Context
 
@@ -154,7 +157,8 @@ def query(...) -> None:  pretty_print(search(...))
 
 ## 4. Hybrid retrieval：dense + BM25 + RRF
 
-- **日期**：2026-04-25
+- **Status**: accepted
+- **Date**: 2026-04-25
 
 ### Context
 
@@ -235,7 +239,8 @@ def query(...) -> None:  pretty_print(search(...))
 
 ## 5. Cross-encoder reranker
 
-- **日期**：2026-04-25
+- **Status**: accepted
+- **Date**: 2026-04-25
 
 ### Context
 
