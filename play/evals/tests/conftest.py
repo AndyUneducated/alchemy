@@ -88,6 +88,27 @@ sample_vdb_required = pytest.mark.skipif(
 )
 
 
+# ---------- agent_engine probe（phase 5）-----------------------------------
+
+def _agent_engine_ok() -> tuple[Path | None, str]:
+    """检查 play/agent_engine/ 包 + 至少一个 scenario 可见；返回 (play_dir, skip_reason)."""
+    play_dir = REPO_ROOT / "play"
+    pkg = play_dir / "agent_engine"
+    if not (pkg / "__init__.py").exists():
+        return None, f"agent_engine package missing at {pkg}"
+    brainstorm = pkg / "scenarios" / "brainstorm.md"
+    if not brainstorm.exists():
+        return None, f"agent_engine/scenarios/brainstorm.md missing at {brainstorm}"
+    return play_dir, ""
+
+
+_AE_PLAY, _AE_SKIP = _agent_engine_ok()
+
+agent_engine_required = pytest.mark.skipif(
+    bool(_AE_SKIP), reason=_AE_SKIP or "agent_engine required"
+)
+
+
 @pytest.fixture(scope="session")
 def ollama_model() -> str:
     """test 用 model tag；EVALS_TEST_OLLAMA_MODEL env 可 override."""

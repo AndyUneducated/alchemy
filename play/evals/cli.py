@@ -133,14 +133,16 @@ def _build_task_with_optional_deps(
     retrieve_mode: str = "hybrid",
     rerank: bool = False,
 ):
-    """get_task(name) + 可选依赖注入（judge_lm / retrieve_fn）.
+    """get_task(name) + 可选依赖注入（judge_lm / retrieve_fn / run_fn）.
 
-    - `judge_model_spec` 给定 → parse 为 LM 注入相应 task（qa_open / rag_qa）
+    - `judge_model_spec` 给定 → parse 为 LM 注入相应 task（qa_open / rag_qa / agent_traj）
     - `vdb` 给定 → make_retrieve_fn 注入 RAG task（rag_retrieval / rag_qa）
+    - agent_traj：永远注入 make_run_fn（cheap closure；score 路径不会触发 subprocess）
     - 不匹配的 task × flag 组合 → SystemExit fail-fast
 
     扩展新 task 支持时在此处加 dispatch 分支.
     """
+    from .tasks.agent_traj import AgentTraj
     from .tasks.qa_open import QAOpen
     from .tasks.rag_qa import RagQA
     from .tasks.rag_retrieval import RagRetrieval
@@ -165,6 +167,15 @@ def _build_task_with_optional_deps(
     if isinstance(base_task, RagQA):
         return RagQA(retrieve_fn=retrieve_fn, judge_lm=judge_lm, top_k=retrieve_top_k)
 
+    if isinstance(base_task, AgentTraj):
+        if vdb is not None:
+            raise SystemExit(
+                f"--vdb / RAG flags not supported by {task_name!r}; "
+                "agent_traj uses subprocess-driven agent_engine, not direct retrieval."
+            )
+        from .models.agent_engine_run import make_run_fn
+        return AgentTraj(run_fn=make_run_fn(), judge_lm=judge_lm)
+
     if isinstance(base_task, QAOpen):
         if vdb is not None:
             raise SystemExit(
@@ -178,7 +189,7 @@ def _build_task_with_optional_deps(
     # 其它 task：拒绝 RAG / judge flag
     if judge_lm is not None:
         raise SystemExit(
-            f"--judge-model only supported by qa_open / rag_qa (got task={task_name!r}); "
+            f"--judge-model only supported by qa_open / rag_qa / agent_traj (got task={task_name!r}); "
             "extend the dispatch in cli.py::_build_task_with_optional_deps when adding judge to other tasks"
         )
     if vdb is not None:
@@ -228,12 +239,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         rerank=rerank,
     )
 
-    # output_type='none' task（rag_retrieval）允许省 --model：用 retriever 名作 EvalResult.model 标签
+    # output_type='none' task（rag_retrieval / agent_traj）允许省 --model：用代表性 label 占位
     if task.output_type == "none":
         if args.model:
             lm: LM = parse_model_spec(args.model, task)
         elif vdb:
             lm = _RetrieverOnlyLM(name=f"retriever:{Path(vdb).name}:{retrieve_mode}")
+        elif task.name == "agent_traj":
+            lm = _RetrieverOnlyLM(name="agent_engine")
         else:
             raise SystemExit(
                 f"task={args.task!r} has output_type='none'; pass --vdb to label the run "

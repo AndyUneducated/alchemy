@@ -95,3 +95,34 @@
 - `Response` 不加 `retrieved_ids` 字段；pipeline 产物住 `Doc.metadata` → DECISIONS §4（path B+C）
 - 自实现 5 个 RAG 维度而非 import RAGAS（避 langchain/openai 全家桶 ~30 个传递依赖） → DECISIONS §4
 - `output_type='none'` literal 取代 `RetrieveOnlyLM(LM)` 假 adapter → DECISIONS §4
+
+## 2026-05-03 — Phase 5：族 5 agent trajectory 完全体（agent_traj task + 5 个 metric + 接 agent_engine）
+
+### 功能
+
+- 新 task `agent_traj`：3 docs（panel / brainstorm / example，分别覆盖投票决议 / 自由讨论 / kitchen-sink）× 4 份 stub predictions（perfect / partial / **wrong_decision** / garbage）；可选 `judge_lm` 注入 plan_quality
+- 5 个 trajectory metric：`task_success`（outcome，τ-bench `verify(state)` 同源）/ `tool_call_set_f1` / `argument_correctness` / `trajectory_match`（BFCL trajectory_match 同名，归一化 Levenshtein similarity）/ `trajectory_coverage`（required-callers / speakers 二选一）
+- **核心叙事 wrong_decision**：tool_call_set_f1 / trajectory_match / coverage 都满分但 task_success=0（decision 不在白名单），数学上让 outcome 与 process 分叉，焊死"tool 调用全对 ≠ 任务对"反向叙事；同 phase 3 `wrong_fact`（lexical 误判）/ phase 4 `wrong_fact`（grounding 抓错）一脉相承
+- CLI 不引新 flag：`scenarios_root` 默认 `play/agent_engine/`，`agent_traj` 在 score / run 双路径都能跑；run 路径自动 fork agent_engine subprocess
+- 跨项目集成：通过 subprocess + JSON envelope 调 `python -m agent_engine <scenario> --save-result-json`，evals 进程零 ollama / openai / anthropic / gemini 客户端依赖污染
+
+### 技术
+
+- `metrics/trajectory.py` 是项目第 5 个 metric 模块，5 个 closure-factory metric + 2 个 ready-made predicate + 3 个数学 helper（multiset_f1 / levenshtein DP / normalized_lev_match），手写 ~250 行不引外部库——trajectory 长度 ≤ 50 步，O(n·m) Levenshtein 原生足够
+- 数据契约 0 增量：复用 phase 4 path B+C 的 `Doc.metadata` 通路（`Doc.metadata['trajectory']` 7 个 key：transcript/artifact/warnings/success/tool_calls/tool_seq/decision），**0 个新 dataclass、0 个新 ABC hook**
+- envelope schema 同源：`agent_engine.Result` 4 字段 dataclass + `dataclasses.asdict` 直出；`test_agent_traj_envelope` 锁 `Result` 字段集合 == `{artifact, transcript, success, warnings}`，agent_engine 改字段 → CI 即时 fail
+- `tool_call_set_f1` 用 `(tool, caller)` 而非 BFCL 标准的 `(tool, args)`：args 含 LLM 生成的长文本，gold 不可固定；caller 维度由 set_f1 主导，args 维度由 argument_correctness 子集匹配主导，二者互补
+- `plan_quality` 复用 `judge_core.g_eval` 三维度（plan_structure / tool_choice / completeness）：trajectory 拍扁成单段文本喂 judge，子维度走 `_plan_<dim>` 私有键不污染主聚合面板
+- 跨项目动 agent_engine 两处：① `cli.py` 加 `--save-result-json PATH`（~15 行）；② `artifact.py` 5 个 event 各加 `"arguments": dict(args)`（~5 行）让 argument_correctness 在 run 路径有真数据。两处全部 additive
+- 测试增量：55 条新断言（31 metric unit / 9 score 矩阵 / 14 envelope contract / 1 live e2e）；conftest 加 `agent_engine_required` skip marker，与 ollama-probe 共同构成双 gate
+- run e2e 性能：brainstorm.md 实测 ~20s（M-series Mac + qwen2.5:32b），CI 友好；panel.md ~分钟级，仅手动跑
+
+### 取舍
+
+- subprocess + JSON envelope（不直接 import agent_engine）→ DECISIONS §5（monorepo 解耦，同源 §4）
+- 5 metric 选定 + 2 个不实现（tool_selection_accuracy / step_count_efficiency 信号重合或恒值）→ DECISIONS §5
+- `tool_call_set_f1` key 选 `(tool, caller)` 而非 BFCL `(tool, args)` → DECISIONS §5
+- `trajectory_match` 命名 + 归一化方向（同步 README C.5）→ DECISIONS §5
+- `plan_quality` 复用 `judge_core.g_eval`（不新建 judge_trajectory.py）→ DECISIONS §5
+- run-path mock / `--replay-envelope` 不做，原则 5 parity 显式让步 → DECISIONS §5
+- agent_engine artifact_event 加 `arguments` 字段是 phase 5 驱动的 ~5 行 additive 改造 → DECISIONS §5 / agent_engine DECISIONS §11
