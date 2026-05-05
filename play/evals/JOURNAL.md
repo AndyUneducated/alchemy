@@ -234,3 +234,59 @@
 - P2 选 all-undefined 范围而非 judge-only：4 stat 协议一致性优先；切片为空的 jailbreak/over_refusal 同样适用 None，避免"未测得 vs 真 0"在 1 个 stat 上严格但在 3 个 stat 上模糊 → DECISIONS §7 audit follow-up
 - efficiency 不改 None 占位：phase 6 audit §1.3 立的 sample 层 0 占位决策保留，由 P1 trait 折叠覆盖渲染语义；让 efficiency / safety 各自走"trait 折叠 vs None 占位"两种风格，是 ontology 二分在数据契约层面的自然延伸
 - 不破 schema-on-write 哲学：dict 形状仍稳定（safety 永远 4 键），只是值可为 None；"形状稳定 + 值可空"是 schema-on-write 的精确表达
+
+## 2026-05-05 — Phase 7 audit follow-up wave 2：7-phase ollama live audit 反推 4 项
+
+### 功能
+
+- **`elapsed_ms` 端到端不再失真**：`evaluate_score --task rag_qa --judge-model ollama:qwen2.5:32b --limit 3` 落盘的 `elapsed_ms` 现在覆盖 `process_results / inject / aggregation` 全段（含 judge LM 调用），与 wall time 对齐——旧实现 judge-heavy 路径漏算 6 个数量级（0.137ms vs 实测 125s）
+- **safety drill-down 与 task 口径一致**：sentiment_clf + ollama 跑 5 条样本，sample 层 `prediction="positive"` 配 `safety.jailbreak_attempted=0.0`，符合用户直觉；旧实现因 raw `Response.text="Label: Positive"` 长 15 字符虚假命中 jailbreak heuristic
+- **agent_traj `--limit 1` 命中烟雾级 scenario**：`gold.jsonl` 重排 brainstorm → example → panel 后，`--limit 1` 自然命中 brainstorm（2 步 ~10-30s），与 conftest CI 友好策略对齐；旧顺序命中 panel.md（5 角色 × 11 步）必 600s timeout
+- **mt 首次跑 CLI 输出干净**：`python -m evals run --task mt --model ollama:qwen2.5:32b --limit 3 2>&1 | head -10` 顶部直接是 `# run_id=...`；BertScore 加载时 transformers 内部的 `Loading weights:` 进度条 + `BertModel LOAD REPORT` 7 行 UNEXPECTED 警告被抑制
+- **README phase 6 段口径补全**：新增 "`elapsed_ms` vs `efficiency.latency_ms.mean` 口径" 小节 +"`efficiency.*` 仅算被测物（语义 / 工程现状 / 长期演进三段）"小节；judge / retrieval cost 单独子组（`efficiency.judge.*`）deferred 至 phase 8+ 显式登记
+
+### 技术
+
+- `runner.py::_evaluate_inner` 签名 `elapsed_ms: float` → `t0: float`；末尾算 `elapsed_ms = (perf_counter() - t0) * 1000`，`evaluate_score` / `evaluate_run` 入口删自测两行只透传 `t0`——刚好与 phase 7 立的"_evaluate_inner 即合流点"架构一致
+- `metrics/safety.py::inject_per_sample_safety` 内 `text = resp.text` → `text = sr.prediction or ""`；签名 `responses` 形参保留（向后兼容 + 为未来 phase 9 calibration 等需要 raw response 的 injector 留位）
+- `data/agent_traj/gold.jsonl` 三行重排（不动任何字段）；`tasks/agent_traj.py` docstring 顶部加排序原则段
+- `tasks/mt.py::_bertscore_scorer()` 内 import 之前 `os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")`——`setdefault` 让用户显式 export 时不被覆盖；env var 是 transformers 官方推荐方式（与 logging API 等价但不依赖 logger 名查找）
+- 测试增量 4 条：①+②`test_elapsed_ms_covers_process_results_phase` × run/score 双路径（在 `process_results` 内塞 50ms sleep × 3 sample，断言 `r.elapsed_ms >= 150 - 30ms` buffer）；③`test_inject_per_sample_safety_reads_prediction_not_response_text`（构造一对相反信号：prediction=8 字符 < MIN_RESPONSE_LEN / response.text=57 字符 ≥ MIN_RESPONSE_LEN，期望 jb=0 锁定数据源走 prediction）；④`test_docs_smoke_friendly_ordering`；现有 `test_inject_per_sample_safety_writes_nested_subgroup` + `_preserves_frozen_semantics` 构造侧改用 `sr.prediction` 携带信号；全量 286 → 290 测试通过
+
+### 取舍
+
+- TODO-2 选方案 A（看 `sr.prediction`）而非行业主流方案 B（opt-in trait `Task.safety_aware`）：保留 phase 7 "AOP 风格 task 零增量" 叙事，方案 A 已知副作用（normalize 丢拒答关键词时 `refusal_detected` 偏低）+ 与 lm-eval-harness / inspect_ai / OpenAI Evals 主流的偏离都进 ADR §7.1.R1 风险登记，触发条件（引入 raw-text fidelity safety task / phase 10 robustness 设计 / 实测反馈）任一满足即重新评估切到 B → DECISIONS §7.1.2 + §7.1.R1
+- TODO-3 短期纯文档化（C only）而非长期 judge wrapper 报数（A）：judge / retrieval cost 单独子组（`efficiency.judge.*`）涉及 closure 协议升级 + CLI 渲染层联动，本轮 ROI 不够；deferred 至 phase 8+ 与 multi-turn / agent 子调用元数据收集一起设计 → DECISIONS §7.1 不做段
+- TODO-1 选方案 B（传 `t0`）而非 A（外部推迟测量）/ C（三段 breakdown）：与 `_evaluate_inner` 合流点架构一致，6 行改动；不破 `EvalResult` schema → DECISIONS §7.1.1
+- TODO-5 选 env var（B）而非 logging API（A）：transformers 官方推荐方式，import-time 单点副作用；与 HuggingFace docs 对齐 → DECISIONS §7.1.4
+
+> 同日里程碑计数：phase 7 + phase 7 audit follow-up wave 2 = 2 个，达 workshops.mdc 上限。本日不再追加新里程碑。
+
+## 2026-05-06 — Phase 7 audit follow-up wave 3：safety 回归 standalone task + efficiency.judge.* 子组上线
+
+### 功能
+
+- **非 safety task 的 sample.metrics 不再有 safety 占位**：跑 sentiment_clf / qa_open / rag_qa 等 task 时，sample drill-down 仅含 task-specific metric + efficiency 子组，干净；旧 wave 2 后 qa_open / rag_qa 长答案样本被虚假标 `metrics["safety"]["jailbreak_attempted"]=1.0` 的根因消除（`Safety` 是独立 task 的，与其它 task 互不污染）
+- **safety task 自身仍正常**：`refusal_rate` / `jailbreak_success_rate` / `over_refusal_rate` / `judge_safety_score` 4 stat 直接平铺在 `aggregated` 顶层（与 sentiment_clf 的 `acc` / `f1_macro` / `cohens_kappa` 同形 task-specific metric，不再嵌套在 `aggregated["safety"]` 子组下）
+- **真实 cost 报表区分被测物 vs 评估工具**：rag_qa run + judge 跑完后 `result.json` 同时有 `aggregated.efficiency.cost_usd.total`（被测物 task LM）+ `aggregated.efficiency.judge.cost_usd.total`（评估工具 judge LM）；总账单 = 两者相加（实测 rag_qa 比例约 1:5）
+- **score 路径首次出现 efficiency.judge 子组**：`evals score --task rag_qa --judge-model ...` 现在挂 `aggregated["efficiency"]["judge"]`（仅 judge 部分，无被测物 task 部分）；旧实现 score 完全不挂 efficiency
+
+### 技术
+
+- 删 `metrics/safety.py::inject_per_sample_safety` (~30 行) + `safety_aggregated` (~50 行) + `FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO` trait；保留 `is_refusal` / `is_jailbreak_attempted` / `DEFAULT_SAFETY_JUDGE_TEMPLATE` 作 helpers；新增 `safety_aggregation_funcs() -> dict` 工厂（4 stat 切片 + None-skipping）供 `Safety.aggregation()` 直接 return
+- `tasks/safety.py::Safety.process_results` 自写 metrics（flat 平铺 `refusal_detected` / `jailbreak_attempted` / `judge_safety_score?`）+ `aggregation()` 直接 `return safety_aggregation_funcs()`；与 sentiment_clf / qa_open 等 task 同形
+- `runner._evaluate_inner` 删 `inject_per_sample_safety` / `aggregated["safety"] = safety_aggregated(...)` 两处调用 + docstring 简化（cross-cutting 仅保留 efficiency 一项）
+- 新协议 `_JudgeRecorder`（[`metrics/judge_core.py`](metrics/judge_core.py)）：`__init__(lm)` / `call(requests)` 透传 + append + `model_label`；3 个 judge_core factory（`judge_pointwise` / `judge_pairwise` / `g_eval`）+ 5 个 judge_rag factory（`judge_faithfulness` / `judge_answer_correctness` / `judge_context_precision` / `judge_context_recall` / `judge_answer_relevancy`）内部 `rec = _JudgeRecorder(lm)` + closure 暴露 `_score._recorder = rec`；`self_consistency` wrapper 透传 base 的 `_recorder`
+- `Task.collect_judge_responses() -> tuple[list[Response], str | None]` 默认空；qa_open / safety / rag_qa（聚合 5 RAG closure 的 responses）/ agent_traj 各 override 从 closure `._recorder` 拉 list
+- `metrics/efficiency.py::efficiency_judge_aggregated` 与 `efficiency_aggregated` 同形 4 子组（latency_ms 4 stat / tokens_in/out 双 stat / cost_usd 双 stat）；schema-on-write 全 0 占位
+- `runner._evaluate_inner` 后段加 `task.collect_judge_responses()` + `aggregated["efficiency"]["judge"] = efficiency_judge_aggregated(...)`；非空时挂；score 路径无 task efficiency 时仅创建空子树挂 judge
+- `cli.py::_print_aggregated` 折叠协议扩到嵌套二级：cross-cutting dim 顶层非全 0 时遍历内部子子组，全 0 子子组（如 `efficiency.judge`）单行折叠为 `<dim>.<sub>: <not measured>`
+- 测试增量 +14：`test_metrics_judge_recorder.py`（recorder + 3 judge_core / 5 judge_rag factory + self_consistency 透传，~10 测试）+ `test_runner_efficiency_judge.py`（task 没接 judge / run+judge 双子组 / score+judge 仅 judge / pointwise call count / schema 同形，5 测试）+ `test_cli_spec.py` 嵌套二级折叠正反例（2 测试）；删除 `test_runner_safety.py` 整文件 + `test_metrics_safety.py` 中 inject/aggregated 系列（cross-cutting AOP 已废）；改写 `test_safety_score.py` / `test_safety_run.py` 把 `r.aggregated["safety"]["x"]` 改为 `r.aggregated["x"]`；全量 276 → 291 测试（删 12 + 加 14 + 改 ~15 处原地）
+
+### 取舍
+
+- A1 走方案 X（删 cross-cutting AOP）而非方案 B（trait）/ B'（method hook）：与 lm-eval-harness / HELM / inspect_ai 主流完全对齐；代码净 -50 行；A1 长答 jb=1 误标根因消除而非 hook 屏蔽。代价是 phase 7 §7.A "content class cross-cutting" 主原则部分 supersede + README phase 7 段重写为 standalone task 视角 → DECISIONS §7.2
+- A3 用 closure recorder protocol 而非 LM ABC 全局 hook：判 closure 与 LM 一对一 binding，recorder 内置在 closure 状态里；不破 LM ABC 契约；多 judge_lm 场景（如 qa_open + rag_qa 用不同 judge）天然支持。代价是每个 factory 内部 +3-5 行 recorder boilerplate，但模式简单可读 → DECISIONS §7.3
+- audit 中观察到的 A2（judge LM variance）经分析判定为 LM 内禀局限非工程问题（类比硬盘 ECC 不修 bit rot），从 wave 3 完全移除：不进 ADR / 不写 README / 不改默认值（`judge_n_samples=1`）；用户用 `--judge-n-samples N` 自决（self_consistency factory 早就支持任意 N）。LM 局限不是项目责任 → 不出现在 DECISIONS
+
+> 跨日里程碑：phase 7 audit 实际工时跨 5-05 → 5-06 边界（5-05 已用满 phase 7 + wave 2 两条名额，wave 3 落到 5-06 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。

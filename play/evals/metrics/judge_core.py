@@ -34,6 +34,34 @@ from ..models.base import LM
 PairwiseVerdict = Literal["a", "b", "tie"]
 
 
+# ---------- closure-internal LM 调用 recorder（DECISIONS §7.3 wave 3）----------
+
+class _JudgeRecorder:
+    """closure 内部用：拦 lm.generate_until 调用，副本 append 到 responses 列表.
+
+    DECISIONS §7.3：让 judge closure 自报数，runner 通过 task.collect_judge_responses
+    拉取，挂 aggregated["efficiency"]["judge"]——评估工具 call class（双路径都挂）.
+
+    所有 judge factory（judge_pointwise / judge_pairwise / g_eval +
+    metrics/judge_rag.py 的 5 个 RAG factory）内部把原来直接 `judge_lm.generate_until(...)`
+    的调用改走 recorder，runner 端从 closure._recorder 拉响应列表.
+    """
+
+    def __init__(self, lm: LM):
+        self.lm = lm
+        self.model_label = lm.name
+        self.responses: list[Response] = []
+
+    def call(self, requests: list[Request]) -> list[Response]:
+        out = self.lm.generate_until(requests)
+        self.responses.extend(out)
+        return out
+
+    def reset(self) -> None:
+        """testing helper：复用 closure 时手动清状态."""
+        self.responses = []
+
+
 # ---------- 默认 prompt 模板 ----------
 
 DEFAULT_POINTWISE_TEMPLATE = (
@@ -131,7 +159,11 @@ def judge_pointwise(
 
     模板字段：`{input}` / `{reference}` / `{response}`. 缺失字段会被 .format 忽略
     （如果模板没引用），所以测试可以用极简模板 `"rate: {response}"`.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取
+    judge LM 调用记录，runner 挂 `aggregated["efficiency"]["judge"]`.
     """
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         prompt = prompt_template.format(
@@ -143,9 +175,10 @@ def judge_pointwise(
             doc_id=doc.id, prompt=prompt,
             request_type="generate_until", max_tokens=max_tokens,
         )
-        [resp] = judge_lm.generate_until([req])
+        [resp] = rec.call([req])
         return float(parse_pointwise_score(resp.text or "", scale=scale))
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -162,7 +195,10 @@ def judge_pairwise(
 
     `swap=True`（默认）：双跑 A/B 与 B/A，把翻译回原序后两次结果一致才计胜负，
     否则计 tie——这是去除"位置偏置"的标准做法（Zheng et al. 2023, MT-Bench）.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
     """
+    rec = _JudgeRecorder(judge_lm)
 
     def _ask(doc: Doc, a: Response, b: Response) -> PairwiseVerdict:
         prompt = prompt_template.format(
@@ -175,7 +211,7 @@ def judge_pairwise(
             doc_id=doc.id, prompt=prompt,
             request_type="generate_until", max_tokens=max_tokens,
         )
-        [r] = judge_lm.generate_until([req])
+        [r] = rec.call([req])
         return parse_pairwise_verdict(r.text or "")
 
     def _verdict(doc: Doc, resp_a: Response, resp_b: Response) -> PairwiseVerdict:
@@ -190,6 +226,7 @@ def judge_pairwise(
             return v1
         return "tie"
 
+    _verdict._recorder = rec  # type: ignore[attr-defined]
     return _verdict
 
 
@@ -231,7 +268,10 @@ def g_eval(
     的本地 ollama / 兼容路径）.
 
     模板字段：`{input}` / `{reference}` / `{response}` / `{dimension}`.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
     """
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> dict[str, float]:
         out: dict[str, float] = {}
@@ -248,11 +288,12 @@ def g_eval(
                     doc_id=doc.id, prompt=prompt,
                     request_type="generate_until", max_tokens=max_tokens,
                 )
-                [resp] = judge_lm.generate_until([req])
+                [resp] = rec.call([req])
                 scores.append(parse_pointwise_score(resp.text or "", scale=scale))
             out[dim] = sum(scores) / len(scores)
         return out
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -270,6 +311,9 @@ def self_consistency(
       - 任意返回 hashable 的 callable（pairwise verdict / 类别 label / ...）
 
     平票取首个出现的众数（first-seen tiebreak）——deterministic，避免字典序 / 随机.
+
+    DECISIONS §7.3：透传 base 的 `_recorder` 属性——base 内部多次调用都会被同一 recorder
+    收集，wrapper 不需自己另开 recorder.
     """
 
     def _wrapped(*args: Any, **kwargs: Any) -> Any:
@@ -281,4 +325,6 @@ def self_consistency(
                 return r
         return results[0]  # unreachable; mypy/pylint friendly
 
+    if hasattr(base_judge, "_recorder"):
+        _wrapped._recorder = base_judge._recorder  # type: ignore[attr-defined]
     return _wrapped

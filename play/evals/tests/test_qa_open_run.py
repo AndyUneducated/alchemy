@@ -30,15 +30,22 @@ def test_run_gold_judge_equals_score_perfect_judge():
     task_score = QAOpen(judge_lm=_jaccard_fake())
     r_score = evaluate_score(task_score, PRED_DIR / "perfect.jsonl")
 
-    # phase 6/7 引入 cross-cutting 子组（efficiency call class / safety content class）
-    # + §7.D nested 派统一：sample.metrics 嵌套子组 metrics["efficiency"] / metrics["safety"]；
-    # 剥离后 task-specific parity 仍成立
-    _crosscut = {"efficiency", "safety"}
+    # phase 6 引入 cross-cutting efficiency 子组（被测物 call class，仅 run 挂）；wave 3
+    # （DECISIONS §7.2）撤销 safety cross-cutting—— qa_open 不再有 sample.metrics["safety"] 占位；
+    # wave 3 §7.3 加 efficiency.judge 子组（评估工具 call class，双路径都挂）—— score 路径
+    # 仍出现 efficiency 顶层，但仅含 judge 子组（无 task 部分的 latency_ms / tokens_in）.
+    _crosscut = {"efficiency"}
     task_agg = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
     task_metrics = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
     assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
+    # run 路径：efficiency 顶层含 task 部分 + judge 子组
     assert "efficiency" in r_run.aggregated
-    assert "efficiency" not in r_score.aggregated
+    assert "latency_ms" in r_run.aggregated["efficiency"]
+    assert "judge" in r_run.aggregated["efficiency"]
+    # score 路径：efficiency 顶层仅含 judge 子组（task LM 无调用，被测物 efficiency 不挂）
+    assert "efficiency" in r_score.aggregated
+    assert "judge" in r_score.aggregated["efficiency"]
+    assert "latency_ms" not in r_score.aggregated["efficiency"]
     assert r_run.n == r_score.n
 
     a_pairs = [(s.doc_id, s.prediction, s.target, task_metrics(s.metrics)) for s in r_run.per_sample]

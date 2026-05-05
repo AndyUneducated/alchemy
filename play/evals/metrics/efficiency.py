@@ -210,6 +210,81 @@ def efficiency_aggregated(sample_results: list[SampleResult]) -> dict[str, dict[
     }
 
 
+# ---------- judge 子组聚合（DECISIONS §7.3 wave 3：评估工具 call class，双路径都挂） -
+
+def efficiency_judge_aggregated(
+    judge_responses: list[Response],
+    judge_model_label: str | None,
+) -> dict[str, dict[str, float | int]]:
+    """生成 `aggregated["efficiency"]["judge"]` 嵌套子树.
+
+    与 `efficiency_aggregated` 同形 4 子组（latency_ms / tokens_in / tokens_out / cost_usd），
+    但来源不同：
+      - efficiency_aggregated 从 `sample.metrics["efficiency"]` 嵌套子组收集（被测物 task LM）
+      - efficiency_judge_aggregated 从 `task.collect_judge_responses()` 直接收 list[Response]
+        （评估工具 judge LM 调用记录）
+
+    为什么 judge 不挂 sample 层？因为 judge 调用与 sample 是 N:M 关系——一条 sample 可能触发
+    多次 judge call（如 RAG faithfulness：claim extract + per-claim NLI = 1 + N 次；g_eval
+    多维度多采样 = D × n_samples 次），不像被测物 task LM 与 sample 是 1:1 关系适合摊到
+    sample.metrics. 所以 judge efficiency 仅在 aggregated 层暴露.
+
+    DECISIONS §7.3 评估工具 call class（与被测物 call class 二分）：score / run 双路径都挂.
+
+    缺失值处理：
+      - judge_responses 为空 / model_label 为 None → 4 子组全 0 占位（与 efficiency_aggregated
+        的 schema-on-write 协议一致；CLI 折叠协议据此可折叠为 `<not measured>`）
+      - 单条 response 缺 latency_ms / usage → 跳过（与 _collect None-skipping 一致）
+    """
+    if not judge_responses or judge_model_label is None:
+        return {
+            "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
+            "tokens_in": {"total": 0, "mean": 0.0},
+            "tokens_out": {"total": 0, "mean": 0.0},
+            "cost_usd": {"total": 0.0, "mean": 0.0},
+        }
+
+    latency = [r.latency_ms for r in judge_responses if r.latency_ms is not None]
+    tokens_in = [
+        r.usage.tokens_in
+        for r in judge_responses
+        if r.usage is not None and r.usage.tokens_in is not None
+    ]
+    tokens_out = [
+        r.usage.tokens_out
+        for r in judge_responses
+        if r.usage is not None and r.usage.tokens_out is not None
+    ]
+    cost: list[float] = []
+    for r in judge_responses:
+        if r.usage is None:
+            continue
+        c = compute_cost_usd(judge_model_label, r.usage.tokens_in, r.usage.tokens_out)
+        if c is not None:
+            cost.append(c)
+
+    return {
+        "latency_ms": {
+            "mean": float(statistics.mean(latency)) if latency else 0.0,
+            "p50": _percentile(latency, 50.0),
+            "p95": _percentile(latency, 95.0),
+            "max": float(max(latency)) if latency else 0.0,
+        },
+        "tokens_in": {
+            "total": int(sum(tokens_in)),
+            "mean": float(statistics.mean(tokens_in)) if tokens_in else 0.0,
+        },
+        "tokens_out": {
+            "total": int(sum(tokens_out)),
+            "mean": float(statistics.mean(tokens_out)) if tokens_out else 0.0,
+        },
+        "cost_usd": {
+            "total": float(sum(cost)),
+            "mean": float(statistics.mean(cost)) if cost else 0.0,
+        },
+    }
+
+
 # ---------- runner injector（避免 runner.py 直接 import dataclasses.replace） ----------
 
 def inject_per_sample_efficiency(

@@ -27,11 +27,8 @@ from typing import Any
 from .api import Doc, EvalMode, EvalResult, Request, Response, SampleResult
 from .metrics.efficiency import (
     efficiency_aggregated,
+    efficiency_judge_aggregated,
     inject_per_sample_efficiency,
-)
-from .metrics.safety import (
-    inject_per_sample_safety,
-    safety_aggregated,
 )
 from .models.base import LM
 from .tasks.base import Task
@@ -127,28 +124,40 @@ def _evaluate_inner(
     mode: EvalMode,
     model_label: str,
     started_at: str,
-    elapsed_ms: float,
+    t0: float,
     run_id: str,
     num_fewshot: int = 0,
 ) -> EvalResult:
     """Response 之后的双模式合流中段（phase 7 立的架构合流点）.
 
-    步骤（cross-cutting 顺序按 ontology 类分组；同类内按 phase 号续接）：
+    步骤（cross-cutting 二分：被测物 call class / 评估工具 call class / DECISIONS §7.2 + §7.3）：
       1. task.process_results per-sample 评分
-      2. content class injectors（双路径都跑；数据源 = Response.text 内容）
-         - inject_per_sample_safety: refusal_detected / jailbreak_attempted   [phase 7]
-         - phase 10 robustness 在此续接                                        [planned]
-      3. call class injectors（仅 run 跑；数据源 = LM 调用副产品 usage/latency/logprobs）
+      2. 被测物 call class injector（仅 run 跑；数据源 = task LM 调用副产品 usage/latency）
          - inject_per_sample_efficiency: latency / tokens / cost              [phase 6]
          - phase 9 calibration 在此续接                                        [planned]
-      4. 打包 EvalResult（aggregated + per_sample）
+      3. aggregated 打包：
+         a) task.aggregation() 字典 → 顶层平铺
+         b) 仅 run：被测物 efficiency 子组（phase 6）
+         c) 双路径：评估工具 efficiency.judge 子组（DECISIONS §7.3 wave 3）
+      4. 末尾测端到端 elapsed_ms
 
-    挂载规则（DECISIONS §7.A cross-cutting ontology）：
-      - aggregated["safety"]（content class）score / run 双路径都挂
-      - aggregated["efficiency"]（call class）仅 run 挂（score 无 LM 调用信号）
+    挂载规则（DECISIONS §7.A 部分 superseded by §7.2 / §7.3）：
+      - safety 不再 cross-cutting：`Safety` task 自己 own metrics["refusal_detected" /
+        "jailbreak_attempted" / "judge_safety_score"]（flat 平铺）+ aggregation 4 stat；
+        非 safety task 不再有 sample.metrics["safety"] / aggregated["safety"] 占位
+      - aggregated["efficiency"]（被测物 call class）仅 run 挂（保留：基础设施 cross-cutting）
+      - aggregated["efficiency"]["judge"]（评估工具 call class，§7.3 新增）：score / run
+        双路径都挂——judge 在两路径都被调用，与被测物 task LM 仅在 run 调用不同
+      - phase 10 robustness 等未来横切按 lm-eval-harness 主流走独立 task 路径，不再
+        AOP 注入
 
-    See: README §命名约定 cross-cutting 二分表 / DECISIONS §7.A ontology 二分原则 +
-    §7.B `_evaluate_inner` 中段重构 ADR.
+    时序约定（DECISIONS §7.1.1）：
+      - `t0 = perf_counter()` 由调用方在入口最早处取，传进来；本函数在末尾算
+        `elapsed_ms = (perf_counter() - t0) * 1000`，确保覆盖 process_results +
+        injectors + aggregation 全段（含 judge LM 调用 / RAG retrieve 等子调用）.
+
+    See: README §命名约定 cross-cutting 表 / DECISIONS §7.B `_evaluate_inner` 中段重构 +
+    §7.1.1 elapsed_ms 端到端 + §7.2 safety 回归 standalone task + §7.3 efficiency.judge.* ADR.
     """
     if len(docs) != len(responses):
         raise RuntimeError(
@@ -157,16 +166,27 @@ def _evaluate_inner(
     sample_results: list[SampleResult] = [
         task.process_results(doc, resp) for doc, resp in zip(docs, responses)
     ]
-    sample_results = inject_per_sample_safety(sample_results, responses)
     if mode == "run":
         sample_results = inject_per_sample_efficiency(sample_results, responses, model_label)
 
     aggregated: dict[str, Any] = {
         name: fn(sample_results) for name, fn in task.aggregation().items()
     }
-    aggregated["safety"] = safety_aggregated(sample_results)
+    # 被测物 call class（仅 run）：task LM 的 efficiency
     if mode == "run":
         aggregated["efficiency"] = efficiency_aggregated(sample_results)
+
+    # 评估工具 call class（双路径，DECISIONS §7.3）：judge LM 的 efficiency
+    judge_responses, judge_label = task.collect_judge_responses()
+    if judge_responses:
+        if "efficiency" not in aggregated:
+            # score 路径无被测物 efficiency 子树，但有 judge → 创建子树仅含 judge 子组
+            aggregated["efficiency"] = {}
+        aggregated["efficiency"]["judge"] = efficiency_judge_aggregated(
+            judge_responses, judge_label
+        )
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     return EvalResult(
         task=task.name,
         model=model_label,
@@ -220,7 +240,6 @@ def evaluate_score(
         docs_for_eval.append(enriched_doc)
         responses.append(response)
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     model_label = source_label or f"preds:{Path(predictions_path).stem}"
     run_id = _generate_run_id(task.name, model_label, None)
 
@@ -231,7 +250,7 @@ def evaluate_score(
         mode="score",
         model_label=model_label,
         started_at=started_at,
-        elapsed_ms=elapsed_ms,
+        t0=t0,
         run_id=run_id,
     )
 
@@ -286,7 +305,6 @@ def evaluate_run(
                 f"LM returned {len(responses)} responses for {len(docs)} requests"
             )
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     run_id = _generate_run_id(task.name, model_label, seed)
 
     return _evaluate_inner(
@@ -296,7 +314,7 @@ def evaluate_run(
         mode="run",
         model_label=model_label,
         started_at=started_at,
-        elapsed_ms=elapsed_ms,
+        t0=t0,
         run_id=run_id,
         num_fewshot=num_fewshot,
     )

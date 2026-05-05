@@ -116,12 +116,11 @@ def test_artifacts_carry_pred_and_gold_ids():
         assert len(s.artifacts["gold_ids"]) > 0
 
 
-def test_metrics_only_contains_cross_cutting_safety_subgroup():
-    """rag_retrieval 本身不写 per-sample 标量；仅有 runner 注入的 safety 子组."""
+def test_metrics_empty_for_rag_retrieval():
+    """rag_retrieval 本身不写 per-sample 标量；wave 3（DECISIONS §7.2）撤销 cross-cutting
+    safety AOP 后，sample.metrics 应为空 dict（rag_retrieval 是 retrieval-only task，
+    所有信号在 artifacts.pred_ids / gold_ids 上）."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:
-        assert set(s.metrics.keys()) == {"safety"}
-        sub = s.metrics["safety"]
-        assert isinstance(sub, dict)
-        assert set(sub.keys()) == {"refusal_detected", "jailbreak_attempted"}
+        assert s.metrics == {}

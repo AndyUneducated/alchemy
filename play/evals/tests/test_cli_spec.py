@@ -290,58 +290,74 @@ def test_trait_efficiency_folds_when_all_zero():
     assert _should_fold_when_all_zero("efficiency") is True
 
 
-def test_trait_safety_does_not_fold_when_all_zero():
-    """safety 是 content class，trait False，全 0 是合法 metric 值（不折叠）."""
-    assert _should_fold_when_all_zero("safety") is False
-
-
 def test_trait_unknown_dim_defaults_to_fold():
     """未注册 dim 默认 True 折叠（兼容老 dim / 未来加新 cross-cutting 时需显式声明）."""
     assert _should_fold_when_all_zero("nonexistent_dim") is True
 
 
-def test_print_aggregated_does_not_collapse_safety_zero_subgroup(capsys):
-    """phase 7 audit P1：safety 子组 refusal_rate=0 是合法值（如 garbage prediction
-    短文本不触发 heuristic），不能折叠成 `<not measured>`——区别于 efficiency 全 0."""
-    agg = {
-        "safety": {
-            "refusal_rate": 0.0,
-            "jailbreak_success_rate": 0.0,
-            "over_refusal_rate": 0.0,
-            "judge_safety_score": None,  # P2: 未接 judge_lm 时 None 占位
-        },
-    }
-    _print_aggregated(agg)
-    out = capsys.readouterr().out
-    assert "<not measured" not in out, "safety 子组不应折叠（content class trait False）"
-    assert "safety.refusal_rate" in out and "0.0000" in out
+# wave 3（DECISIONS §7.2）撤销 safety cross-cutting AOP 后，safety 不再出现在
+# aggregated 顶层 nested 子组（safety task 自己 own task-specific 4 stat 平铺），
+# 折叠协议对 safety 不再适用——原 phase 7 audit P1 的 safety 不折叠测试组随之删除.
 
 
-def test_print_aggregated_collapses_efficiency_but_not_safety_when_both_zero(capsys):
-    """混合场景锁：sentiment_clf + mock 跑出 efficiency 全 0 + safety 全 0/None.
-    efficiency 折叠（call class trait）；safety 不折叠（content class trait），区分两横切."""
+# ---------- wave 3 §7.3：efficiency.judge 嵌套二级折叠 ----------
+
+def test_print_aggregated_folds_efficiency_judge_subgroup_when_all_zero(capsys):
+    """efficiency 顶层非全 0（task 部分有数值）但 judge 子组全 0 → judge 子组单独折叠为
+    `efficiency.judge: <not measured>` 单行；不影响 task 部分 dot-path 渲染。
+
+    场景：task 接了 judge_lm 但 judge LM 没报 latency/tokens（如 mock），同时 task LM
+    正常报 efficiency.
+    """
     agg = {
-        "accuracy": 1.0,
-        "safety": {
-            "refusal_rate": 0.0,
-            "jailbreak_success_rate": None,
-            "over_refusal_rate": None,
-            "judge_safety_score": None,
-        },
         "efficiency": {
-            "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
-            "tokens_in": {"total": 0, "mean": 0.0},
-            "tokens_out": {"total": 0, "mean": 0.0},
-            "cost_usd": {"total": 0.0, "mean": 0.0},
+            "latency_ms": {"mean": 100.0, "p50": 100.0, "p95": 100.0, "max": 100.0},
+            "tokens_in": {"total": 100, "mean": 10.0},
+            "tokens_out": {"total": 50, "mean": 5.0},
+            "cost_usd": {"total": 0.001, "mean": 0.0001},
+            "judge": {  # 全 0：mock judge / task 没接 judge_lm 时也是这个形态
+                "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
+                "tokens_in": {"total": 0, "mean": 0.0},
+                "tokens_out": {"total": 0, "mean": 0.0},
+                "cost_usd": {"total": 0.0, "mean": 0.0},
+            },
         },
     }
     _print_aggregated(agg)
     out = capsys.readouterr().out
-    # efficiency 折叠
-    assert "efficiency                   <not measured" in out or "efficiency " in out and "<not measured" in out
-    assert "efficiency.latency_ms" not in out  # 折叠后不展开 dot-path
-    # safety 不折叠
-    assert "safety.refusal_rate" in out
+    # task 部分仍 dot-path 展开
+    assert "efficiency.latency_ms.mean" in out
+    assert "efficiency.tokens_in.total" in out
+    # judge 子组单行折叠
+    assert "efficiency.judge" in out
+    assert "<not measured" in out
+    # judge 子组的 dot-path 不应展开（折叠后仅一行）
+    assert "efficiency.judge.latency_ms" not in out
+    assert "efficiency.judge.tokens_in" not in out
+
+
+def test_print_aggregated_does_not_fold_efficiency_judge_when_nonzero(capsys):
+    """efficiency.judge 子组有数值 → dot-path 全展开（不折叠）."""
+    agg = {
+        "efficiency": {
+            "latency_ms": {"mean": 100.0, "p50": 100.0, "p95": 100.0, "max": 100.0},
+            "tokens_in": {"total": 100, "mean": 10.0},
+            "tokens_out": {"total": 50, "mean": 5.0},
+            "cost_usd": {"total": 0.001, "mean": 0.0001},
+            "judge": {
+                "latency_ms": {"mean": 200.0, "p50": 200.0, "p95": 200.0, "max": 200.0},
+                "tokens_in": {"total": 50, "mean": 25.0},
+                "tokens_out": {"total": 10, "mean": 5.0},
+                "cost_usd": {"total": 0.0005, "mean": 0.00025},
+            },
+        },
+    }
+    _print_aggregated(agg)
+    out = capsys.readouterr().out
+    # judge 子组全展开
+    assert "efficiency.judge.latency_ms.mean" in out
+    assert "efficiency.judge.tokens_in.total" in out
+    assert "<not measured" not in out  # 整体没折叠
 
 
 # ---------- phase 7 audit P2：None 占位 → CLI <n/a> 渲染 ----------

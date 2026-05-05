@@ -272,12 +272,13 @@ def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数�
     return False
 
 
-# phase 7 audit P1：cross-cutting dim → metric module 路径映射，
-# 用于查询 module-level FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
-# 加新横切维度（calibration / robustness）在此处注册即可。
+# cross-cutting dim → metric module 路径映射，用于查询 module-level
+# FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
+#
+# wave 3（DECISIONS §7.2）：safety 退出 cross-cutting（回归 standalone task），
+# 此映射只剩 efficiency。加新 cross-cutting 维度（calibration 等）在此注册.
 _DIM_MODULES: dict[str, str] = {
     "efficiency": "evals.metrics.efficiency",
-    "safety": "evals.metrics.safety",
 }
 
 
@@ -298,17 +299,34 @@ def _should_fold_when_all_zero(dim: str) -> bool:
 def _print_aggregated(agg: dict) -> None:
     """嵌套友好打印：phase 6 起 aggregated 含 efficiency 子组，递归走 _fmt_kv.
 
-    audit §1.7 + phase 7 audit P1：嵌套子组若所有 leaf 数值全 0/None 且该 dim 在
-    trait 表里声明 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True（efficiency 等 call class），
-    折叠为 `<dim>: <not measured>` 单行避免 11+ 行 0 占位的视觉误导.
-    Content class（safety 等）声明 False，全 0 是合法 metric 值，不折叠；None
-    占位的 stat 走 _fmt_kv 的 `<n/a>` 渲染（phase 7 audit P2）.
+    audit §1.7：cross-cutting dim 嵌套子组若所有 leaf 数值全 0/None 且该 dim 在 trait 表里
+    声明 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True，折叠为 `<dim>: <not measured>` 单行避免
+    视觉误导. None 占位的 stat 走 _fmt_kv 的 `<n/a>` 渲染.
     顶层 task-specific 指标（accuracy=0 等）保持显式 0 输出（task 信号不折叠）.
+
+    DECISIONS §7.3 wave 3：嵌套二级折叠——cross-cutting 子树（如 efficiency）顶层非全 0 但
+    内部子子组（如 efficiency.judge：task 没接 judge_lm / mock judge / 价格表未命中）全 0 时，
+    按同 trait gate 单独折叠为 `<dim>.<sub>: <not measured>` 单行.
     """
     for k, v in agg.items():
+        # 顶层折叠：cross-cutting dim 全 0 → 单行 `<dim>: <not measured>`
         if isinstance(v, dict) and _is_all_zero_nested(v) and _should_fold_when_all_zero(k):
             print(f"  {k:<28} <not measured (no LM signal)>")
             continue
+
+        # 嵌套二级折叠（DECISIONS §7.3）：cross-cutting dim 顶层非全 0 但内部子子组全 0
+        if k in _DIM_MODULES and isinstance(v, dict) and _should_fold_when_all_zero(k):
+            for sub_k, sub_v in v.items():
+                if isinstance(sub_v, dict) and _is_all_zero_nested(sub_v):
+                    full_path = f"{k}.{sub_k}"
+                    print(f"  {full_path:<28} <not measured (no LM signal)>")
+                    continue
+                for line in _fmt_kv(sub_k, sub_v, prefix=f"{k}."):
+                    key, _, val = line.partition("=")
+                    print(f"  {key:<28} {val}")
+            continue
+
+        # 顶层 task scalar（含 safety task 自身的 refusal_rate 等 wave 3 平铺 metric）
         for line in _fmt_kv(k, v):
             key, _, val = line.partition("=")
             print(f"  {key:<28} {val}")

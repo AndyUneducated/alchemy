@@ -139,3 +139,19 @@ class Task(ABC):
         - 与 doc 加工无关的初始化（资源准备 / 缓存预热）应放在 task __init__
         """
         return docs
+
+    def collect_judge_responses(self) -> tuple[list[Response], str | None]:
+        """run / score 双路径都调，返回 (judge_responses, judge_model_label).
+
+        默认 ([], None)——无 judge 的 task / 未注入 judge_lm 的 task 都返空.
+        持有 judge closure 的 task 在此 override，从 closure._recorder 拉响应列表.
+
+        DECISIONS §7.3 evaluation tool call class：runner 双路径都收集 judge 调用记录，
+        挂到 `aggregated["efficiency"]["judge"]` 子组（与被测物 task LM 的
+        `aggregated["efficiency"].{latency_ms, tokens_in, tokens_out, cost_usd}` 同形 4 子组）.
+
+        实现指引：closure 工厂（judge_pointwise / g_eval / self_consistency / judge_rag.* 5
+        factory）都暴露 `closure._recorder.responses + .model_label`；task 把所有 judge closure
+        的 responses 合并、取统一 model_label 即可.
+        """
+        return [], None

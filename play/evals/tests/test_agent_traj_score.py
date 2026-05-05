@@ -30,6 +30,14 @@ def _score(pred_name: str) -> dict[str, float]:
     return dict(result.aggregated)
 
 
+def test_docs_smoke_friendly_ordering():
+    """DECISIONS §7.1.3 锁：gold.jsonl 行序按 smoke → 中等 → 重排，
+    `--limit 1` 命中 brainstorm 而非 panel（panel 5 角色 × 11 步分钟级会超 600s）。
+    与 tests/conftest.py live test 选 brainstorm 的 CI 友好策略对齐。"""
+    docs = list(AgentTraj().docs())
+    assert [d.id for d in docs] == ["brainstorm", "example", "panel"]
+
+
 # ---------- 上下界 sanity（2 条）-------------------------------------------
 
 def test_perfect_all_metrics_are_one():
@@ -126,7 +134,7 @@ def test_brainstorm_partial_speakers_coverage():
     """
     task = AgentTraj()
     result = evaluate_score(task, str(PRED_ROOT / "partial.jsonl"))
-    # per_sample 顺序按 gold.jsonl 行序：panel / brainstorm / example
+    # per_sample 顺序按 gold.jsonl 行序：brainstorm / example / panel（DECISIONS §7.1.3，smoke → 重）
     brainstorm = next(s for s in result.per_sample if s.doc_id == "brainstorm")
     assert abs(brainstorm.metrics["trajectory_coverage"] - 1 / 3) < 1e-9
     assert brainstorm.metrics["task_success"] == 0.0  # 仅 1 speaker，speakers_covered fail
