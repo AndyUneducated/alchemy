@@ -27,7 +27,8 @@ def test_sentiment_score_perfect_unchanged_after_load_prediction_default():
     """sentiment perfect.jsonl 走默认 load_prediction → 仍 100% accuracy（字节相同）."""
     task = SentimentClf()
     r = evaluate_score(task, PRED_SENTIMENT / "perfect.jsonl")
-    assert r.aggregated == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
+    task_agg = {k: v for k, v in r.aggregated.items() if k not in {"efficiency", "safety"}}
+    assert task_agg == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
 
 
 def test_mt_score_perfect_unchanged_after_load_prediction_default():
@@ -42,7 +43,7 @@ def test_sentiment_run_gold_unchanged_after_process_docs_default():
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
-    task_agg = {k: v for k, v in r.aggregated.items() if k != "efficiency"}
+    task_agg = {k: v for k, v in r.aggregated.items() if k not in {"efficiency", "safety"}}
     assert task_agg == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
 
 
@@ -54,15 +55,15 @@ def test_old_task_default_output_type_is_generate_until():
 
 def test_score_run_parity_after_phase4_hooks():
     """phase 4 改造后 sentiment 上 score / run 在 task-specific 指标层面 parity（架构定海神针）.
-    phase 6 引入 efficiency 子组（cross-cutting）+ audit §1.3A sample 层 efficiency 占位字段：
-    剥离 aggregated.efficiency 子组 + sample.metrics 4 efficiency 字段后应等价."""
+    phase 6/7 引入 cross-cutting 子组（efficiency call class / safety content class，§7.A ontology 二分）+
+    §7.D nested 派统一：sample.metrics 嵌套子组 metrics["efficiency"] / metrics["safety"]，剥离后应等价."""
     task = SentimentClf()
     docs = list(task.docs())
     r_run = evaluate_run(task, MockLM(mode="gold", docs=docs))
     r_score = evaluate_score(task, PRED_SENTIMENT / "perfect.jsonl")
-    _eff_keys = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
-    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
-    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _eff_keys}  # noqa: E731
+    _crosscut = {"efficiency", "safety"}
+    task_agg = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
+    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
     assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
     assert "efficiency" in r_run.aggregated
     assert "efficiency" not in r_score.aggregated

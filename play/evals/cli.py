@@ -87,13 +87,17 @@ def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 for
 
 # ---------- 输出格式化 ----------
 
-def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v 可为 float / dict / int
+def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v 可为 float / dict / int / None
     """递归把 (key, value) 拍平成 'k=v' 列表；嵌套 dict 用 dot 连接.
 
     phase 6 起 aggregated 允许嵌套（efficiency 子组等）；老的 phase 1-5 平铺指标
     走 isinstance 非 dict 分支，与原 `_fmt_row` 字节相同.
+    phase 7 audit P2：None 占位 stat（如 safety.judge_safety_score 未接 judge_lm 时）
+    渲染为 `<n/a>`，与"真 0"显式区分；落 result.json 仍是 null（dataclasses.asdict）.
     """
     full = f"{prefix}{k}"
+    if v is None:
+        return [f"{full}=<n/a>"]
     if isinstance(v, dict):
         out: list[str] = []
         for sub_k, sub_v in v.items():
@@ -165,6 +169,7 @@ def _build_task_with_optional_deps(
     from .tasks.qa_open import QAOpen
     from .tasks.rag_qa import RagQA
     from .tasks.rag_retrieval import RagRetrieval
+    from .tasks.safety import Safety
 
     base_task = get_task(task_name)
     judge_lm = parse_model_spec(judge_model_spec, base_task) if judge_model_spec else None
@@ -195,6 +200,16 @@ def _build_task_with_optional_deps(
         from .models.agent_engine_run import make_run_fn
         return AgentTraj(run_fn=make_run_fn(), judge_lm=judge_lm)
 
+    if isinstance(base_task, Safety):
+        if vdb is not None:
+            raise SystemExit(
+                f"--vdb / RAG flags not supported by {task_name!r}; "
+                "safety is a text-safety task, not retrieval-driven."
+            )
+        if judge_lm is None:
+            return base_task
+        return Safety(judge_lm=judge_lm)
+
     if isinstance(base_task, QAOpen):
         if vdb is not None:
             raise SystemExit(
@@ -208,7 +223,7 @@ def _build_task_with_optional_deps(
     # 其它 task：拒绝 RAG / judge flag
     if judge_lm is not None:
         raise SystemExit(
-            f"--judge-model only supported by qa_open / rag_qa / agent_traj (got task={task_name!r}); "
+            f"--judge-model only supported by qa_open / rag_qa / agent_traj / safety (got task={task_name!r}); "
             "extend the dispatch in cli.py::_build_task_with_optional_deps when adding judge to other tasks"
         )
     if vdb is not None:
@@ -241,8 +256,15 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
-def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数值 leaf
-    """递归判断嵌套 dict 所有 leaf 数值是否都为 0（非数值 leaf → False，不折叠）."""
+def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数值 leaf / None
+    """递归判断嵌套 dict 所有 leaf 数值是否都为 0（None 视为零类信号；非数值 leaf → False）.
+
+    phase 7 audit P2：safety stat 用 None 占位"未测得"，None 与 0 在折叠语义上等价
+    （都属于"无 metric 信号"），但 trait gate（_should_fold_when_all_zero）仍按 dim
+    决定是否真折叠——content class（safety）即使全 None 也不折叠，让 <n/a> 显式渲染.
+    """
+    if d is None:
+        return True
     if isinstance(d, dict):
         return all(_is_all_zero_nested(v) for v in d.values())
     if isinstance(d, (int, float)):
@@ -250,16 +272,41 @@ def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数�
     return False
 
 
+# phase 7 audit P1：cross-cutting dim → metric module 路径映射，
+# 用于查询 module-level FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
+# 加新横切维度（calibration / robustness）在此处注册即可。
+_DIM_MODULES: dict[str, str] = {
+    "efficiency": "evals.metrics.efficiency",
+    "safety": "evals.metrics.safety",
+}
+
+
+def _should_fold_when_all_zero(dim: str) -> bool:
+    """查询 cross-cutting dim 模块的 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
+
+    缺失或未注册 → 默认 True 兼容老 dim（保留 phase 6 audit §1.7 立的折叠默认行为）.
+    详见 metrics/efficiency.py / metrics/safety.py 的 trait 常量声明.
+    """
+    mod_path = _DIM_MODULES.get(dim)
+    if not mod_path:
+        return True
+    import importlib
+    mod = importlib.import_module(mod_path)
+    return getattr(mod, "FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO", True)
+
+
 def _print_aggregated(agg: dict) -> None:
     """嵌套友好打印：phase 6 起 aggregated 含 efficiency 子组，递归走 _fmt_kv.
 
-    audit §1.7：嵌套子组（efficiency / phase 7+ safety / ...）若所有 leaf 数值全 0
-    （MockLM 不报、output_type='none' task），折叠为 `<dim>: <not measured>` 单行
-    避免 11+ 行 0 占位的视觉误导（"0.0000" 看着像"超低延迟"而非"未测得"）。
+    audit §1.7 + phase 7 audit P1：嵌套子组若所有 leaf 数值全 0/None 且该 dim 在
+    trait 表里声明 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True（efficiency 等 call class），
+    折叠为 `<dim>: <not measured>` 单行避免 11+ 行 0 占位的视觉误导.
+    Content class（safety 等）声明 False，全 0 是合法 metric 值，不折叠；None
+    占位的 stat 走 _fmt_kv 的 `<n/a>` 渲染（phase 7 audit P2）.
     顶层 task-specific 指标（accuracy=0 等）保持显式 0 输出（task 信号不折叠）.
     """
     for k, v in agg.items():
-        if isinstance(v, dict) and _is_all_zero_nested(v):
+        if isinstance(v, dict) and _is_all_zero_nested(v) and _should_fold_when_all_zero(k):
             print(f"  {k:<28} <not measured (no LM signal)>")
             continue
         for line in _fmt_kv(k, v):

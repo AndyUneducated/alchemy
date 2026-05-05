@@ -387,7 +387,7 @@ ADR（Architecture Decision Record）归档。每条以 `## n. 标题` 开头，
 
 ## 6.1. Phase 6 efficiency follow-up（基于实测产物反向审查）
 
-- **Status**: accepted
+- **Status**: accepted（其中"§1.3 sample 层 4 efficiency 键 flat 写 0 占位"被 §7.D 单独 supersede——sample.metrics 改 nested 子组 `metrics["efficiency"]`；其余 6 项 §1.1 / §1.2 / §1.4 / §1.5 / §1.6 / §1.7 仍生效）
 - **Date**: 2026-05-04
 
 ### Scope
@@ -398,7 +398,7 @@ phase 6 上线后跑全量 233 测试 + 端到端 demo 落盘 4 个 run（mock /
 |---|---|---|
 |`aggregated.efficiency.cost_usd` 加 `mean`|与 `tokens_in/out.{total,mean}` 对称；per-call 平均成本是用户对比 model 时的核心信号|audit §1.1|
 |`aggregated.efficiency.latency_ms` 加 `max`|HELM efficiency 维度标配 (mean,p50,p95,**max**)；小 N 下 worst-case 通过 max 暴露（如 demo 实测 cold-start latency=1339ms，p95=1274ms，max=1339ms 是 cold-start 入口）|audit §1.2|
-|`SampleResult.metrics` schema-on-write 两层一致|`inject_per_sample_efficiency` 永远写 4 efficiency 键，None / 缺失 0.0 占位；与 `aggregated.efficiency` 子组永远 4 子组的协议哲学统一；下游 drill-down `s.metrics["latency_ms"]` 在 mock 路径不再 KeyError|audit §1.3 选项 A|
+|`SampleResult.metrics` schema-on-write 两层一致 ⚠️ **§1.3 写位置被 §7.D supersede**|`inject_per_sample_efficiency` 永远写 4 efficiency 键，None / 缺失 0.0 占位；schema-on-write 哲学保留；phase 7 起 nested 子组 `s.metrics["efficiency"]["latency_ms"]` 替代原 flat 写法 `s.metrics["latency_ms"]`|audit §1.3 选项 A → §7.D|
 |`compute_cost_usd` 未命中 model 时 fail-loud `UserWarning`|`_warn_unknown_pricing_model` 用 `functools.lru_cache(maxsize=128)` 防刷屏；让用户区分 cost=0 的三种状态（真免费 / 未测得 / 模型不在表里）|audit §1.4|
 |`tokens_in.total` / `tokens_out.total` 用 `int(sum(...))`|token 是离散计数，整数语义；`mean` 仍 `float`（avg 可有小数）；`SampleResult.metrics` 仍 dict[str, float] 不破契约|audit §1.5|
 |`inject_per_sample_efficiency` 去掉 `getattr` 防御|`Response` 是 frozen dataclass 字段固定；`resp.latency_ms` 直接取，schema rename 时即时 AttributeError 而非 silent None；`responses: list[Response]` 类型注解收紧|audit §1.6|
@@ -409,7 +409,7 @@ phase 6 上线后跑全量 233 测试 + 端到端 demo 落盘 4 个 run（mock /
 |侧面|做法|
 |---|---|
 |两层 schema-on-write|`inject_per_sample_efficiency` 不再 `if not extra: skip`；`extra` dict 永远 4 键，None / 缺失值用 0.0；`efficiency_aggregated._collect` 的 None-skipping 行为保留（直接构造 metrics 时仍合法），与 injector 写 0 占位的链路在数值上等价（0 序列 mean = 空序列 fallback 0）|
-|fail-loud 的"安静"边界|warning 只对 cost path 触发：`tokens_in/out` 任一 None → 早 return None，跳过 unknown-model 检查（mock 路径不会 spam）；`lru_cache` 让同 unknown model 同进程内只 warn 一次（CI / pytest reruns 不污染日志）|
+|fail-loud 的"安静"边界|warning 只对 cost path 触发：`tokens_in/out` 任一 None → 早 return None，跳过 unknown-model 检查（mock 路径不会 spam）；`lru_cache` 让同 unknown model 同进程内只 warn 一次（CI / pytest reruns 不污染日志）。**phase 7 audit P3**：score 路径在 ontology 二分（§7.A call class 仅 run 挂）下不挂 efficiency 子组 → 不调 `compute_cost_usd` → 不发 warning。`preds:*` 等 score model_label 永不查价格表，是正确行为而非 silent failure（preds:* 是文件 label，非 LM）|
 |CLI 折叠语义|`_is_all_zero_nested` 仅对 `dict` 递归；非数值 leaf 返 False（不折叠未知形态）；顶层 scalar `accuracy=0` 不走折叠分支（task 信号 ≠ 横切信号）|
 |parity test 9 处补丁|新增 `_task_metrics(metrics)` helper（`test_runner_run.py` 模块级）和 inline lambda（其它 3 处），剥离 sample.metrics 的 4 efficiency 字段后再比对；与之前 `_task_agg(aggregated)` 体例对齐——sample 层与 aggregated 层走同套"剥 cross-cutting 后比 task 主体"协议|
 |测试增量 13 条|`test_metrics_efficiency.py`(+5: cost.mean / latency.max / int total / fail-loud warning x2 / lru-cache dedup) + `test_runner_efficiency.py`(+1: mock per-sample 占位) + `test_cli_spec.py`(+5: 折叠正例/反例/task 指标不折叠)；现有断言更新 5 处适配新 schema|
@@ -448,10 +448,92 @@ phase 6 上线后跑全量 233 测试 + 端到端 demo 落盘 4 个 run（mock /
 ### Decision
 
 - **schema 对称补齐**：`aggregated.efficiency.cost_usd` 加 `mean`；`aggregated.efficiency.latency_ms` 加 `max`
-- **schema-on-write 两层一致**：`SampleResult.metrics` 永远写 4 efficiency 键（None / 缺失 0.0 占位）；`inject_per_sample_efficiency` 不再 skip 空写入分支
+- **schema-on-write 两层一致**：`SampleResult.metrics` 永远写 4 efficiency 键（None / 缺失 0.0 占位）；`inject_per_sample_efficiency` 不再 skip 空写入分支。⚠️ 写位置被 §7.D supersede：phase 7 起改 nested 子组 `metrics["efficiency"][...]`，schema-on-write 哲学（永远 4 键 0 占位）保留
 - **unknown model fail-loud**：`compute_cost_usd` 内 `_warn_unknown_pricing_model(model)`（lru_cache 防刷屏 + UserWarning）；保留 0.0 fallback 不破坏控制流
 - **`tokens.total` 用 `int`**：整数计数语义；`mean` / `latency_ms` / `cost_usd` 全 `float` 不变
 - **去 getattr 防御**：`responses: list[Response]` 收紧类型注解；`resp.latency_ms` / `resp.usage` 直接取；schema rename 即时暴露
 - **CLI 全 0 折叠仅在详细模式**：`_is_all_zero_nested` + `_print_aggregated` 嵌套子组判全 0 折叠为 `<dim>: <not measured (no LM signal)>`；`show` 索引模式（`_fmt_row` 紧凑单行）显式不折叠以保跨 run 列对齐与 grep 友好（两套渲染对应单 run 反馈 vs 跨 run 对比两种 UX 目的）
 - **测试 13 条增量**：含 fail-loud warning 锁、`lru_cache` dedup 锁、单元测两层 schema-on-write、CLI 折叠正反例
 - **parity test 9 处补丁**：sample.metrics 比对前剥离 4 efficiency 占位字段；体例与 aggregated 层 task_agg subset 一致
+
+## 7. Phase 7 横切 Safety + cross-cutting ontology 二分 + evaluate 中段合流
+
+- **Status**: accepted
+- **Date**: 2026-05-04
+
+### Scope
+
+|模块|内容|
+|---|---|
+|`metrics/safety.py`|新增 refusal / jailbreak heuristic + `inject_per_sample_safety` + `safety_aggregated`（4 stat 固定 schema）|
+|`tasks/safety.py`|新增 safety task（15 docs：6 harmful + 5 jailbreak + 4 benign）；可选 `judge_lm` 注入 `judge_safety_score`|
+|`data/safety/*`|`gold.jsonl` + 5 份 stub predictions（safe / over_refuse / jailbreak_success / evasive / garbage）|
+|`runner.py`|`evaluate_score` / `evaluate_run` 合并到 `_evaluate_inner` 中段：`process_results` 后统一挂 content-class safety；run-only 再挂 call-class efficiency|
+|`api.py`|`SampleResult.metrics` 由纯标量 dict 放宽到 nested subgroup（`dict[str, float | dict[str, float]]`）|
+|`cli.py`|`_build_task_with_optional_deps` 增加 `safety` 分支；支持 `--judge-model`，拒绝 `--vdb`|
+|测试|新增 `test_metrics_safety.py` / `test_safety_score.py` / `test_safety_run.py` / `test_runner_safety.py`，并修订 parity helper 对 `safety` 子组剥离|
+
+### Implementation
+
+|侧面|做法|
+|---|---|
+|cross-cutting ontology|二分为 **content class**（可从 `Response.text` 推导，score/run 都能算）与 **call class**（依赖 LM 调用元数据，只能 run 算）|
+|evaluate 合流|新增 `_evaluate_inner(task, docs, responses, ...)` 统一处理 `process_results` → cross-cutting injectors → aggregated 打包，避免 score/run 两套后处理漂移；删除原 `_finalize` 不留过渡函数|
+|safety 注入位点|`inject_per_sample_safety` 固定写 `metrics["safety"] = {refusal_detected, jailbreak_attempted}`；`aggregated["safety"]` 固定 4 stat|
+|injector 顺序|`_evaluate_inner` 内固定 content class 先于 call class（safety 先于 efficiency）；同类内按 phase 号续接（phase 9 calibration 加在 efficiency 后；phase 10 robustness 加在 safety 后）|
+|category 切片|task 在 `SampleResult.artifacts["safety_category"]` 写 category（**非标量字符串走 artifacts** 而非 metrics）；`safety_aggregated` 读该字段计算 `jailbreak_success_rate` / `over_refusal_rate`；保留对 `metrics["_safety_category"]` 的兜底读路径以兼容早期草案|
+|judge 复用|不新增 safety judge factory，直接复用 `judge_core.judge_pointwise` + `DEFAULT_SAFETY_JUDGE_TEMPLATE`|
+
+### Options considered
+
+|议题|选项|结论|
+|---|---|---|
+|score/run 代码统一|A 维持双尾段；B 中段合流 helper|选 B：复杂度下降，新增横切只改一处|
+|`SampleResult.metrics` 命名|A 全平铺；B 前缀平铺；C nested subgroup|选 C：与 `Response.usage` / `aggregated[dim]` 形状一致|
+|safety judge 组织|A `metrics/safety.py` 另造 closure；B 复用 judge_core|选 B：去重，保持 judge 范式单一来源|
+|category 落点|A `metrics["_safety_category"]` 下划线前缀字符串；B `artifacts["safety_category"]`|选 B：§7.D 把 `metrics` 类型签名收紧为 `dict[str, float \| dict[str, float]]` 后，**字符串 category 在类型上违法**；落 `artifacts` 与 phase 4 立的 MLflow scalar/non-scalar 二分一致；保留对 metrics["_safety_category"] 的兜底读路径不破老草案|
+|injector 顺序|A 任意；B content 先于 call|选 B：把 ontology 二分映射到代码层执行顺序（内禀关系：content 不依赖 call，反之不成立），由 `test_safety_inject_runs_before_efficiency` 焊死|
+
+### Decision
+
+- **ontology 二分落地**：`safety` 作为 content-class 横切双路径注入；`efficiency` 作为 call-class 仅 run 注入
+- **中段合流落地**：`_evaluate_inner` 成为 score/run 共同后处理入口，后续横切维度不再复制粘贴注入逻辑
+- **sample.metrics nested 正式采纳**：cross-cutting 一律写入 `metrics[<dim>]` 子组；§6.1 中“sample 层平铺 efficiency 占位”的决策被 supersede
+- **safety task 最小闭环**：15 条低风险 stub + 5 份预测矩阵用于教学验证 refusal / jailbreak / over-refusal / evasive 四类行为
+
+### Audit follow-up（phase 7 实测产物反推 4 项）
+
+phase 7 上线后跑全量 281 测试 + 6 个端到端 demo（5 份 safety stub × score + 1 份 ollama:qwen2.5:32b run），从产物形态（CLI 输出 / `result.json` / `samples.jsonl`）反推出 4 项工程问题修订。本组与 §6.1 audit 同体例（实测驱动而非纸面设计），按 P 编号汇总：
+
+|侧面|改动|来源|
+|---|---|---|
+|**P1**: CLI 折叠规则误把 safety 全 0 折叠为"未测得"|cross-cutting dim 在 metric 模块顶部声明 `FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO` trait（efficiency=True / safety=False）；`cli.py::_should_fold_when_all_zero` 查询 trait；按 ontology 二分对应（call class 全 0 折叠 / content class 不折叠）|实测 garbage stub score 输出折叠后误导|
+|**P2**: `judge_safety_score=0` 与"模型得 0 分"语义混淆|`safety_aggregated` 返回类型放宽 `dict[str, float \| None]`；`refusal_rate` 永远 float（heuristic 永远算）；`jailbreak_success_rate` / `over_refusal_rate` / `judge_safety_score` 在切片为空 / 未接 judge 时 → None；CLI `_fmt_kv` 加 None → `<n/a>` 渲染|`safety.judge_safety_score 0.0000` 在 1-5 scale 上 0 越界，无法区分"未测得"|
+|**P3**: score 路径不发 unknown-model warning 易被误判 fail-silent|`compute_cost_usd` docstring + DECISIONS §6.1 §1.4 + README phase 6 段三处显式记录"`preds:*` 不查价格表是 ontology 二分的合理产物"|纯文档增强，零代码改动|
+|**P6**: 落盘 `result.json` 的 `elapsed_ms` 浮点精度泄露|`runner.py::_evaluate_inner` 创建 `EvalResult` 时 `elapsed_ms = round(x, 3)`；不动 `efficiency.latency_ms` / `cost_usd` 等 LM 报值（dashboard 真用得到亚 ms 精度）|`"elapsed_ms": 0.9334170026704669` 15 位小数对人无价值|
+
+#### Options considered
+
+**P1 折叠规则修法**（trait vs allowlist）：
+
+- **trait（选）**：metric 模块自描述 fold 行为，CLI 渲染层中性查询；新加 phase 9 calibration / phase 10 robustness 时按 ontology 二分声明 trait 即可，不改 CLI；6 行代码
+- allowlist：CLI 硬编码 `_FOLDABLE_DIMS = {'efficiency'}`，新维度需改 CLI 而非 metric 模块；2 行代码但耦合方向反了（CLI 该懂 dim 行为属性，不该硬编码 dim 名）
+
+**P2 None 占位范围**（judge-only vs all-undefined）：
+
+- **all-undefined（选）**：所有"未测得"性质 stat 用 None（含切片为空时的 jailbreak_success_rate / over_refusal_rate）；语义最一致，None 与 0 在 1 个 stat 上严格分离的协议跨 4 stat 普适
+- judge-only：只 `judge_safety_score` 用 None，其它 3 stat 保持 0 占位；改动面小但语义不一致（jb 切片为空时仍 0 占位，与 P1/P2 立的"区分未测得"协议矛盾）
+
+**P2 efficiency 不动的理由**：
+
+- efficiency 全 0 在 `inject_per_sample_efficiency` 写 0 占位（phase 6 audit §1.3 决策），由 P1 trait 折叠覆盖渲染语义，无需改 None；保持 efficiency / safety 各自独立的"全 0 处理风格"（trait 折叠 vs None 占位），是 ontology 二分在数据契约层面的自然延伸
+- 历史决策保留：phase 6 audit §1.3 立的"sample 层 4 efficiency 键 0 占位"仍生效（已被 §7.D 单点 supersede 写位置改 nested，本次不再动数值占位策略）
+
+#### Decision
+
+- **P1**：cross-cutting dim 走 trait 协议，按 ontology 二分声明 fold 行为（efficiency True / safety False）；新维度声明 trait 即可，CLI 中性
+- **P2**：`safety_aggregated` 返回 `dict[str, float | None]`；3 个未测得场景写 None；CLI 渲染 `<n/a>`；落 `result.json` 出现 `null`（向前兼容增强非删减）
+- **P3**：纯文档化（compute_cost_usd docstring + DECISIONS §6.1 §1.4 + README phase 6 段）；零代码改动
+- **P6**：`elapsed_ms` round 到千分之一毫秒；不动横切指标 LM 报值精度
+- **测试增量**：+8 条新测试（trait 协议正反例 + None 占位 + CLI `<n/a>` 渲染 + content/call 混合场景） + ~4 处现有 assert 修订（`== 0.0` → `is None`）；全量 281 → 290+ 测试
+- **不破 schema-on-write 哲学**：dict 形状仍稳定（safety 永远 4 键），只是值可为 None（"形状稳定 + 值可空"是 schema-on-write 的精确表达，老协议未破）

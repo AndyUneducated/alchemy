@@ -113,7 +113,15 @@ def test_compute_cost_small_call_scales_correctly():
 
 # ---------- efficiency_aggregated schema 永远 4 子组 ----------
 
-def _sr(metrics: dict[str, float]) -> SampleResult:
+def _sr(eff: dict[str, float] | None = None) -> SampleResult:
+    """构造测试用 SampleResult.
+
+    phase 7 §7.D 起 sample.metrics nested 派：efficiency 键值嵌入 metrics["efficiency"] 子组.
+    `eff=None` 表示 sample 完全无 efficiency 信号（mock 路径或 score 路径）.
+    """
+    metrics: dict[str, float | dict[str, float]] = {}
+    if eff is not None:
+        metrics["efficiency"] = eff
     return SampleResult(doc_id="x", prediction="p", target="t", metrics=metrics)
 
 
@@ -121,7 +129,7 @@ def test_efficiency_aggregated_empty_inputs_returns_zero_schema():
     """完全无 efficiency 信号（MockLM 路径）→ 4 子组键值全 0，schema 仍存在.
     audit §1.1: cost_usd 加 mean；§1.2: latency_ms 加 max；§1.5: tokens.total 用 int.
     """
-    agg = efficiency_aggregated([_sr({"accuracy": 1.0})])
+    agg = efficiency_aggregated([_sr(None)])
     assert set(agg.keys()) == {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
     assert agg["latency_ms"] == {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0}
     assert agg["tokens_in"] == {"total": 0, "mean": 0.0}
@@ -176,7 +184,7 @@ def test_efficiency_aggregated_skips_none_signals_per_sample():
     srs = [
         _sr({"latency_ms": 100.0}),  # 只报 latency
         _sr({"tokens_in": 50.0}),    # 只报 tokens_in
-        _sr({}),                      # 啥都不报
+        _sr(None),                    # 啥都不报
     ]
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == 100.0
@@ -218,3 +226,47 @@ def test_efficiency_aggregated_p95_stays_below_max():
     assert agg["latency_ms"]["max"] == 100.0
     # 严格 p95 < max（验证 max 的独立 worst-case 信号价值）
     assert agg["latency_ms"]["p95"] < agg["latency_ms"]["max"]
+
+
+# ---------- phase 7 §7.D nested 派写位置锁 ----------
+
+def test_efficiency_aggregated_ignores_legacy_flat_keys():
+    """phase 7 §7.D 起 metrics["efficiency"] 必须是 dict；老 phase 6 flat 写法
+    （metrics["latency_ms"] = 999）不再被识别（aggregator 看不到 → 全 0）.
+
+    这是 supersede 的预期行为：旧 result.json 反序列化后能加载但 efficiency 数据"看不见"，
+    需要重跑.（不抛异常 / 不崩溃即可，aggregator 默默跳过 non-dict efficiency key）.
+    """
+    sr_legacy = SampleResult(
+        doc_id="x", prediction="p", target="t",
+        metrics={"latency_ms": 999.0},  # 老 flat 写法
+    )
+    agg = efficiency_aggregated([sr_legacy])
+    assert agg["latency_ms"]["mean"] == 0.0
+
+
+def test_inject_per_sample_efficiency_writes_nested_subgroup():
+    """phase 7 §7.D 锁：inject_per_sample_efficiency 写到 metrics["efficiency"] 嵌套子组,
+    不污染顶层（task-specific scalar 与 cross-cutting 横切按 ontology 分层）.
+    """
+    from evals.api import Response, Usage
+    from evals.metrics.efficiency import inject_per_sample_efficiency
+
+    sr = SampleResult(doc_id="x", prediction="p", target="t", metrics={"acc": 1.0})
+    resp = Response(
+        doc_id="x", text="positive",
+        latency_ms=123.0,
+        usage=Usage(tokens_in=10, tokens_out=5),
+    )
+    [out] = inject_per_sample_efficiency([sr], [resp], "ollama:qwen2.5:32b")
+
+    # task-specific 顶层未受影响
+    assert out.metrics["acc"] == 1.0
+    # cross-cutting 落在嵌套子组
+    assert isinstance(out.metrics["efficiency"], dict)
+    assert out.metrics["efficiency"]["latency_ms"] == 123.0
+    assert out.metrics["efficiency"]["tokens_in"] == 10.0
+    assert out.metrics["efficiency"]["tokens_out"] == 5.0
+    # 顶层无 4 个 flat key（防止退回 phase 6 行为）
+    assert "latency_ms" not in out.metrics
+    assert "tokens_in" not in out.metrics

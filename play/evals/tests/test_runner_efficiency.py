@@ -93,31 +93,35 @@ def test_run_with_real_signals_aggregates_correctly():
 
 
 def test_run_per_sample_metrics_carry_efficiency_fields():
-    """per-sample 实测值进 SampleResult.metrics（drill-down 能看每条 latency/tokens）."""
+    """per-sample 实测值进 SampleResult.metrics["efficiency"] 子组（phase 7 §7.D nested 派）."""
     import warnings
     task = SentimentClf()
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning, message=".*fake:counter.*")
         r = evaluate_run(task, _CountingFakeLM())
     s0 = r.per_sample[0]
-    assert s0.metrics["latency_ms"] == 100.0
-    assert s0.metrics["tokens_in"] == 10.0
-    assert s0.metrics["tokens_out"] == 5.0
-    assert s0.metrics["cost_usd"] == 0.0
+    eff = s0.metrics["efficiency"]
+    assert isinstance(eff, dict)
+    assert eff["latency_ms"] == 100.0
+    assert eff["tokens_in"] == 10.0
+    assert eff["tokens_out"] == 5.0
+    assert eff["cost_usd"] == 0.0
 
 
 def test_run_mock_lm_per_sample_metrics_carry_zero_padded_efficiency():
-    """audit §1.3 选项 A：mock 路径 per-sample.metrics 也写 4 efficiency 占位（schema-on-write 两层一致）.
-    避免下游 drill-down `s.metrics["latency_ms"]` 在 mock 路径 KeyError.
+    """audit §1.3 选项 A：mock 路径 per-sample.metrics["efficiency"] 子组也写 4 占位（schema-on-write 两层一致）.
+    phase 7 §7.D nested 派：访问路径 s.metrics["efficiency"]["latency_ms"]，避免 KeyError.
     """
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
     s0 = r.per_sample[0]
-    assert "latency_ms" in s0.metrics and s0.metrics["latency_ms"] == 0.0
-    assert "tokens_in" in s0.metrics and s0.metrics["tokens_in"] == 0.0
-    assert "tokens_out" in s0.metrics and s0.metrics["tokens_out"] == 0.0
-    assert "cost_usd" in s0.metrics and s0.metrics["cost_usd"] == 0.0
+    eff = s0.metrics["efficiency"]
+    assert isinstance(eff, dict)
+    assert eff["latency_ms"] == 0.0
+    assert eff["tokens_in"] == 0.0
+    assert eff["tokens_out"] == 0.0
+    assert eff["cost_usd"] == 0.0
 
 
 # ---------- score 模式 ----------

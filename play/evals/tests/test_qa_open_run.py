@@ -30,11 +30,12 @@ def test_run_gold_judge_equals_score_perfect_judge():
     task_score = QAOpen(judge_lm=_jaccard_fake())
     r_score = evaluate_score(task_score, PRED_DIR / "perfect.jsonl")
 
-    # phase 6 起 run 多 efficiency 子组（cross-cutting）+ audit §1.3A sample 层 efficiency
-    # 占位字段；剥离后 task-specific parity 仍成立
-    _eff_keys = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
-    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
-    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _eff_keys}  # noqa: E731
+    # phase 6/7 引入 cross-cutting 子组（efficiency call class / safety content class）
+    # + §7.D nested 派统一：sample.metrics 嵌套子组 metrics["efficiency"] / metrics["safety"]；
+    # 剥离后 task-specific parity 仍成立
+    _crosscut = {"efficiency", "safety"}
+    task_agg = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
+    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _crosscut}  # noqa: E731
     assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
     assert "efficiency" in r_run.aggregated
     assert "efficiency" not in r_score.aggregated

@@ -4,14 +4,16 @@
 
 设计要点：
   - **runner 自动采集**（cross-cutting AOP 风格）：task 不改 process_results / aggregation；
-    runner._finalize 在 run 模式时挂 `aggregated["efficiency"] = efficiency_aggregated(srs)`.
+    runner._evaluate_inner 在 run 模式时挂 `aggregated["efficiency"] = efficiency_aggregated(srs)`
+    （phase 7 起 _finalize 合并入 _evaluate_inner，cross-cutting injectors + 聚合 + 打包统一在中段）.
   - **嵌套子组**：`aggregated["efficiency"]` 子树为 phase 7+ 横切（safety / calibration /
     robustness）预留扩展位（HELM 7 维度作 ontology）；与 OpenAI / Anthropic / inspect_ai
     SDK 的 nested usage object 风格对齐.
-  - **schema-on-write 两层一致**（phase 6 audit follow-up）：aggregated.efficiency 子组永远
-    挂 4 子组、per-sample SampleResult.metrics 永远写 4 efficiency 键；缺失值 0.0 占位
-    （语义"未测得"），让下游 drill-down（CLI / dashboard / SQL）写一份 schema 不需分支判
-    KeyError. CLI 渲染层判断"全 0"折叠为 `<not measured>` 一行，避免视觉误导.
+  - **schema-on-write 两层一致**（phase 6 audit follow-up；phase 7 §7.D 起 nested 派统一）：
+    `aggregated["efficiency"]` 子组永远挂 4 子组、`SampleResult.metrics["efficiency"]` 子组永远
+    写 4 efficiency 键；缺失值 0.0 占位（语义"未测得"），让下游 drill-down（CLI / dashboard /
+    SQL）写一份 schema 不需分支判 KeyError. CLI 渲染层判断"全 0"折叠为 `<not measured>` 一行，
+    避免视觉误导.
   - **per 1M tokens 单位**（与 OpenAI / Anthropic / Together / Fireworks 公开报价同单位，
     entry 直接复制粘贴免人脑除 1000）.
   - **fail-loud unknown model**（phase 6 audit follow-up）：`compute_cost_usd` 在 model 不在
@@ -20,13 +22,16 @@
   - **stdlib 算 percentile**：`statistics.quantiles(data, n=100, method='inclusive')`，
     不引 numpy（项目 phase 1-5 现有代码 0 处显式 import numpy）.
 
-数据契约（per-sample）：
-  runner._inject_efficiency_into_samples 用 dataclasses.replace 把以下 4 键写进
-  SampleResult.metrics（永远 4 键，None / 缺失值 0.0 占位）：
+数据契约（per-sample，phase 7 §7.D nested 派）：
+  inject_per_sample_efficiency 用 dataclasses.replace 把以下 4 键写进
+  SampleResult.metrics["efficiency"] 嵌套子组（永远 4 键，None / 缺失值 0.0 占位）：
     - latency_ms     来自 Response.latency_ms
     - tokens_in      来自 Response.usage.tokens_in
     - tokens_out     来自 Response.usage.tokens_out
     - cost_usd       由 compute_cost_usd(model_label, tokens_in, tokens_out) 派生
+
+  访问路径：`s.metrics["efficiency"]["latency_ms"]`（phase 6 初版是 flat `s.metrics["latency_ms"]`，
+  phase 7 §7.D supersede 为 nested 子组，与 aggregated["efficiency"] / Response.usage 三层一致）.
 
 行业对标：
   - HELM efficiency 维度：mean / p50 / p95 / max 是标配（本模块 latency_ms 子组 4 stat）
@@ -42,6 +47,14 @@ import statistics
 import warnings
 
 from ..api import Response, SampleResult
+
+# CLI 渲染层折叠协议（phase 7 audit P1，trait 派）：
+#   True  = 全 0 子组折叠为 `<dim>: <not measured>` 单行，避免视觉误导
+#   False = 全 0 是合法 metric 值（content class），不折叠
+# efficiency 是 call class——全 0 几乎等价 mock / output_type='none' 路径，
+# 折叠是诚实 UX；safety 等 content class 走 False（heuristic 真跑出 0 是合法值）。
+# CLI _print_aggregated 通过 evals.cli._should_fold_when_all_zero 查询本常量。
+FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO = True
 
 
 # ---------- 价格表（per 1M tokens） ----------
@@ -87,6 +100,11 @@ def compute_cost_usd(
       - model 不在 table → 0.0 + UserWarning（fail-loud）：让用户区分"真免费 vs 未配置定价"；
         warning 用 lru_cache 防刷屏，每个 unknown model 同进程内只 warn 一次
       - 命中 → (tokens_in * in_price + tokens_out * out_price) / 1_000_000
+
+    注意（phase 7 audit P3）：score 路径在 ontology 二分（DECISIONS §7.A call class
+    仅 run 挂）下不挂 efficiency 子组 → 不调本函数，故 `preds:*` 等 score 路径
+    model_label 永不进入价格表查询，不会触发 unknown-model warning。这是正确行为
+    （preds:* 是文件 label 不是 LM）而非 fail-silent.
     """
     if tokens_in is None or tokens_out is None:
         return None
@@ -119,16 +137,23 @@ def _percentile(data: list[float], pct: float) -> float:
 
 
 def _collect(srs: list[SampleResult], key: str) -> list[float]:
-    """从 SampleResult.metrics 收集非 None 值."""
+    """从 SampleResult.metrics["efficiency"] 嵌套子组收集非 None 值（phase 7 §7.D nested 派）.
+
+    phase 6 初版是 flat `s.metrics.get(key)`；§7.D supersede 为 nested 路径
+    `s.metrics.get("efficiency", {}).get(key)`，与 inject 写入路径对称.
+    """
     out: list[float] = []
     for s in srs:
-        v = s.metrics.get(key)
+        sub = s.metrics.get("efficiency")
+        if not isinstance(sub, dict):
+            continue
+        v = sub.get(key)
         if v is not None:
             out.append(float(v))
     return out
 
 
-# ---------- run-only 入口（runner._finalize 调用） ----------
+# ---------- run-only 入口（runner._evaluate_inner 调用） ----------
 
 def efficiency_aggregated(sample_results: list[SampleResult]) -> dict[str, dict[str, float | int]]:
     """生成 `aggregated["efficiency"]` 嵌套子树.
@@ -156,7 +181,7 @@ def efficiency_aggregated(sample_results: list[SampleResult]) -> dict[str, dict[
     保证 run 模式的 efficiency schema 始终一致，下游消费（CLI _fmt_row 递归打印 / W&B
     dashboard / cross-run JSON_EXTRACT）不需要分支判 None.
 
-    score 模式不调用本函数（runner._finalize 只在 mode='run' 分支 update 子树）.
+    score 模式不调用本函数（runner._evaluate_inner 只在 mode='run' 分支 update 子树）.
     """
     latency = _collect(sample_results, "latency_ms")
     tokens_in = _collect(sample_results, "tokens_in")
@@ -192,15 +217,20 @@ def inject_per_sample_efficiency(
     responses: list[Response],
     model_label: str,
 ) -> list[SampleResult]:
-    """run 路径在 process_results 之后调用，把 per-sample efficiency 写进 SampleResult.metrics.
+    """run 路径 _evaluate_inner 中段调用，把 per-sample efficiency 写进 SampleResult.metrics["efficiency"] 子组.
 
-    schema-on-write（phase 6 audit follow-up §1.3 选项 A）：永远写 4 efficiency 键，
-    None / 缺失值 0.0 占位（语义"未测得"），与 aggregated.efficiency 子组永远 4 子组的
-    schema 哲学一致；下游 drill-down 不需要分支判 KeyError.
+    nested 派写位置（phase 7 §7.D supersede phase 6 audit §1.5）：
+      `metrics={..., "efficiency": {"latency_ms": ..., "tokens_in": ..., "tokens_out": ..., "cost_usd": ...}}`
+    与 `aggregated["efficiency"]` 嵌套子组 / `Response.usage` nested object 三层完全一致
+    （OpenAI / Anthropic / inspect_ai 派对齐）.
 
-    schema-on-data 的代价：mock 路径 metrics dict 多 4 个 0 占位（与 phase 4 锁的
-    "metrics 仍是 dict[str, float]" 兼容）；CLI 渲染层 `_print_aggregated` 对全 0
-    efficiency 子组折叠为 `<not measured>` 单行避免视觉误导（audit §1.7）.
+    schema-on-write（audit §1.3 选项 A + §7.D nested 统一）：永远写 `metrics["efficiency"]` 子组
+    含 4 efficiency 键，None / 缺失值 0.0 占位（语义"未测得"），与 aggregated.efficiency 子组永远
+    4 子组的 schema 哲学一致；下游 drill-down `s.metrics["efficiency"]["latency_ms"]` 不需要分支
+    判 KeyError.
+
+    CLI 渲染层 `_print_aggregated` 对全 0 efficiency 子组折叠为 `<not measured>` 单行避免视觉
+    误导（audit §1.7；递归形态对 phase 7+ 横切子组通用）.
 
     用 dataclasses.replace 保持 SampleResult frozen 语义.
     顺序约定：sample_results[i] ↔ responses[i]（与 runner._build_request 同序）.
@@ -222,11 +252,11 @@ def inject_per_sample_efficiency(
         tokens_out = usage.tokens_out if usage is not None else None
         cost = compute_cost_usd(model_label, tokens_in, tokens_out)
 
-        extra: dict[str, float] = {
+        eff_subgroup: dict[str, float] = {
             "latency_ms": float(resp.latency_ms) if resp.latency_ms is not None else 0.0,
             "tokens_in": float(tokens_in) if tokens_in is not None else 0.0,
             "tokens_out": float(tokens_out) if tokens_out is not None else 0.0,
             "cost_usd": float(cost) if cost is not None else 0.0,
         }
-        out.append(_replace(sr, metrics={**sr.metrics, **extra}))
+        out.append(_replace(sr, metrics={**sr.metrics, "efficiency": eff_subgroup}))
     return out

@@ -29,6 +29,10 @@ from .metrics.efficiency import (
     efficiency_aggregated,
     inject_per_sample_efficiency,
 )
+from .metrics.safety import (
+    inject_per_sample_safety,
+    safety_aggregated,
+)
 from .models.base import LM
 from .tasks.base import Task
 
@@ -115,9 +119,10 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _finalize(
+def _evaluate_inner(
     task: Task,
-    sample_results: list[SampleResult],
+    docs: list[Doc],
+    responses: list[Response],
     *,
     mode: EvalMode,
     model_label: str,
@@ -126,15 +131,40 @@ def _finalize(
     run_id: str,
     num_fewshot: int = 0,
 ) -> EvalResult:
-    """共享尾段：聚合 + 打包 EvalResult。score / run 两路径的合流点.
+    """Response 之后的双模式合流中段（phase 7 立的架构合流点）.
 
-    phase 6 起 run 模式额外注入 `aggregated["efficiency"]` 嵌套子组（latency / tokens /
-    cost）；score 模式不注入（无 LM 调用 → 无 efficiency 信号；显式让步而非 0/None 占位）.
-    嵌套子组协议为 phase 7+ 横切（safety / calibration / robustness）预留扩展位.
+    步骤（cross-cutting 顺序按 ontology 类分组；同类内按 phase 号续接）：
+      1. task.process_results per-sample 评分
+      2. content class injectors（双路径都跑；数据源 = Response.text 内容）
+         - inject_per_sample_safety: refusal_detected / jailbreak_attempted   [phase 7]
+         - phase 10 robustness 在此续接                                        [planned]
+      3. call class injectors（仅 run 跑；数据源 = LM 调用副产品 usage/latency/logprobs）
+         - inject_per_sample_efficiency: latency / tokens / cost              [phase 6]
+         - phase 9 calibration 在此续接                                        [planned]
+      4. 打包 EvalResult（aggregated + per_sample）
+
+    挂载规则（DECISIONS §7.A cross-cutting ontology）：
+      - aggregated["safety"]（content class）score / run 双路径都挂
+      - aggregated["efficiency"]（call class）仅 run 挂（score 无 LM 调用信号）
+
+    See: README §命名约定 cross-cutting 二分表 / DECISIONS §7.A ontology 二分原则 +
+    §7.B `_evaluate_inner` 中段重构 ADR.
     """
+    if len(docs) != len(responses):
+        raise RuntimeError(
+            f"doc/response length mismatch: docs={len(docs)} responses={len(responses)}"
+        )
+    sample_results: list[SampleResult] = [
+        task.process_results(doc, resp) for doc, resp in zip(docs, responses)
+    ]
+    sample_results = inject_per_sample_safety(sample_results, responses)
+    if mode == "run":
+        sample_results = inject_per_sample_efficiency(sample_results, responses, model_label)
+
     aggregated: dict[str, Any] = {
         name: fn(sample_results) for name, fn in task.aggregation().items()
     }
+    aggregated["safety"] = safety_aggregated(sample_results)
     if mode == "run":
         aggregated["efficiency"] = efficiency_aggregated(sample_results)
     return EvalResult(
@@ -146,7 +176,10 @@ def _finalize(
         per_sample=tuple(sample_results),
         run_id=run_id,
         created_at=started_at,
-        elapsed_ms=elapsed_ms,
+        # phase 7 audit P6：端到端跑分时间 round 到千分之一毫秒，避免落 result.json
+        # 时浮点精度泄露（实测 0.9334170026704669 这类 15 位小数对人无价值）.
+        # 不动 efficiency.latency_ms / cost_usd 等 LM 报值——dashboard / cost 累计真用得到亚 ms / 亚 cent 精度.
+        elapsed_ms=round(elapsed_ms, 3),
         num_fewshot=num_fewshot,
     )
 
@@ -163,7 +196,7 @@ def evaluate_score(
     步骤（3 步）：
       1. 取数据：task.docs()
       2. 读预测 + 直接评分：preds[doc.id] → Response(text=pred) → process_results
-      3. 合流：_finalize 做聚合 + 打包
+      3. 合流：_evaluate_inner（process_results + cross-cutting injectors + 打包）
 
     语义等价于 evaluate_run(task, PrerecordedLM(predictions_path))。
     """
@@ -173,7 +206,8 @@ def evaluate_score(
     docs = _collect_docs(task, limit)
     preds = _load_predictions(predictions_path)
 
-    sample_results: list[SampleResult] = []
+    docs_for_eval: list[Doc] = []
+    responses: list[Response] = []
     for doc in docs:
         if doc.id not in preds:
             raise KeyError(
@@ -183,15 +217,17 @@ def evaluate_score(
         # phase 4：让 task 自定 row → (doc', response) 翻译.
         # 默认 Task.load_prediction 只取 row['prediction']，与 phase 1 字节相同.
         enriched_doc, response = task.load_prediction(doc, preds[doc.id])
-        sample_results.append(task.process_results(enriched_doc, response))
+        docs_for_eval.append(enriched_doc)
+        responses.append(response)
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     model_label = source_label or f"preds:{Path(predictions_path).stem}"
     run_id = _generate_run_id(task.name, model_label, None)
 
-    return _finalize(
+    return _evaluate_inner(
         task,
-        sample_results,
+        docs_for_eval,
+        responses,
         mode="score",
         model_label=model_label,
         started_at=started_at,
@@ -214,8 +250,7 @@ def evaluate_run(
       1. 取数据
       2. 建请求（按 num_fewshot 拼 prompt）
       3. 批调模型  <-- 未来并发在这里：asyncio.gather + semaphore
-      4. per-sample 评分
-      5-6. 合流（_finalize 负责）
+      4. 合流：_evaluate_inner（process_results + cross-cutting injectors + 打包）
 
     `num_fewshot=0` 时 prompt 与 Phase 1 字节相同（_build_prompt 早 return）。
     `num_fewshot>0` 时从 `task.fewshot_docs()` 抽 K 条**非自身** example 拼到前面。
@@ -251,20 +286,13 @@ def evaluate_run(
                 f"LM returned {len(responses)} responses for {len(docs)} requests"
             )
 
-    sample_results = [
-        task.process_results(doc, resp) for doc, resp in zip(docs, responses)
-    ]
-    # phase 6：把 LM 适配器报的 latency/usage 拷进 SampleResult.metrics（per-sample 实测值）
-    # ；run-only 横切；不报数（MockLM / output_type='none' 占位 Response）→ 跳过该键，
-    # efficiency_aggregated 收集时自动忽略.
-    sample_results = inject_per_sample_efficiency(sample_results, responses, model_label)
-
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     run_id = _generate_run_id(task.name, model_label, seed)
 
-    return _finalize(
+    return _evaluate_inner(
         task,
-        sample_results,
+        docs,
+        responses,
         mode="run",
         model_label=model_label,
         started_at=started_at,

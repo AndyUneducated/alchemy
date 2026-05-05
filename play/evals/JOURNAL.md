@@ -181,3 +181,56 @@
 - CLI 折叠仅作用于详细模式（`cmd_run` / `cmd_score` 顶部输出）；`show` 索引模式（紧凑单行 dot-path）显式不折叠 —— 两套渲染对应"单 run 反馈降误导"vs"跨 run 对比保列对齐 / grep 友好"两种 UX 目的，分离规则 → DECISIONS §6.1
 - `tokens.total` 用 `int` 而非 `float`：整数计数语义；与 OpenAI `CompletionUsage` / `Counter.total()` 同源；`mean` 仍 `float`（avg 可有小数）→ DECISIONS §6.1
 - audit 中标 "应文档化" 4 项（elapsed_ms vs Σ latency_ms 口径差 / cost deterministic vs latency stochastic / cold-start 偏置 / run_id hash idempotent fingerprint）+ deferred 4 项（reproducibility metadata / 价格表用户扩展 API / 老 ollama daemon silent None / output_type='none' efficiency 全 0）本轮不动，留给后续单独 PR 处理
+
+## 2026-05-05 — Phase 7：横切 Safety 上线 + cross-cutting ontology 二分 + evaluate 中段合流 + sample.metrics nested 派统一
+
+### 功能
+
+- 新增 `safety` task 与 15 条低风险样本（6 harmful + 5 jailbreak + 4 benign），并提供 5 份 stub predictions（`safe` / `over_refuse` / `jailbreak_success` / `evasive` / `garbage`），可直接跑 score 矩阵教学
+- `score` 与 `run` 双路径均自动产出 `aggregated["safety"]`（4 stat：`refusal_rate` / `jailbreak_success_rate` / `over_refusal_rate` / `judge_safety_score`）及 `per_sample.metrics["safety"]` 子组（schema-on-write，永远 2 键 0/1 占位）
+- **核心反向叙事 evasive + safe.s11**：含拒答关键词但实际给绕行提示（evasive）vs 无拒答关键词但语义上是拒答（safe.s11）—— 双向暴露 heuristic 失明，judge 救场，与 phase 3 `wrong_fact` / phase 4 `wrong_fact` / phase 5 `wrong_decision` 同源
+- CLI 完整可达：`--task safety` 走 `_build_task_with_optional_deps` 注入；`--judge-model` 接 `Safety(judge_lm=...)`；`--vdb` 显式 SystemExit（safety 非 retrieval task）
+- 全量 243 → 281 测试通过（新增 38 条 safety 相关 + 2 条结构性焊接锁）
+
+### 技术
+
+- **cross-cutting ontology 二分（架构升级，不只是文档）**：`content class`（数据源 = `Response.text`，score/run 双路径都能算 → safety / robustness）vs `call class`（数据源 = LM 调用副产品 usage/latency/logprobs，仅 run 能算 → efficiency / calibration）；phase 6 "score 不挂 efficiency" 的事后追认升级为明文原则，phase 9/10 横切按 ontology 直接对号入座
+- **evaluate 中段合流 `_evaluate_inner` 重构**：拉出共享 helper（`process_results` → content-class injectors → run-only call-class injectors → 打包），删除 `_finalize` 不留过渡函数；`evaluate_score` / `evaluate_run` 双入口仅负责"如何拿 (docs, responses)"；跨模式分叉点缩到 1 个 `if mode == "run":`
+- **`SampleResult.metrics` nested 派统一**（supersede phase 6 audit §6.1 §1.3 单项）：类型签名从 `dict[str, float]` 放宽为 `dict[str, float | dict[str, float]]`；cross-cutting 横切走嵌套子组（`metrics["efficiency"]` / `metrics["safety"]`），与 `Response.usage` nested object / `aggregated[<dim>]` 嵌套子组三层完全一致（OpenAI / Anthropic / inspect_ai SDK 派）
+- **新 metric 模块 `metrics/safety.py`**：AdvBench (Zou et al. 2023) + 中文自补的 refusal heuristic 关键词列表（~37 条）+ `is_refusal` / `is_jailbreak_attempted` / `MIN_RESPONSE_LEN=10` 阈值；`inject_per_sample_safety` runner injector + `safety_aggregated` 4 stat schema-on-write；显式不重复造 judge closure，仅暴露 `DEFAULT_SAFETY_JUDGE_TEMPLATE` 常量供 task 端复用 phase 3 `judge_core.judge_pointwise`（同源 phase 5 plan_quality 复用 g_eval）
+- **新 task `tasks/safety.py`**：`@register_task("safety")`，可选 `judge_lm` 注入；`process_results` 只做 judge_safety_score，不算 refusal/jailbreak（runner injector 跨 task 统一负责）；category 落 `SampleResult.artifacts["safety_category"]`（非标量字符串走 artifacts 而非 metrics，与 §7.D 类型签名一致）
+- **结构性焊接锁**：`test_inner_helper_invoked_by_both_modes` 用 monkey-patch 焊死"score/run 双入口必经 `_evaluate_inner`"；`test_safety_inject_runs_before_efficiency` 用 spy 焊死"content class 注入先于 call class"——把 ontology 二分映射到代码层执行顺序
+- **测试套增量**：`test_metrics_safety.py`(19) / `test_safety_score.py`(7 含 5 份 stub 矩阵) / `test_safety_run.py`(3 含 mock:gold parity) / `test_runner_safety.py`(8 含跨 task 横切 + 结构性焊接锁) + 修订 phase 6 测试 ~10 处适配 nested 派访问路径
+
+### 取舍
+
+- runner 中段合流选择 B（`_evaluate_inner` helper）而非 A（双尾段维持）：净复杂度下降（+1 抽象层 vs 跨模式分叉风险消除 + phase 9/10 增量降至改一处）→ DECISIONS §7.B
+- `SampleResult.metrics` 命名选 nested 派（C）而非 flat 派（A）/ prefix 派（B）：与 `Response.usage` / `aggregated["efficiency"]` 三层一致；parity helper `_task_metrics` 简化（剥单层子组 key 而非 N 个 flat key）；phase 9/10 加新维度无 namespace 冲突 → DECISIONS §7.D
+- 复用 `judge_core.judge_pointwise` + `DEFAULT_SAFETY_JUDGE_TEMPLATE`，不在 `metrics/safety.py` 重复造 judge closure factory（同源 phase 5 plan_quality 复用 g_eval）→ DECISIONS §7.C
+- category 字符串落 `artifacts["safety_category"]` 而非 plan 原拟的 `metrics["_safety_category"]`：§7.D 类型签名收紧后字符串在 metrics 上违法；与 phase 4 立的 MLflow scalar/non-scalar 二分一致 → DECISIONS §7.C
+- safe.jsonl 矩阵叙事走 fix-B（保留 fixture + 文档反映真实数值）而非 fix-A（修 fixture 让数字配合 heuristic）：与 evasive / wrong_* 反向叙事哲学一致——"暴露局限而非粉饰" → README phase 7 段
+- supersede phase 6 audit §6.1 §1.3 单项（sample 层 4 efficiency 键 flat 写法 → nested 子组），其余 6 项 audit 修订仍生效 → DECISIONS §6.1 / §7.D
+- 三类显式不做：Perspective API（zero-network 原则）/ multi-turn jailbreak（phase 1-7 都 single-turn）/ HarmBench-AdvBench scale 集成（workshop 体量，~15 条手写 stub 已够矩阵叙事） → DECISIONS §7.C
+
+> 日期归属说明：phase 7 实际工时跨 2026-05-04 → 05-05 边界（中段重构 + safety 落地 + 二轮审计 + 三轮审计修订共 4 段工作）；按 workshops.mdc "≤2 milestone/working day" 规则，5-04 已用满 phase 6 + phase 6 follow-up 两条，phase 7 归为 5-05 起始里程碑。
+
+### Audit follow-up（同日追加，phase 7 实测产物反推 4 项）
+
+跑完 phase 7 全量 281 测试 + 6 个端到端 demo（5 份 safety stub × score + ollama:qwen2.5:32b run）后，从 CLI 输出 / `result.json` / `samples.jsonl` 三类产物形态反推出 4 项工程问题（同 §6.1 audit 体例，实测驱动而非纸面设计）：
+
+- **P1（严重，已修）**：CLI `_print_aggregated` 把 safety 全 0 子组折叠为 `<not measured>`，但 garbage prediction 短文本路径下 safety 全 0 是合法 metric 值（heuristic 真跑了），折叠语义错。修法：cross-cutting dim 走 trait 协议——`metrics/efficiency.py` / `metrics/safety.py` 顶部声明 `FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO`（call class True / content class False），CLI 通过 `_should_fold_when_all_zero(dim)` 中性查询；按 ontology 二分一一对应，phase 9/10 加新维度声明 trait 即可不改 CLI
+- **P2（中，已修）**：`safety_aggregated` 用 0 占位 4 stat，但 `judge_safety_score=0` 在 1-5 scale 上越界（0 等价"未测得"而非"模型得 0 分"）；切片为空的 jailbreak/over_refusal 同问题。修法：返回类型放宽 `dict[str, float | None]`；`refusal_rate` 永远 float（heuristic 永远算）；其它 3 stat 在切片为空 / 未接 judge 时 None；CLI `_fmt_kv` 加 `None → <n/a>` 渲染分支；落 `result.json` 出现 `null`（向前兼容增强非删减）
+- **P3（轻，文档化）**：score 路径不挂 efficiency → 不调 `compute_cost_usd` → `preds:*` 不查价格表，是 ontology 二分的合理产物而非 fail-silent。在 `metrics/efficiency.py::compute_cost_usd` docstring + DECISIONS §6.1 §1.4 + README phase 6 段三处显式记录
+- **P6（轻，已修）**：`runner.py::_evaluate_inner` 创建 `EvalResult` 时 `elapsed_ms = round(x, 3)`；不动 `efficiency.latency_ms` / `cost_usd` 等 LM 报值（dashboard / cost 累计真用得到亚 ms / 亚 cent 精度）
+
+技术副产物：
+
+- `_is_all_zero_nested` 加 `None` 视为零类信号（与"全 0 折叠"语义对齐，但实际是否折叠由 trait gate 决定）
+- 测试套增量：+8 条（trait 协议正反例 + None 占位 + `<n/a>` 渲染 + content/call 混合场景） + ~4 处现有 assert 修订（`== 0.0` → `is None`）；全量 281 → 289 测试通过
+- README phase 7 矩阵表 + C.6 toxicity 表 + "None 与 0 的语义分离"小节 + "CLI 折叠规则 trait 派"小节四处同步
+
+取舍：
+
+- P2 选 all-undefined 范围而非 judge-only：4 stat 协议一致性优先；切片为空的 jailbreak/over_refusal 同样适用 None，避免"未测得 vs 真 0"在 1 个 stat 上严格但在 3 个 stat 上模糊 → DECISIONS §7 audit follow-up
+- efficiency 不改 None 占位：phase 6 audit §1.3 立的 sample 层 0 占位决策保留，由 P1 trait 折叠覆盖渲染语义；让 efficiency / safety 各自走"trait 折叠 vs None 占位"两种风格，是 ontology 二分在数据契约层面的自然延伸
+- 不破 schema-on-write 哲学：dict 形状仍稳定（safety 永远 4 键），只是值可为 None；"形状稳定 + 值可空"是 schema-on-write 的精确表达

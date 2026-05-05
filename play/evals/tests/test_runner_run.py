@@ -23,18 +23,21 @@ PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "pred
 MT_PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
 
 
-_EFF_KEYS = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
+# phase 7 §7.D nested 派后 cross-cutting 子组在 sample.metrics 与 aggregated 同构,
+# 都用 dim 名作为 key（efficiency / safety），剥离体例统一.
+_CROSS_CUTTING_SUBGROUPS = {"efficiency", "safety"}
 
 
 def _task_agg(agg: dict) -> dict:
-    """剥离 phase 6 cross-cutting 子组，只保留 task-specific 顶层指标."""
-    return {k: v for k, v in agg.items() if k != "efficiency"}
+    """剥离 cross-cutting 子组，只保留 task-specific 顶层指标."""
+    return {k: v for k, v in agg.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
 def _task_metrics(metrics: dict) -> dict:
-    """剥离 phase 6 audit §1.3A 的 4 个 efficiency 占位字段，只留 task-specific metrics.
-    run 路径写 0 占位，score 路径不写——剥离后 task 层 parity 仍成立."""
-    return {k: v for k, v in metrics.items() if k not in _EFF_KEYS}
+    """剥离 phase 7 §7.D nested 派的 cross-cutting 嵌套子组（efficiency / safety），只留 task-specific metrics.
+    run 路径写 cross-cutting 子组（0 占位或真实数值），score 路径只写 content class 子组（safety），
+    剥离后 task 层 parity 仍成立."""
+    return {k: v for k, v in metrics.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
 def test_run_gold_runs_full_accuracy():

@@ -116,12 +116,12 @@ def test_artifacts_carry_pred_and_gold_ids():
         assert len(s.artifacts["gold_ids"]) > 0
 
 
-def test_metrics_dict_stays_scalar():
-    """metrics 严守空 dict（本 task 无 per-sample 标量；非标量都进 artifacts）.
-
-    锁住"metrics: dict[str, float]"契约，防回归出 list[str] 偷塞污染.
-    """
+def test_metrics_only_contains_cross_cutting_safety_subgroup():
+    """rag_retrieval 本身不写 per-sample 标量；仅有 runner 注入的 safety 子组."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:
-        assert s.metrics == {}
+        assert set(s.metrics.keys()) == {"safety"}
+        sub = s.metrics["safety"]
+        assert isinstance(sub, dict)
+        assert set(sub.keys()) == {"refusal_detected", "jailbreak_attempted"}
