@@ -21,7 +21,7 @@ import urllib.error
 import urllib.request
 from typing import ClassVar
 
-from ..api import Request, Response
+from ..api import Request, Response, Usage
 from .base import LM
 
 
@@ -52,7 +52,16 @@ class OllamaLM(LM):
         self.name = f"ollama:{model}"
 
     def generate_until(self, requests: list[Request]) -> list[Response]:
-        """串行调用 /api/generate；phase 1+ 并发优化在 runner 层做（统一对所有 LM）."""
+        """串行调用 /api/generate；phase 1+ 并发优化在 runner 层做（统一对所有 LM）.
+
+        phase 6 起填 Response.usage / latency_ms：
+          - `prompt_eval_count` → Usage.tokens_in（缺字段 → None）
+          - `eval_count` → Usage.tokens_out（缺字段 → None）
+          - `total_duration`（ns）→ latency_ms（ns / 1e6）；ollama 报的端到端时间，
+            比 perf_counter 更准（不含 Python 调用栈 / urllib socket 排队）.
+        老版本 ollama 服务可能不返回这些字段——getattr 风格 .get(...) 返 None，
+        与 efficiency_aggregated"非 None 收集"协议天然兼容.
+        """
         out: list[Response] = []
         for req in requests:
             options: dict = {
@@ -80,5 +89,21 @@ class OllamaLM(LM):
             with urllib.request.urlopen(http_req, timeout=self.request_timeout) as resp:
                 data = json.loads(resp.read())
             text = data.get("response", "") or ""
-            out.append(Response(doc_id=req.doc_id, text=text))
+            tokens_in = data.get("prompt_eval_count")
+            tokens_out = data.get("eval_count")
+            usage: Usage | None = None
+            if tokens_in is not None or tokens_out is not None:
+                usage = Usage(tokens_in=tokens_in, tokens_out=tokens_out)
+            total_duration_ns = data.get("total_duration")
+            latency_ms: float | None = None
+            if total_duration_ns is not None:
+                latency_ms = float(total_duration_ns) / 1_000_000.0
+            out.append(
+                Response(
+                    doc_id=req.doc_id,
+                    text=text,
+                    latency_ms=latency_ms,
+                    usage=usage,
+                )
+            )
         return out

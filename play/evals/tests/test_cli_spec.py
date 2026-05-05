@@ -153,3 +153,114 @@ def test_build_sentiment_clf_with_vdb_raises_systemexit():
     """非 RAG task + --vdb → SystemExit（fail-fast）."""
     with pytest.raises(SystemExit, match="rag"):
         _build_task_with_optional_deps("sentiment_clf", vdb="/tmp/fake_vdb")
+
+
+# ---------- Phase 6 _fmt_kv 嵌套打印（aggregated efficiency 子组的 CLI 落点） ----------
+
+from evals.cli import _fmt_kv, _fmt_row  # noqa: E402
+
+
+def test_fmt_kv_flat_scalar_unchanged():
+    """老 phase 1-5 平铺指标 (k, float) → "k=v.4f"（与原 _fmt_row 字节相同）."""
+    assert _fmt_kv("accuracy", 0.875) == ["accuracy=0.8750"]
+    assert _fmt_kv("f1_macro", 1.0) == ["f1_macro=1.0000"]
+
+
+def test_fmt_kv_nested_subgroup_uses_dot_path():
+    """phase 6 嵌套：efficiency.latency_ms.p50=... 形式（HELM-style 路径，cross-run 友好）."""
+    out = _fmt_kv("efficiency", {"latency_ms": {"p50": 12.5, "p95": 50.0}})
+    assert "efficiency.latency_ms.p50=12.5000" in out
+    assert "efficiency.latency_ms.p95=50.0000" in out
+
+
+def test_fmt_row_includes_efficiency_keys_when_present():
+    """index row 的 _fmt_row 端到端：含 efficiency 子组的 aggregated 也打印 dot-path 形式."""
+    row = {
+        "run_id": "r1",
+        "task": "sentiment_clf",
+        "mode": "run",
+        "model": "mock:gold",
+        "n": 30,
+        "aggregated": {
+            "accuracy": 1.0,
+            "efficiency": {"latency_ms": {"p50": 0.0, "p95": 0.0, "mean": 0.0}},
+        },
+    }
+    s = _fmt_row(row)
+    assert "accuracy=1.0000" in s
+    assert "efficiency.latency_ms.p50=0.0000" in s
+
+
+# ---------- audit §1.7：嵌套子组全 0 折叠为 <not measured> ----------
+
+from evals.cli import _is_all_zero_nested, _print_aggregated  # noqa: E402
+
+
+def test_is_all_zero_nested_true_for_nested_zeros():
+    """全 0 嵌套（mock 路径 efficiency 子组形态）→ True."""
+    eff = {
+        "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
+        "tokens_in": {"total": 0, "mean": 0.0},
+        "tokens_out": {"total": 0, "mean": 0.0},
+        "cost_usd": {"total": 0.0, "mean": 0.0},
+    }
+    assert _is_all_zero_nested(eff) is True
+
+
+def test_is_all_zero_nested_false_when_any_nonzero():
+    """任一 leaf 非 0 → False（real LM 跑出真数据时不折叠）."""
+    eff = {
+        "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
+        "tokens_in": {"total": 178, "mean": 59.33},  # 非 0
+        "tokens_out": {"total": 0, "mean": 0.0},
+        "cost_usd": {"total": 0.0, "mean": 0.0},
+    }
+    assert _is_all_zero_nested(eff) is False
+
+
+def test_print_aggregated_collapses_zero_efficiency(capsys):
+    """mock 路径 efficiency 全 0 → 折叠为单行 `<not measured (no LM signal)>`，
+    替代 11 行 0 占位的视觉误导（"latency=0.0000" 看着像超低延迟而非未测得）."""
+    agg = {
+        "accuracy": 1.0,
+        "efficiency": {
+            "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
+            "tokens_in": {"total": 0, "mean": 0.0},
+            "tokens_out": {"total": 0, "mean": 0.0},
+            "cost_usd": {"total": 0.0, "mean": 0.0},
+        },
+    }
+    _print_aggregated(agg)
+    out = capsys.readouterr().out
+    assert "accuracy" in out and "1.0000" in out
+    assert "<not measured" in out
+    assert "efficiency.latency_ms" not in out  # 不再展开 11 行
+
+
+def test_print_aggregated_expands_nonzero_efficiency(capsys):
+    """real LM 跑出真数据时不折叠，按 dot-path 展开（信号路径不破）."""
+    agg = {
+        "accuracy": 1.0,
+        "efficiency": {
+            "latency_ms": {"mean": 899.3, "p50": 687.0, "p95": 1274.7, "max": 1339.9},
+            "tokens_in": {"total": 178, "mean": 59.33},
+            "tokens_out": {"total": 12, "mean": 4.0},
+            "cost_usd": {"total": 0.000152, "mean": 0.0000507},
+        },
+    }
+    _print_aggregated(agg)
+    out = capsys.readouterr().out
+    assert "<not measured" not in out
+    assert "efficiency.latency_ms.p50" in out
+    assert "efficiency.latency_ms.max" in out  # audit §1.2 新加
+    assert "efficiency.cost_usd.mean" in out  # audit §1.1 新加
+
+
+def test_print_aggregated_does_not_collapse_zero_task_metric(capsys):
+    """任务自身指标即使为 0 也不折叠（accuracy=0 是真实信号，不是"未测得"）；
+    折叠只对嵌套子组生效."""
+    agg = {"accuracy": 0.0, "f1_macro": 0.0}
+    _print_aggregated(agg)
+    out = capsys.readouterr().out
+    assert "accuracy" in out and "0.0000" in out
+    assert "<not measured" not in out

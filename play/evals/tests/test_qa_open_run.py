@@ -30,11 +30,18 @@ def test_run_gold_judge_equals_score_perfect_judge():
     task_score = QAOpen(judge_lm=_jaccard_fake())
     r_score = evaluate_score(task_score, PRED_DIR / "perfect.jsonl")
 
-    assert r_run.aggregated == r_score.aggregated
+    # phase 6 起 run 多 efficiency 子组（cross-cutting）+ audit §1.3A sample 层 efficiency
+    # 占位字段；剥离后 task-specific parity 仍成立
+    _eff_keys = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
+    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
+    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _eff_keys}  # noqa: E731
+    assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
+    assert "efficiency" in r_run.aggregated
+    assert "efficiency" not in r_score.aggregated
     assert r_run.n == r_score.n
 
-    a_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_run.per_sample]
-    o_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_score.per_sample]
+    a_pairs = [(s.doc_id, s.prediction, s.target, task_metrics(s.metrics)) for s in r_run.per_sample]
+    o_pairs = [(s.doc_id, s.prediction, s.target, task_metrics(s.metrics)) for s in r_score.per_sample]
     assert a_pairs == o_pairs
 
 

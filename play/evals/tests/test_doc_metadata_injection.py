@@ -135,5 +135,10 @@ def test_run_score_parity_via_metadata_injection():
     from evals.runner import evaluate_score
     r_score = evaluate_score(RagRetrieval(), tmp_path)
 
-    assert r_run.aggregated == r_score.aggregated
+    # phase 6 起 run 多 efficiency 子组（cross-cutting AOP），score 路径无 LM 调用故不注入；
+    # parity 在 task-specific 指标层面成立.
+    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
+    assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
+    assert "efficiency" in r_run.aggregated
+    assert "efficiency" not in r_score.aggregated
     assert r_run.n == r_score.n

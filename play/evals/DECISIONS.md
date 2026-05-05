@@ -288,3 +288,170 @@ ADR（Architecture Decision Record）归档。每条以 `## n. 标题` 开头，
 - **agent_engine artifact_event 加 arguments 字段**：phase 5 驱动的 5 处 additive 改造，让 run 路径 argument_correctness 有真数据
 - **测试 gate**：复用 ollama-probe + 加 agent_engine-probe（包 + brainstorm.md 存在性）双层；缺任一即 skip + 友好提示
 - **run-path mock 显式不做**：写入"风险与显式不做"表，与 phase 4 RAG 同源，原则 5 parity 让步
+
+## 6. Phase 6 横切 Efficiency
+
+- **Status**: accepted
+- **Date**: 2026-05-04
+
+### Scope
+
+|模块|内容|
+|---|---|
+|新 metric 模块 [`metrics/efficiency.py`](metrics/efficiency.py)|`_PRICE_PER_1M_TOKENS` 价格表（4 entry：ollama:qwen2.5:32b + openai:gpt-4o-mini + anthropic:claude-3-5-haiku-20241022 + gemini:gemini-1.5-flash） + `compute_cost_usd(model, in, out)` + `efficiency_aggregated(srs)` 返回 4 子组嵌套 dict + `inject_per_sample_efficiency(srs, resps, model)` runner injector|
+|契约层加 1 嵌套 dataclass [`api.py::Usage`](api.py)|`{tokens_in: int \| None, tokens_out: int \| None}`；嵌入 `Response.usage`，与 OpenAI / Anthropic / inspect_ai SDK 同形|
+|`Response` 新增字段|`latency_ms`（pre-existing 占位字段 phase 6 真填）+ `usage: Usage \| None`（phase 6 新加）；老 `Response(doc_id, text)` 调用点完全不破|
+|`EvalResult.aggregated` 类型放宽|`dict[str, float]` → `dict[str, Any]`（实际形态 `dict[str, float \| dict]`）；老平铺 schema 仍合法|
+|[`runner.py`](runner.py) 加横切注入|`evaluate_run` 在 `task.process_results` 之后调 `inject_per_sample_efficiency` 把 latency/usage 拷进 `SampleResult.metrics`；`_finalize` 在 `mode='run'` 分支挂 `aggregated["efficiency"] = efficiency_aggregated(srs)`|
+|[`models/ollama.py`](models/ollama.py) 解析|`/api/generate` 响应的 `prompt_eval_count` / `eval_count` / `total_duration` 三字段填入 `Response.usage` / `Response.latency_ms`|
+|[`cli.py`](cli.py) `_fmt_kv` + `_fmt_row` + `_print_aggregated`|嵌套 dict 递归打印为 dot-path（`efficiency.latency_ms.p50=12.50`），cmd_score / cmd_run 顶部 + `show` index row 全适配|
+|测试套（27 条新断言 + 修订 8 条 parity）|`test_metrics_efficiency.py`(13) + `test_runner_efficiency.py`(6) + `test_api_contract_extension.py`(+5) + `test_ollama_lm.py`(+1) + `test_cli_spec.py`(+3)；改 `test_runner_run.py` / `test_doc_metadata_injection.py` / `test_runner_task_hooks_compat.py` / `test_qa_open_run.py` 8 处 parity 断言为 task-keys subset 比对 + 显式断言 score 不含 efficiency 子组|
+
+### Implementation
+
+|侧面|做法|
+|---|---|
+|cross-cutting AOP 风格|task 不改 `process_results` / `aggregation`，零 task-side 增量；横切由 runner 在 `_finalize` 注入 + `inject_per_sample_efficiency` 在 process_results 之后注入。phase 7+（safety / calibration / robustness）按同协议追加，每加一个新 task 不会因为新横切多写一行 task 代码|
+|`Usage` 嵌套而非顶层平铺|与 OpenAI `CompletionUsage` / Anthropic `Usage` / inspect_ai `ModelUsage` 同形：嵌套 typed object 让多模型生态扩展（reasoning_tokens / cached_tokens / audio_tokens）时只动 `Usage` 字段，不污染顶层 `Response` schema；`Response.usage = None` 默认值保证老 `Response(doc_id, text)` 调用点完全不破|
+|`aggregated` 嵌套子组而非平铺|HELM 7 维度作 ontology：cross-cutting 维度（efficiency / safety / calibration / robustness）各占一个 nested namespace，task-specific 指标（accuracy / f1 / em / rouge_l / task_success / cohens_kappa / ...）继续顶层平铺；phase 6 起 `aggregated` 类型放宽到 `dict[str, Any]`，老 score 路径全平铺仍合法（`test_eval_result_aggregated_still_accepts_flat_only` 锁住）|
+|价格表 per 1M tokens 单位|与 OpenAI / Anthropic / Together / Fireworks 公开报价同单位，entry 直接复制粘贴免人脑除 1000；4 entry 覆盖 ollama:qwen2.5:32b（默认本地）+ external 三家各一最便宜调试 SKU（cli.py EXTERNAL_PROVIDERS 三家全覆盖；phase 3 NotImplementedError 暂跑不到，但 entry 在不破坏，phase 3+ 启用时即用）|
+|cost = 0 vs cost = None 边界|`compute_cost_usd` 协议：tokens_in/out 任一 None → cost None（不污染 None 收集协议）；model 不在表 → cost 0.0（语义"不计费"，mock 路径与未填的 ollama tag 同；不报错避免 fail-loud over-engineering）|
+|百分位 stdlib 实现|`statistics.quantiles(data, n=100, method='inclusive')` 等价 `numpy.percentile(linear)` 的 1..99 整数 cutpoint；项目 phase 1-5 现有代码 0 处显式 import numpy，新建模块继续保持。`_percentile` helper 兜底单元素 / 空列表，避免 `quantiles` 要求 n>=2 的 ValueError 在小 batch 下爆|
+|run-only 注入|`_finalize` 仅在 `mode='run'` 分支挂 efficiency 子组：score 路径无 LM 调用 → 真无 efficiency 信号，注入 0/None 占位是数据噪音；显式让步好过 stretch schema|
+|MockLM 不报|MockLM 不打 LM，不填 latency_ms / usage；`efficiency_aggregated` 收集时跳过 None → 4 子组键值全 0 但 schema 在；run mock 路径仍可演示 efficiency schema 的下游消费（CLI 渲染 / W&B dashboard / SQLite read model），但数值 = 0 是诚实的|
+|parity test 改子集比对|`test_*` 8 处 parity 断言（`test_runner_run.py` x5 + `test_doc_metadata_injection.py` x1 + `test_runner_task_hooks_compat.py` x2 + `test_qa_open_run.py` x1）改为 `task_agg(r_run.aggregated) == task_agg(r_score.aggregated)`（剥离 efficiency 子组）+ 显式断言 score 不含 efficiency / run 含。架构等价性保留：efficiency 是 cross-cutting 增量不是 task 尾段路径分叉|
+|`SampleResult.metrics` 仍 dict[str, float]|per-sample efficiency 字段（latency_ms / tokens_in / tokens_out / cost_usd）按 float 写入 metrics dict；不破 phase 4 锁定的"metrics 仍只装标量"语义契约|
+
+### Options considered
+
+**`Response` token 字段 schema**：
+
+- **`Response.usage: Usage \| None` 嵌套**（选择）—— 与 OpenAI / Anthropic / inspect_ai SDK 同形；多模型生态扩展（reasoning_tokens / cached_tokens / audio_tokens）只动 `Usage` 不污染顶层；老调用点 `Response(doc_id, text)` 不破
+- 顶层平铺 `Response.tokens_in / Response.tokens_out` —— 排除：未来加 reasoning/cached tokens 时顶层 `Response` 字段膨胀；与行业 SDK 嵌套对象惯例不一致
+- 走 `Response.metadata: dict` —— 排除：失去 typed object 优势；IDE 无字段提示；序列化反序列化无 schema 锁
+
+**`aggregated` 命名结构（efficiency 落点）**：
+
+- **嵌套子组 `aggregated["efficiency"][group][stat]`**（选择）—— HELM 7 维度作 ontology，cross-cutting 维度各占独立 namespace；同名指标跨 phase 位置不漂移（cohens_kappa 在 phase 1 / 8 都顶层）；phase 7+ safety / calibration / robustness 按协议追加，扩展 zero-cost
+- 平铺 `aggregated["latency_ms_p50"]` / `aggregated["latency_ms_p95"]` —— 排除：phase 7+ 加 safety_refusal_rate / calibration_ece 时顶层键空间继续膨胀；与 task-specific 指标平起平坐导致 namespace 污染（accuracy 与 latency_ms_p50 同位语义错位）
+- 子组按"方法学族"分类（如 `aggregated["agreement"]["cohens_kappa"]`）—— 排除：会让 task-specific 指标跨 phase 位置漂移（phase 1 顶层 cohens_kappa，phase 8 改为 `agreement.cohens_kappa`），破坏 cross-run JSON_EXTRACT 路径稳定
+
+**efficiency 子组 schema-on-write 还是 schema-on-data**：
+
+- **永远填 4 子组（schema 稳定）**（选择）—— MockLM 不报 → 子组键值全 0，子组 keys 在；下游消费（CLI 渲染 / W&B / SQLite read model）可写一份 schema 不需分支判 None；schema-on-write 对 cross-run 索引最友好
+- schema-on-data：无 efficiency 信号则不注入 `aggregated["efficiency"]` —— 排除：让 mock run 与 real run 的 schema 不同（mock 不带子组，real 带），CLI / dashboard 必须 if-branch；schema 漂移成本远大于 0 占位的"轻微误导"
+
+**`_PRICE_PER_1M_TOKENS` 是否预填**：
+
+- **预填 4 entry**（选择）—— ollama:qwen2.5:32b（项目默认）用 Together AI / Fireworks 开源平台报价做 "如果在 cloud 跑会花多少" 类比，给本地教学一个非零数字；external 三家各一最便宜调试 SKU 覆盖 cli.py EXTERNAL_PROVIDERS，phase 3+ 启用即用；entry 在不破坏，价变时手动同步
+- 空启动 + docstring 说"phase 3 启用时填" —— 排除：mock / ollama 永远 0，cost_usd 字段失去演示价值；用户首次 run 看到 cost=0 不知道是"未填"还是"真免费"
+- 全量集成 [tokencost](https://github.com/AgentOps-AI/tokencost) —— 排除：phase 6 仅 4 entry 不值得引依赖；tokencost 表单价更新有滞后；phase 3+ 真启用 external provider 时再考虑切
+
+**price 单位 per 1K vs per 1M tokens**：
+
+- **per 1M tokens**（选择）—— 与 OpenAI / Anthropic / Together / Fireworks 公开报价同单位，entry 直接复制粘贴免人脑除 1000；行业近 2 年统一往 per-1M 迁
+- per 1K tokens —— 排除：与 OpenAI 老定价页同源但与新页 mismatch；维护时容易 transcribe error
+
+**`(input_price, output_price)` tuple vs 单一价格**：
+
+- **二元 tuple**（选择）—— 行业惯例 input != output（output 是 autoregressive decode，4-5x input 价；anthropic claude-3-5-haiku 锁了 5x 倍数）；开源平台 Together / Fireworks 常 1:1，可填同值；保留区分能力
+- 单一 price —— 排除：忽略主流闭源 provider 的 in/out 差异，cost 数字偏低；演示意图（教学 cost-aware）受损
+
+**percentile 实现**：
+
+- **stdlib `statistics.quantiles`**（选择）—— 项目 phase 1-5 现有代码 0 处显式 import numpy，新建模块继续无新依赖；3-line `_percentile` helper 兜底空 / 单元素列表
+- numpy `np.percentile` —— 排除：项目 sklearn / scipy 已传递引 numpy 但 evals 自己代码不显式 import，保持一致性
+- 自实现 sort + index —— 排除：与 numpy linear interp 行为容易差几个数值（quartile 端点处理），用 stdlib 已有实现是 KISS
+
+**MockLM 是否估算 efficiency**：
+
+- **不估算，永远报 None**（选择）—— "显式 None > 不准估算"原则；引 tiktoken 估 token 数 + 用 perf_counter 估 latency 都是噪音；mock 路径的核心价值是 task 逻辑教学（accuracy / f1 / kappa 数学），efficiency 演示让位给 ollama:qwen2.5:32b 真跑（已 ollama_required gate ready）
+- 估算 token 数（tiktoken / 分词字符长度）+ 测 perf_counter latency —— 排除：tiktoken vs Ollama tokenizer 误差大；perf_counter 含 Python 调用栈不是端到端 latency；噪音 > 信号
+
+**reproducibility metadata（stderr / schema_version / git_hash / fewshot_seed list / system_prompt_hash 等 7 项 known gaps）**：
+
+- **deferred 至后续 phase**（选择）—— phase 6 scope 严守"runner 自动采集 efficiency"原则；reproducibility metadata 是与 efficiency 正交的独立维度（HELM "metadata" 与 "efficiency" 是两个维度），phase 11+ 单独成 ADR 处理
+- 与 phase 6 一并落地 —— 排除：scope creep；7 项各自有独立设计决策（如 stderr 怎么算、git_hash 怎么获取、schema_version 升级策略），混在一个 phase 增加 review 难度
+
+### Decision
+
+- **嵌套契约**：`Response.usage: Usage | None` 嵌套 dataclass + `EvalResult.aggregated: dict[str, Any]` 类型放宽，cross-cutting 维度走 `aggregated[<dim>]` 嵌套子组（HELM 7 维度作 ontology），task-specific 指标继续顶层平铺
+- **runner 自动注入**：`evaluate_run` 在 `task.process_results` 后调 `inject_per_sample_efficiency` 拷 per-sample 实测值；`_finalize` 在 run 模式注入 `aggregated["efficiency"]` 子组（4 group × 1-3 stat 永远 schema 稳定）；score 模式不注入
+- **价格表 4 entry 预填**：ollama:qwen2.5:32b（默认本地，cloud-equiv 价 $0.80/1M 同价）+ openai:gpt-4o-mini ($0.15/$0.60) + anthropic:claude-3-5-haiku-20241022 ($1.00/$5.00) + gemini:gemini-1.5-flash ($0.075/$0.30)；per 1M tokens × (in_price, out_price) tuple；未命中 model → cost 0.0（mock / 未填 tag 同）
+- **stdlib 算 percentile**：`statistics.quantiles(method='inclusive')`，3 行 `_percentile` helper 兜底空/单元素；不引 numpy
+- **OllamaLM 真填**：解析 `/api/generate` 的 `prompt_eval_count` / `eval_count` / `total_duration` 写入 `Response.usage` / `Response.latency_ms`
+- **CLI 嵌套打印**：`_fmt_kv` 递归 dot-path（`efficiency.latency_ms.p50=12.50`）；`cmd_score` / `cmd_run` 顶部 + `show` index row 全适配
+- **parity test 改子集比对**：8 处 `r_run.aggregated == r_score.aggregated` 改为 `task_agg(r_run) == task_agg(r_score)`（剥离 efficiency 子组）+ 显式锁"score 不含 efficiency / run 含"，架构等价性在 task-specific 指标层面保留
+- **MockLM 不估算**：mock 路径 efficiency 子组键值全 0；显式 None > 不准估算；efficiency 演示让位给 ollama 真跑（conftest ollama_required gate ready）
+- **reproducibility metadata 显式 deferred**：stderr / schema_version / git_hash / fewshot_seed list / system_prompt_hash / dataset_revision_hash / lm_call_seed 7 项 known gaps 记入"已知缺口"清单，phase 11+ 单独成 ADR 处理
+
+## 6.1. Phase 6 efficiency follow-up（基于实测产物反向审查）
+
+- **Status**: accepted
+- **Date**: 2026-05-04
+
+### Scope
+
+phase 6 上线后跑全量 233 测试 + 端到端 demo 落盘 4 个 run（mock / score / ollama×2），从 `result.json` / `samples.jsonl` / CLI stdout 反向审查；用户从 `AUDIT.md §1.1-1.7` 确认要修的 7 项一致性 / fail-loud / 渲染问题。
+
+|侧面|改动|来源|
+|---|---|---|
+|`aggregated.efficiency.cost_usd` 加 `mean`|与 `tokens_in/out.{total,mean}` 对称；per-call 平均成本是用户对比 model 时的核心信号|audit §1.1|
+|`aggregated.efficiency.latency_ms` 加 `max`|HELM efficiency 维度标配 (mean,p50,p95,**max**)；小 N 下 worst-case 通过 max 暴露（如 demo 实测 cold-start latency=1339ms，p95=1274ms，max=1339ms 是 cold-start 入口）|audit §1.2|
+|`SampleResult.metrics` schema-on-write 两层一致|`inject_per_sample_efficiency` 永远写 4 efficiency 键，None / 缺失 0.0 占位；与 `aggregated.efficiency` 子组永远 4 子组的协议哲学统一；下游 drill-down `s.metrics["latency_ms"]` 在 mock 路径不再 KeyError|audit §1.3 选项 A|
+|`compute_cost_usd` 未命中 model 时 fail-loud `UserWarning`|`_warn_unknown_pricing_model` 用 `functools.lru_cache(maxsize=128)` 防刷屏；让用户区分 cost=0 的三种状态（真免费 / 未测得 / 模型不在表里）|audit §1.4|
+|`tokens_in.total` / `tokens_out.total` 用 `int(sum(...))`|token 是离散计数，整数语义；`mean` 仍 `float`（avg 可有小数）；`SampleResult.metrics` 仍 dict[str, float] 不破契约|audit §1.5|
+|`inject_per_sample_efficiency` 去掉 `getattr` 防御|`Response` 是 frozen dataclass 字段固定；`resp.latency_ms` 直接取，schema rename 时即时 AttributeError 而非 silent None；`responses: list[Response]` 类型注解收紧|audit §1.6|
+|CLI 嵌套子组全 0 折叠 `<not measured (no LM signal)>` 单行|13 行 0 占位（mock / output_type='none' 路径）视觉上像"超低延迟"误导用户；折叠为单行明确"未测得"语义；`_is_all_zero_nested` 递归判断；顶层 task 指标即使 0 不折叠（`accuracy=0` 是真信号）|audit §1.7|
+
+### Implementation
+
+|侧面|做法|
+|---|---|
+|两层 schema-on-write|`inject_per_sample_efficiency` 不再 `if not extra: skip`；`extra` dict 永远 4 键，None / 缺失值用 0.0；`efficiency_aggregated._collect` 的 None-skipping 行为保留（直接构造 metrics 时仍合法），与 injector 写 0 占位的链路在数值上等价（0 序列 mean = 空序列 fallback 0）|
+|fail-loud 的"安静"边界|warning 只对 cost path 触发：`tokens_in/out` 任一 None → 早 return None，跳过 unknown-model 检查（mock 路径不会 spam）；`lru_cache` 让同 unknown model 同进程内只 warn 一次（CI / pytest reruns 不污染日志）|
+|CLI 折叠语义|`_is_all_zero_nested` 仅对 `dict` 递归；非数值 leaf 返 False（不折叠未知形态）；顶层 scalar `accuracy=0` 不走折叠分支（task 信号 ≠ 横切信号）|
+|parity test 9 处补丁|新增 `_task_metrics(metrics)` helper（`test_runner_run.py` 模块级）和 inline lambda（其它 3 处），剥离 sample.metrics 的 4 efficiency 字段后再比对；与之前 `_task_agg(aggregated)` 体例对齐——sample 层与 aggregated 层走同套"剥 cross-cutting 后比 task 主体"协议|
+|测试增量 13 条|`test_metrics_efficiency.py`(+5: cost.mean / latency.max / int total / fail-loud warning x2 / lru-cache dedup) + `test_runner_efficiency.py`(+1: mock per-sample 占位) + `test_cli_spec.py`(+5: 折叠正例/反例/task 指标不折叠)；现有断言更新 5 处适配新 schema|
+
+### Options considered
+
+**`SampleResult.metrics` 两层 schema 不一致怎么修**：
+
+- **选项 A：sample 层也按需固定写 0 占位（选择）**——schema-on-write 哲学统一；下游 `s.metrics["latency_ms"]` 不需分支判 KeyError；mock 路径 metrics dict 多 4 个 0 字段，与 phase 4"metrics 仍是 dict[str, float]"契约兼容（0.0 是合法 float）；代价：parity test 比对 sample.metrics 时需剥离 4 efficiency 键（与 aggregated 层剥离 efficiency 子组同源体例）
+- 选项 B：保留两层不一致 + 仅 docstring 警告——优势 mock 路径 metrics 干净（不污染 acc/f1）；缺点 schema 哲学分裂（aggregated schema-on-write、sample schema-on-data），下游消费者必须分支判，文档负担转嫁给用户
+- **采纳依据**：用户在 audit follow-up 时显式选 A
+
+**unknown model 怎么 fail-loud**：
+
+- **`UserWarning` + `lru_cache(maxsize=128)`（选择）**——同进程内每个 unknown model 只 warn 一次；保留 0.0 fallback 行为（cost 字段不抛异常，下游不需 try/except）；用户在 stdout/stderr 看到一条提示足以行动
+- 抛 `LookupError` —— 排除：用户跑实验中途 cost 计算抛异常会破坏整个 run；fail-loud 的"loud"应该是日志层面，不是控制流层面
+- 静默不报（保留原行为）—— 排除：违反 fail-loud 原则；用户区分不出 cost=0 的三种状态
+
+**CLI 折叠规则**：
+
+- **嵌套 dict 全 leaf == 0 才折叠（选择）**——精确触发 mock / output_type='none' 路径；不影响 partial-zero（如 ollama 跑出 cost=0 但 latency 非 0，此时仍展开看真实 latency）；递归判断对 phase 7+ 嵌套子组（safety / calibration）通用
+- 仅对 `efficiency` 子组特判 —— 排除：硬编码 dimension 名让 phase 7+ 横切都需要逐个加 if；递归形态保持 ontology 中性
+- 全折叠所有 nested subgroup（不限 zero）—— 排除：失去信号路径，用户在 dashboard 上看不到真实数值
+
+**CLI 折叠应用范围**（`_print_aggregated` 详细模式 vs `_fmt_row` 索引模式）：
+
+- **仅详细模式折叠（`cmd_run` / `cmd_score` 顶部输出）**（选择）—— `_print_aggregated` 多行格式服务"刚跑完单 run 反馈"UX，折叠避免 0 占位视觉误导；`_fmt_row` 紧凑单行服务"扫一眼跨 run 对比"UX，保持 dot-path 字段对齐 + grep 友好（mock 行 0 在 cross-run context 下用户一眼懂"是 mock"，不会误读为"超低延迟"）；两套渲染对应两种 UX 目的，规则可以分离
+- 两种模式都折叠 —— 排除：`show` 索引行折叠会让 mock vs ollama 列宽不一致，破坏跨 run 列对齐与 grep 友好性
+- 两种模式都不折叠 —— 排除：单 run 反馈下 13 行 0 占位是已确认的视觉误导（audit §1.7 起点）
+
+**`tokens.total` 数值类型**：
+
+- **`int`（选择）**——token 是离散计数；与 `Counter / Counter.total()` / OpenAI `CompletionUsage` 同语义；`mean` 仍 `float`（与 `latency_ms.mean` 同）；JSON 序列化得到 `178` 而非 `178.0`，dashboard / SQL 解析更直观
+- `float` 全统一 —— 排除：`tokens_in.total: 178.0` 看着像"还能再细分"，掩盖整数语义；前后不一致的代价（aggregated total int vs sample float）已被 phase 4 dataclass 契约（metrics dict[str, float]）天然吸收
+
+### Decision
+
+- **schema 对称补齐**：`aggregated.efficiency.cost_usd` 加 `mean`；`aggregated.efficiency.latency_ms` 加 `max`
+- **schema-on-write 两层一致**：`SampleResult.metrics` 永远写 4 efficiency 键（None / 缺失 0.0 占位）；`inject_per_sample_efficiency` 不再 skip 空写入分支
+- **unknown model fail-loud**：`compute_cost_usd` 内 `_warn_unknown_pricing_model(model)`（lru_cache 防刷屏 + UserWarning）；保留 0.0 fallback 不破坏控制流
+- **`tokens.total` 用 `int`**：整数计数语义；`mean` / `latency_ms` / `cost_usd` 全 `float` 不变
+- **去 getattr 防御**：`responses: list[Response]` 收紧类型注解；`resp.latency_ms` / `resp.usage` 直接取；schema rename 即时暴露
+- **CLI 全 0 折叠仅在详细模式**：`_is_all_zero_nested` + `_print_aggregated` 嵌套子组判全 0 折叠为 `<dim>: <not measured (no LM signal)>`；`show` 索引模式（`_fmt_row` 紧凑单行）显式不折叠以保跨 run 列对齐与 grep 友好（两套渲染对应单 run 反馈 vs 跨 run 对比两种 UX 目的）
+- **测试 13 条增量**：含 fail-loud warning 锁、`lru_cache` dedup 锁、单元测两层 schema-on-write、CLI 折叠正反例
+- **parity test 9 处补丁**：sample.metrics 比对前剥离 4 efficiency 占位字段；体例与 aggregated 层 task_agg subset 一致

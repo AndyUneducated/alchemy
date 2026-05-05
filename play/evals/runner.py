@@ -22,8 +22,13 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from itertools import islice
 from pathlib import Path
+from typing import Any
 
 from .api import Doc, EvalMode, EvalResult, Request, Response, SampleResult
+from .metrics.efficiency import (
+    efficiency_aggregated,
+    inject_per_sample_efficiency,
+)
 from .models.base import LM
 from .tasks.base import Task
 
@@ -121,10 +126,17 @@ def _finalize(
     run_id: str,
     num_fewshot: int = 0,
 ) -> EvalResult:
-    """共享尾段：聚合 + 打包 EvalResult。score / run 两路径的合流点."""
-    aggregated = {
+    """共享尾段：聚合 + 打包 EvalResult。score / run 两路径的合流点.
+
+    phase 6 起 run 模式额外注入 `aggregated["efficiency"]` 嵌套子组（latency / tokens /
+    cost）；score 模式不注入（无 LM 调用 → 无 efficiency 信号；显式让步而非 0/None 占位）.
+    嵌套子组协议为 phase 7+ 横切（safety / calibration / robustness）预留扩展位.
+    """
+    aggregated: dict[str, Any] = {
         name: fn(sample_results) for name, fn in task.aggregation().items()
     }
+    if mode == "run":
+        aggregated["efficiency"] = efficiency_aggregated(sample_results)
     return EvalResult(
         task=task.name,
         model=model_label,
@@ -242,6 +254,10 @@ def evaluate_run(
     sample_results = [
         task.process_results(doc, resp) for doc, resp in zip(docs, responses)
     ]
+    # phase 6：把 LM 适配器报的 latency/usage 拷进 SampleResult.metrics（per-sample 实测值）
+    # ；run-only 横切；不报数（MockLM / output_type='none' 占位 Response）→ 跳过该键，
+    # efficiency_aggregated 收集时自动忽略.
+    sample_results = inject_per_sample_efficiency(sample_results, responses, model_label)
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     run_id = _generate_run_id(task.name, model_label, seed)

@@ -101,3 +101,25 @@ def test_ollama_loglikelihood_not_implemented(ollama_model: str):
     lm = OllamaLM(model=ollama_model)
     with pytest.raises(NotImplementedError):
         lm.loglikelihood([Request(doc_id="d0", prompt="test", request_type="loglikelihood")])
+
+
+def test_ollama_response_carries_efficiency_fields(ollama_model: str):
+    """phase 6：Ollama /api/generate 返 prompt_eval_count / eval_count / total_duration
+    → Response.usage / latency_ms 字段被填上（非 None + 数值合理）.
+
+    Ollama 0.1+ 默认返回这三字段；老 daemon 缺字段 → None（efficiency_aggregated 兼容）.
+    """
+    lm = OllamaLM(model=ollama_model)
+    req = Request(
+        doc_id="d0",
+        prompt="请用一个数字回答：2+2 等于几？只回答数字。",
+        max_tokens=8,
+        until=("\n",),
+    )
+    [resp] = lm.generate_until([req])
+    # 至少 latency_ms 非 None（total_duration 是 stable contract）
+    assert resp.latency_ms is not None and resp.latency_ms > 0
+    # usage 同 contract：有 tokens_in / tokens_out
+    assert resp.usage is not None
+    assert resp.usage.tokens_in is not None and resp.usage.tokens_in > 0
+    assert resp.usage.tokens_out is not None and resp.usage.tokens_out > 0

@@ -42,7 +42,8 @@ def test_sentiment_run_gold_unchanged_after_process_docs_default():
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
-    assert r.aggregated == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
+    task_agg = {k: v for k, v in r.aggregated.items() if k != "efficiency"}
+    assert task_agg == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
 
 
 def test_old_task_default_output_type_is_generate_until():
@@ -52,13 +53,20 @@ def test_old_task_default_output_type_is_generate_until():
 
 
 def test_score_run_parity_after_phase4_hooks():
-    """phase 4 改造后 sentiment 上 score / run 仍字节级 parity（架构定海神针）."""
+    """phase 4 改造后 sentiment 上 score / run 在 task-specific 指标层面 parity（架构定海神针）.
+    phase 6 引入 efficiency 子组（cross-cutting）+ audit §1.3A sample 层 efficiency 占位字段：
+    剥离 aggregated.efficiency 子组 + sample.metrics 4 efficiency 字段后应等价."""
     task = SentimentClf()
     docs = list(task.docs())
     r_run = evaluate_run(task, MockLM(mode="gold", docs=docs))
     r_score = evaluate_score(task, PRED_SENTIMENT / "perfect.jsonl")
-    assert r_run.aggregated == r_score.aggregated
+    _eff_keys = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
+    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
+    task_metrics = lambda d: {k: v for k, v in d.items() if k not in _eff_keys}  # noqa: E731
+    assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
+    assert "efficiency" in r_run.aggregated
+    assert "efficiency" not in r_score.aggregated
     assert r_run.n == r_score.n
-    a_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_run.per_sample]
-    o_pairs = [(s.doc_id, s.prediction, s.target, s.metrics) for s in r_score.per_sample]
+    a_pairs = [(s.doc_id, s.prediction, s.target, task_metrics(s.metrics)) for s in r_run.per_sample]
+    o_pairs = [(s.doc_id, s.prediction, s.target, task_metrics(s.metrics)) for s in r_score.per_sample]
     assert a_pairs == o_pairs

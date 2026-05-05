@@ -87,10 +87,29 @@ def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 for
 
 # ---------- 输出格式化 ----------
 
+def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v 可为 float / dict / int
+    """递归把 (key, value) 拍平成 'k=v' 列表；嵌套 dict 用 dot 连接.
+
+    phase 6 起 aggregated 允许嵌套（efficiency 子组等）；老的 phase 1-5 平铺指标
+    走 isinstance 非 dict 分支，与原 `_fmt_row` 字节相同.
+    """
+    full = f"{prefix}{k}"
+    if isinstance(v, dict):
+        out: list[str] = []
+        for sub_k, sub_v in v.items():
+            out.extend(_fmt_kv(sub_k, sub_v, prefix=f"{full}."))
+        return out
+    if isinstance(v, (int, float)):
+        return [f"{full}={float(v):.4f}"]
+    return [f"{full}={v}"]
+
+
 def _fmt_row(r: dict) -> str:
-    """一行 index row → 可读短行."""
+    """一行 index row → 可读短行（phase 6 起支持嵌套 aggregated 子组）."""
     agg = r.get("aggregated", {})
-    parts = [f"{k}={v:.4f}" for k, v in agg.items()]
+    parts: list[str] = []
+    for k, v in agg.items():
+        parts.extend(_fmt_kv(k, v))
     return (
         f"{r['run_id']:<30} task={r['task']:<15} "
         f"mode={r['mode']:<6} model={r['model']:<28} "
@@ -218,9 +237,34 @@ def cmd_score(args: argparse.Namespace) -> int:
     )
     save(result, runs_dir=args.runs_dir)
     print(f"# run_id={result.run_id}  mode=score  model={result.model}  n={result.n}  elapsed={result.elapsed_ms:.1f}ms")
-    for k, v in result.aggregated.items():
-        print(f"  {k:<16} {v:.4f}")
+    _print_aggregated(result.aggregated)
     return 0
+
+
+def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数值 leaf
+    """递归判断嵌套 dict 所有 leaf 数值是否都为 0（非数值 leaf → False，不折叠）."""
+    if isinstance(d, dict):
+        return all(_is_all_zero_nested(v) for v in d.values())
+    if isinstance(d, (int, float)):
+        return d == 0
+    return False
+
+
+def _print_aggregated(agg: dict) -> None:
+    """嵌套友好打印：phase 6 起 aggregated 含 efficiency 子组，递归走 _fmt_kv.
+
+    audit §1.7：嵌套子组（efficiency / phase 7+ safety / ...）若所有 leaf 数值全 0
+    （MockLM 不报、output_type='none' task），折叠为 `<dim>: <not measured>` 单行
+    避免 11+ 行 0 占位的视觉误导（"0.0000" 看着像"超低延迟"而非"未测得"）。
+    顶层 task-specific 指标（accuracy=0 等）保持显式 0 输出（task 信号不折叠）.
+    """
+    for k, v in agg.items():
+        if isinstance(v, dict) and _is_all_zero_nested(v):
+            print(f"  {k:<28} <not measured (no LM signal)>")
+            continue
+        for line in _fmt_kv(k, v):
+            key, _, val = line.partition("=")
+            print(f"  {key:<28} {val}")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -270,8 +314,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"# run_id={result.run_id}  mode=run  model={result.model}  n={result.n}  "
         f"num_fewshot={result.num_fewshot}  elapsed={result.elapsed_ms:.1f}ms"
     )
-    for k, v in result.aggregated.items():
-        print(f"  {k:<16} {v:.4f}")
+    _print_aggregated(result.aggregated)
     return 0
 
 

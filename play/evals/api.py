@@ -1,7 +1,10 @@
 """契约层：跨层唯一数据形状.
 
-5 个 frozen dataclass 组成一条数据流：
+5 个顶层契约 dataclass 组成一条数据流：
     Doc -> Request -> Response -> SampleResult -> EvalResult
+
+phase 6 起增加 1 个嵌套字段类型 `Usage`（住 `Response.usage`，与 OpenAI / Anthropic /
+inspect_ai SDK 同形），不属于顶层契约——它是 Response 的内嵌资源消耗类型。
 
 所有其他层（Task / LM / Metric / Runner / Storage）都只读/生产这些类型，互相不 import。
 选 dataclass 而非 Pydantic：Phase 1 不引依赖；frozen 提供不可变 + hash + asdict。
@@ -53,11 +56,35 @@ class Request:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """LM 调用的资源消耗（phase 6 引入）.
+
+    与 OpenAI `CompletionUsage` / Anthropic `Usage` / inspect_ai `ModelUsage` 同形：
+    nested typed object，避免顶层 `Response` 字段在多模型生态扩展（reasoning_tokens /
+    cached_tokens / audio_tokens）时膨胀。
+
+    扩展点（视模型生态按需加，加字段不破老 Response）：
+      - reasoning_tokens   o1 / DeepSeek-R1 风格
+      - cached_tokens      Anthropic prompt caching / OpenAI cached input
+      - audio_tokens       多模态
+
+    设计上 score 路径 / MockLM 永远不填（保持 None）；OllamaLM 等真适配器在
+    `generate_until` 内解析 provider response 后填入。
+    """
+
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+
+
+@dataclass(frozen=True)
 class Response:
     """LM 的返回.
 
     `text` 和 `loglikelihoods` 互斥，由 request_type 决定哪个有值。
-    `latency_ms` 即使 Phase 1 不用也预留，为 Phase 6 efficiency 维度埋点。
+    `latency_ms` 顶层时间维度（与 HELM `request_time` / inspect_ai `output.time` 同位）；
+    phase 0 起预留，phase 6 起 OllamaLM 真填，runner 不做 batch 时间除以 N 的 fallback——
+    显式 None 优于不准估算。
+    `usage` 嵌套资源消耗（tokens_in/out 等），phase 6 引入；MockLM / score 路径永远 None。
     score 模式下 text 字段从 predictions JSONL 读进来。
     """
 
@@ -65,6 +92,7 @@ class Response:
     text: str | None = None
     loglikelihoods: tuple[float, ...] | None = None
     latency_ms: float | None = None
+    usage: Usage | None = None
 
 
 @dataclass(frozen=True)
@@ -102,13 +130,23 @@ class EvalResult:
     `aggregated` 装必须看全集才能算的指标（f1_macro / kappa / NDCG...）。
     `mode` 区分 score / run，让 storage 能按模式过滤。
     `num_fewshot` 仅 run 路径有意义（score 永远 0）；默认值保证旧 result.json 反序列化兼容。
+
+    aggregated 类型 phase 6 起放宽为 `dict[str, Any]`（实际形态 `dict[str, float | dict]`）：
+      - 顶层平铺任务自身指标（HELM accuracy 维度：accuracy / f1_macro / em / rouge_l / ...）
+      - 嵌套子组装横切维度（HELM 7 维度的另外 6 维）：
+          aggregated["efficiency"]   phase 6
+          aggregated["safety"]       phase 7（计划）
+          aggregated["calibration"]  phase 9（计划）
+          aggregated["robustness"]   phase 10（计划）
+      - 同名指标跨 phase 位置一致（如 cohens_kappa 在 phase 1 / 8 都顶层），保证
+        cross-run JSON_EXTRACT 路径不漂移；显式不按"方法学族"内部归类 task-specific 指标。
     """
 
     task: str
     model: str
     mode: EvalMode
     n: int
-    aggregated: dict[str, float]
+    aggregated: dict[str, Any]
     per_sample: tuple[SampleResult, ...]
     run_id: str
     created_at: str  # ISO8601

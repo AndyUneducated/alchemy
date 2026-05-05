@@ -45,7 +45,10 @@ def test_evaluate_run_qa_open_ollama_smoke(ollama_model: str):
     assert r.mode == "run"
     assert r.n == 3
     assert r.model == f"ollama:{ollama_model}"
-    assert set(r.aggregated.keys()) == {"exact_match", "rouge_l", "judge_pointwise"}
+    # phase 6 起 run 多 efficiency 子组（cross-cutting，HELM 7 维度 ontology）
+    task_keys = {k for k in r.aggregated.keys() if k != "efficiency"}
+    assert task_keys == {"exact_match", "rouge_l", "judge_pointwise"}
+    assert "efficiency" in r.aggregated
 
     # 数值合法区间
     assert 0.0 <= r.aggregated["exact_match"] <= 1.0
