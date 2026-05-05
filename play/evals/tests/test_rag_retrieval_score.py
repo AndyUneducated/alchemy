@@ -116,11 +116,10 @@ def test_artifacts_carry_pred_and_gold_ids():
         assert len(s.artifacts["gold_ids"]) > 0
 
 
-def test_metrics_dict_stays_scalar():
-    """metrics 严守空 dict（本 task 无 per-sample 标量；非标量都进 artifacts）.
-
-    锁住"metrics: dict[str, float]"契约，防回归出 list[str] 偷塞污染.
-    """
+def test_metrics_empty_for_rag_retrieval():
+    """rag_retrieval 本身不写 per-sample 标量；wave 3（DECISIONS §7.2）撤销 cross-cutting
+    safety AOP 后，sample.metrics 应为空 dict（rag_retrieval 是 retrieval-only task，
+    所有信号在 artifacts.pred_ids / gold_ids 上）."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:

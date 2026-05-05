@@ -200,6 +200,32 @@ class RagQA(Task):
             })
         return out
 
+    def collect_judge_responses(self) -> tuple[list[Response], str | None]:
+        """DECISIONS §7.3：聚合 5 个 RAG judge closure 的 _recorder.responses.
+
+        所有 5 维度共用同一 judge_lm（构造时同 LM 实例传给 5 个 factory），所以
+        model_label 取任一即可（实际 5 个 recorder 的 model_label 完全相同）。
+        """
+        if self._judge_lm is None:
+            return [], None
+        all_responses: list[Response] = []
+        label: str | None = None
+        for fn in (
+            self._judge_faithfulness,
+            self._judge_answer_correctness,
+            self._judge_context_precision,
+            self._judge_context_recall,
+            self._judge_answer_relevancy,
+        ):
+            if fn is None:
+                continue
+            rec = getattr(fn, "_recorder", None)
+            if rec is None:
+                continue
+            all_responses.extend(rec.responses)
+            label = label or rec.model_label
+        return all_responses, label
+
 
 def _per_sample_rouge_l(pred: str, target: str) -> float:
     """单样本 ROUGE-L F-measure（中文 char-level；复用 mt._rouge_scorer 缓存）."""

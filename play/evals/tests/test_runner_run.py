@@ -23,18 +23,21 @@ PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "pred
 MT_PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
 
 
-_EFF_KEYS = {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
+# wave 3（DECISIONS §7.2）撤销 safety cross-cutting AOP；仅 efficiency 仍是 cross-cutting
+# 嵌套子组（基础设施指标，与 HELM efficiency 维度同精神，行业一致）.
+_CROSS_CUTTING_SUBGROUPS = {"efficiency"}
 
 
 def _task_agg(agg: dict) -> dict:
-    """剥离 phase 6 cross-cutting 子组，只保留 task-specific 顶层指标."""
-    return {k: v for k, v in agg.items() if k != "efficiency"}
+    """剥离 cross-cutting 子组，只保留 task-specific 顶层指标."""
+    return {k: v for k, v in agg.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
 def _task_metrics(metrics: dict) -> dict:
-    """剥离 phase 6 audit §1.3A 的 4 个 efficiency 占位字段，只留 task-specific metrics.
-    run 路径写 0 占位，score 路径不写——剥离后 task 层 parity 仍成立."""
-    return {k: v for k, v in metrics.items() if k not in _EFF_KEYS}
+    """剥离 phase 7 §7.D nested 派的 cross-cutting 嵌套子组（efficiency / safety），只留 task-specific metrics.
+    run 路径写 cross-cutting 子组（0 占位或真实数值），score 路径只写 content class 子组（safety），
+    剥离后 task 层 parity 仍成立."""
+    return {k: v for k, v in metrics.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
 def test_run_gold_runs_full_accuracy():
@@ -132,3 +135,55 @@ def test_run_mt_with_fewshot_records_num_fewshot():
     assert r.num_fewshot == 2
     # gold mode 下答案和 target 一字不差，K-shot 不影响 perfect score
     assert r.aggregated["exact_match"] == 1.0
+
+
+def test_elapsed_ms_covers_process_results_phase():
+    """DECISIONS §7.1.1 端到端 elapsed_ms 锁：
+
+    旧实现 elapsed_ms 在 _evaluate_inner 调用前测，process_results / injectors /
+    aggregation 全段被排除——judge-heavy 路径漏算 6 个数量级（rag_qa 实测 0.137ms vs
+    125s wall time）.
+
+    本测试在 process_results 里塞 50ms sleep，断言 elapsed_ms >= 50 * n（per-sample
+    sleep 累加）—— 旧实现下 elapsed_ms 接近 0；新实现下 elapsed_ms 必含 sleep 段.
+    """
+    import time
+
+    from evals.api import Doc, Response, SampleResult
+
+    sleep_ms = 50
+
+    class _SlowSentimentClf(SentimentClf):
+        """process_results 内塞 sleep 模拟 judge-heavy 子调用."""
+
+        def process_results(self, doc: Doc, response: Response) -> SampleResult:  # type: ignore[override]
+            time.sleep(sleep_ms / 1000.0)
+            return super().process_results(doc, response)
+
+    task = _SlowSentimentClf()
+    docs = list(task.docs())[:3]  # 限 3 条避免单测过慢
+    # 用 MockLM gold 模式 + 限 3 条 docs；evaluate_run limit=3 让 runner 也只处理这 3 条
+    r = evaluate_run(task, MockLM(mode="gold", docs=docs), limit=3)
+    # 3 条 × 50ms sleep ≥ 150ms；留 30ms buffer 防 CI 抖动
+    assert r.elapsed_ms >= 3 * sleep_ms - 30, (
+        f"elapsed_ms={r.elapsed_ms} 应 >= {3 * sleep_ms - 30}ms（含 process_results sleep）"
+    )
+
+
+def test_elapsed_ms_score_path_covers_process_results_phase():
+    """同上锁，覆盖 score 路径——judge-heavy 失真核心场景（rag_qa + 5 维度 judge）."""
+    import time
+
+    from evals.api import Doc, Response, SampleResult
+
+    sleep_ms = 50
+
+    class _SlowSentimentClf(SentimentClf):
+        def process_results(self, doc: Doc, response: Response) -> SampleResult:  # type: ignore[override]
+            time.sleep(sleep_ms / 1000.0)
+            return super().process_results(doc, response)
+
+    r = evaluate_score(_SlowSentimentClf(), PRED_DIR / "perfect.jsonl", limit=3)
+    assert r.elapsed_ms >= 3 * sleep_ms - 30, (
+        f"elapsed_ms={r.elapsed_ms} 应 >= {3 * sleep_ms - 30}ms（含 process_results sleep）"
+    )

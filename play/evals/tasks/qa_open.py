@@ -119,6 +119,15 @@ class QAOpen(Task):
             out["judge_pointwise"] = True
         return out
 
+    def collect_judge_responses(self) -> tuple[list[Response], str | None]:
+        """DECISIONS §7.3：从 judge closure 的 _recorder 拉 LM 调用记录."""
+        if self._judge_pointwise_fn is None:
+            return [], None
+        rec = getattr(self._judge_pointwise_fn, "_recorder", None)
+        if rec is None:
+            return [], None
+        return list(rec.responses), rec.model_label
+
 
 def _exact_match(srs: list[SampleResult]) -> float:
     if not srs:

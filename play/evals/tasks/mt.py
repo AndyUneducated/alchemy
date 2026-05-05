@@ -71,9 +71,21 @@ def _bertscore_scorer():
 
     `lang="zh"` 让 bert-score 选择 `bert-base-chinese` (~400MB)；
     `rescale_with_baseline=False` 避免依赖 baseline 文件，identical strings 给 ~1.0 但非精确等。
-    """
-    from bert_score import BERTScorer
 
+    `TRANSFORMERS_VERBOSITY=error` + `disable_progress_bar()` 抑制 transformers 加载
+    时打到 stderr 的 `BertModel LOAD REPORT` UNEXPECTED 警告（logging）+ `Loading
+    weights:` tqdm 进度条（progress bar）两类噪音；前者由 env var 控制（HuggingFace
+    官方推荐的日志级别控制方式），后者是独立机制（progress bar 不走 logging）。
+    `setdefault` 让用户显式 export 时不被覆盖；`disable_progress_bar` 是同 import
+    单点副作用。详见 DECISIONS §7.1.4.
+    """
+    import os
+
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    from bert_score import BERTScorer
+    from transformers.utils import logging as _hf_logging
+
+    _hf_logging.disable_progress_bar()
     return BERTScorer(lang="zh", rescale_with_baseline=False)
 
 

@@ -141,13 +141,21 @@ def _parse_yes_no(text: str) -> int:
     return 0
 
 
-def _ask(lm: LM, prompt: str, *, doc_id: str = "", max_tokens: int = 64) -> str:
-    """单轮 LM 调用助手——把 LM ABC 的 batch in/out 压缩到单 prompt → text 形态."""
+def _ask(lm_or_rec, prompt: str, *, doc_id: str = "", max_tokens: int = 64) -> str:
+    """单轮 LM 调用助手——把 LM ABC 的 batch in/out 压缩到单 prompt → text 形态.
+
+    DECISIONS §7.3：接受 `LM` 或 `_JudgeRecorder`（duck-typing：has `.call`）；
+    factory 内部走 recorder 时 LM 调用记录会被 collected 供 efficiency.judge.* 子组消费.
+    """
     req = Request(
         doc_id=doc_id, prompt=prompt,
         request_type="generate_until", max_tokens=max_tokens,
     )
-    [resp] = lm.generate_until([req])
+    if hasattr(lm_or_rec, "call"):
+        # _JudgeRecorder
+        [resp] = lm_or_rec.call([req])
+    else:
+        [resp] = lm_or_rec.generate_until([req])
     return resp.text or ""
 
 
@@ -168,7 +176,11 @@ def judge_faithfulness(
 
     `contexts` 来自 `doc.metadata`，遵循 path B+C：检索器产物住在 doc 一侧.
     无 contexts / 无可解析 claim → 0.0（保守）.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
     """
+    from .judge_core import _JudgeRecorder
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         contexts: Sequence[str] = doc.metadata.get("contexts", ())
@@ -180,7 +192,7 @@ def judge_faithfulness(
 
         # Step 1: extract claims
         extract_prompt = claim_template.format(text=text)
-        raw = _ask(judge_lm, extract_prompt, doc_id=doc.id, max_tokens=max_tokens_extract)
+        raw = _ask(rec, extract_prompt, doc_id=doc.id, max_tokens=max_tokens_extract)
         claims = parse_statement_list(raw)
         if not claims:
             return 0.0
@@ -190,10 +202,11 @@ def judge_faithfulness(
         supported = 0
         for claim in claims:
             nli_prompt = nli_template.format(context=joined_ctx, statement=claim)
-            verdict = _ask(judge_lm, nli_prompt, doc_id=doc.id, max_tokens=max_tokens_nli)
+            verdict = _ask(rec, nli_prompt, doc_id=doc.id, max_tokens=max_tokens_nli)
             supported += _parse_yes_no(verdict)
         return supported / len(claims)
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -212,7 +225,11 @@ def judge_answer_correctness(
     recall (1-FN/(TP+FN)) 双约束.
 
     无 target / response 全空 / TP+FP+FN=0 → 0.0（保守）.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
+    from .judge_core import _JudgeRecorder
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         target = doc.target or ""
@@ -221,7 +238,7 @@ def judge_answer_correctness(
             return 0.0
         prompt = template.format(reference=target, response=pred)
         try:
-            raw = _ask(judge_lm, prompt, doc_id=doc.id, max_tokens=max_tokens)
+            raw = _ask(rec, prompt, doc_id=doc.id, max_tokens=max_tokens)
             tp, fp, fn = parse_tp_fp_fn(raw)
         except ValueError:
             return 0.0
@@ -233,6 +250,7 @@ def judge_answer_correctness(
             return 0.0
         return 2 * precision * recall / (precision + recall)
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -252,7 +270,11 @@ def judge_context_precision(
     而非"召回的 doc 在不在 gold 集合里".
 
     无 contexts → 0.0；prediction 不参与（这是 query 与 context 的关系）.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
+    from .judge_core import _JudgeRecorder
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         contexts: Sequence[str] = doc.metadata.get("contexts", ())
@@ -261,10 +283,11 @@ def judge_context_precision(
         relevant = 0
         for ctx in contexts:
             prompt = template.format(input=doc.input, context=ctx)
-            verdict = _ask(judge_lm, prompt, doc_id=doc.id, max_tokens=max_tokens)
+            verdict = _ask(rec, prompt, doc_id=doc.id, max_tokens=max_tokens)
             relevant += _parse_yes_no(verdict)
         return relevant / len(contexts)
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -287,7 +310,11 @@ def judge_context_recall(
       - context_recall：target  的 claim 在 contexts 里 → "标准答案里的事实材料覆盖了多少"
 
     无 target / 无可解析 claim → 0.0.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
+    from .judge_core import _JudgeRecorder
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         target = doc.target or ""
@@ -296,7 +323,7 @@ def judge_context_recall(
             return 0.0
 
         extract_prompt = claim_template.format(text=target)
-        raw = _ask(judge_lm, extract_prompt, doc_id=doc.id, max_tokens=max_tokens_extract)
+        raw = _ask(rec, extract_prompt, doc_id=doc.id, max_tokens=max_tokens_extract)
         claims = parse_statement_list(raw)
         if not claims:
             return 0.0
@@ -305,10 +332,11 @@ def judge_context_recall(
         attributable = 0
         for claim in claims:
             nli_prompt = nli_template.format(context=joined_ctx, statement=claim)
-            verdict = _ask(judge_lm, nli_prompt, doc_id=doc.id, max_tokens=max_tokens_nli)
+            verdict = _ask(rec, nli_prompt, doc_id=doc.id, max_tokens=max_tokens_nli)
             attributable += _parse_yes_no(verdict)
         return attributable / len(claims)
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score
 
 
@@ -329,18 +357,22 @@ def judge_answer_relevancy(
 
     解析复用 `judge_core.parse_pointwise_score`（同源 1-5 形态）.
     无 response → 0.0.
+
+    DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
-    from .judge_core import parse_pointwise_score  # 避免循环 import
+    from .judge_core import _JudgeRecorder, parse_pointwise_score  # 避免循环 import
+    rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float:
         pred = (response.text or "").strip()
         if not pred:
             return 0.0
         prompt = template.format(input=doc.input, response=pred)
-        raw = _ask(judge_lm, prompt, doc_id=doc.id, max_tokens=max_tokens)
+        raw = _ask(rec, prompt, doc_id=doc.id, max_tokens=max_tokens)
         try:
             return float(parse_pointwise_score(raw, scale=scale))
         except ValueError:
             return 0.0
 
+    _score._recorder = rec  # type: ignore[attr-defined]
     return _score

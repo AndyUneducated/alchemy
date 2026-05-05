@@ -135,9 +135,11 @@ def test_run_score_parity_via_metadata_injection():
     from evals.runner import evaluate_score
     r_score = evaluate_score(RagRetrieval(), tmp_path)
 
-    # phase 6 起 run 多 efficiency 子组（cross-cutting AOP），score 路径无 LM 调用故不注入；
+    # phase 6/7 起 run 多 cross-cutting 子组（efficiency/safety），按 ontology 二分（DECISIONS §7.A）：
+    # - efficiency 是 call class，仅 run 挂；
+    # - safety 是 content class，score / run 双挂（response.text 双路径都有）.
     # parity 在 task-specific 指标层面成立.
-    task_agg = lambda d: {k: v for k, v in d.items() if k != "efficiency"}  # noqa: E731
+    task_agg = lambda d: {k: v for k, v in d.items() if k not in {"efficiency", "safety"}}  # noqa: E731
     assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
     assert "efficiency" in r_run.aggregated
     assert "efficiency" not in r_score.aggregated

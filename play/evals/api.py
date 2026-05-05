@@ -99,26 +99,34 @@ class Response:
 class SampleResult:
     """单样本评分结果，粒度 = 1 条样本.
 
-    `metrics` 严守 per-sample 标量（acc=0/1, EM, 单条 BLEU）；F1/kappa 这种需要
-    全集才能算的留 aggregation 拉原始 pred/target 自己算。
+    `metrics` 形态（phase 7 起 nested 派统一，supersede phase 6 audit §1.5）：
+      - **task-specific scalar**：永远 flat 顶层（`acc` / `f1_macro` / `cohens_kappa`）—— task 内部命名空间
+      - **cross-cutting 横切子组**：嵌套 dict（`metrics["efficiency"]` / `metrics["safety"]`）—— runner 注入的横切 namespace；与 `aggregated["<dim>"]` 嵌套子组 / `Response.usage` nested object 三层完全一致（OpenAI / Anthropic / inspect_ai 派）
+      - **`_` 前缀私有键**：仍 task 顶层（如 `_safety_category`），不上聚合面板，aggregation 消费用
+
+    F1/kappa 这种需要全集才能算的留 aggregation 拉原始 pred/target 自己算。
 
     `artifacts`（Phase 4 引入）装 per-sample **非标量**产物：
       - retrieval task 的 `pred_ids` / `gold_ids`（aggregation 用 ranx 拉）
       - 未来 agent task 的 trajectory steps / tool_calls
       - 任何 diagnostic dump 而非 metric 数值
 
-    与 metrics 的 dict[str, float] 形成 MLflow / W&B 风格的 scalar/non-scalar 对偶——
-    防止把 `list[str]` 偷偷塞进 `metrics` 里破坏类型契约。
+    与 metrics 的 `dict[str, float | dict[str, float]]` 形成 MLflow / W&B 风格的
+    scalar/non-scalar 对偶——防止把 `list[str]` 偷偷塞进 `metrics` 里破坏类型契约。
 
     防垃圾桶纪律：
       - 装"per-sample 非标量产物"，aggregation 输入 + diagnostic dump 用途
       - 不许装：与 metric 计算无关的状态（log/上报放 metric 闭包内；task 状态走 __init__）
+
+    类型放宽演化（DECISIONS §7.D，supersede §6.1 §1.5）：
+      phase 1: dict[str, float]                     —— 严守标量
+      phase 7: dict[str, float | dict[str, float]]  —— 横切子组嵌套
     """
 
     doc_id: str
     prediction: str
     target: str
-    metrics: dict[str, float]
+    metrics: dict[str, float | dict[str, float]]
     artifacts: dict[str, Any] = field(default_factory=dict)
 
 
@@ -133,11 +141,11 @@ class EvalResult:
 
     aggregated 类型 phase 6 起放宽为 `dict[str, Any]`（实际形态 `dict[str, float | dict]`）：
       - 顶层平铺任务自身指标（HELM accuracy 维度：accuracy / f1_macro / em / rouge_l / ...）
-      - 嵌套子组装横切维度（HELM 7 维度的另外 6 维）：
-          aggregated["efficiency"]   phase 6
-          aggregated["safety"]       phase 7（计划）
-          aggregated["calibration"]  phase 9（计划）
-          aggregated["robustness"]   phase 10（计划）
+      - 嵌套子组装横切维度（HELM 7 维度的另外 6 维），按 cross-cutting ontology 二分挂载（DECISIONS §7.A）：
+          aggregated["efficiency"]   phase 6   call class    仅 run 挂
+          aggregated["safety"]       phase 7   content class score / run 双挂
+          aggregated["calibration"]  phase 9   call class    （计划）
+          aggregated["robustness"]   phase 10  content class （计划）
       - 同名指标跨 phase 位置一致（如 cohens_kappa 在 phase 1 / 8 都顶层），保证
         cross-run JSON_EXTRACT 路径不漂移；显式不按"方法学族"内部归类 task-specific 指标。
     """
