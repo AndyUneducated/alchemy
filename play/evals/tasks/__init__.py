@@ -1,4 +1,6 @@
 from . import agent_traj  # noqa: F401  — 触发 @register_task 副作用 (phase 5)
+from . import iaa_nominal  # noqa: F401  — 触发 @register_task 副作用 (phase 8)
+from . import iaa_ordinal  # noqa: F401  — 触发 @register_task 副作用 (phase 8)
 from . import mt  # noqa: F401  — 触发 @register_task 副作用
 from . import qa_open  # noqa: F401  — 触发 @register_task 副作用
 from . import rag_qa  # noqa: F401  — 触发 @register_task 副作用 (phase 4)

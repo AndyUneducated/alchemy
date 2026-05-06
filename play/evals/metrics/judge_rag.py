@@ -217,21 +217,23 @@ def judge_answer_correctness(
     *,
     template: str = DEFAULT_TP_FP_FN_TEMPLATE,
     max_tokens: int = 64,
-) -> Callable[[Doc, Response], float]:
-    """单步 judge：让 judge_lm 数 TP/FP/FN（事实级），返回 F1.
+) -> Callable[[Doc, Response], float | None]:
+    """单步 judge：让 judge_lm 数 TP/FP/FN（事实级），返回 F1 | None.
 
     不依赖 retrieval contexts——只比 response 与 doc.target，是 grounding 维度里
     最直接的 "endpoint quality" 指标。F1 的好处是 precision (1-FP/(TP+FP)) 与
     recall (1-FN/(TP+FN)) 双约束.
 
-    无 target / response 全空 / TP+FP+FN=0 → 0.0（保守）.
+    无 target / response 全空 / TP+FP+FN=0 → 0.0（degenerate-input：empty 输入
+    的 F1=0 是合法最低分）；parse 失败 → None（DECISIONS §X wave 4，与 phase 7 P2
+    "未测得"占位同形）.
 
     DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
     from .judge_core import _JudgeRecorder
     rec = _JudgeRecorder(judge_lm)
 
-    def _score(doc: Doc, response: Response) -> float:
+    def _score(doc: Doc, response: Response) -> float | None:
         target = doc.target or ""
         pred = (response.text or "").strip()
         if not target or not pred:
@@ -241,7 +243,7 @@ def judge_answer_correctness(
             raw = _ask(rec, prompt, doc_id=doc.id, max_tokens=max_tokens)
             tp, fp, fn = parse_tp_fp_fn(raw)
         except ValueError:
-            return 0.0
+            return None
         if tp + fp + fn == 0:
             return 0.0
         precision = tp / (tp + fp) if (tp + fp) else 0.0
@@ -348,7 +350,7 @@ def judge_answer_relevancy(
     template: str = DEFAULT_ANSWER_RELEVANCE_TEMPLATE,
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
-) -> Callable[[Doc, Response], float]:
+) -> Callable[[Doc, Response], float | None]:
     """单步 judge：rate 1-5 "回答有没有正面 address 问题"（不管对错）.
 
     与 judge_answer_correctness 互补：
@@ -356,14 +358,15 @@ def judge_answer_relevancy(
       - relevancy  ：是否在答这个问题（不看 target，看 input vs response 主题对齐）
 
     解析复用 `judge_core.parse_pointwise_score`（同源 1-5 形态）.
-    无 response → 0.0.
+    无 response → 0.0（empty pred 的 relevancy=0 是合法最低分）；parse 失败 → None
+    （DECISIONS §X wave 4，1-5 scale 0 越界，None 显式表"未测得"，与 phase 7 P2 同形）.
 
     DECISIONS §7.3：closure 持有 `_recorder` 属性.
     """
     from .judge_core import _JudgeRecorder, parse_pointwise_score  # 避免循环 import
     rec = _JudgeRecorder(judge_lm)
 
-    def _score(doc: Doc, response: Response) -> float:
+    def _score(doc: Doc, response: Response) -> float | None:
         pred = (response.text or "").strip()
         if not pred:
             return 0.0
@@ -372,7 +375,7 @@ def judge_answer_relevancy(
         try:
             return float(parse_pointwise_score(raw, scale=scale))
         except ValueError:
-            return 0.0
+            return None
 
     _score._recorder = rec  # type: ignore[attr-defined]
     return _score

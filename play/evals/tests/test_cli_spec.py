@@ -169,6 +169,37 @@ def test_build_safety_with_vdb_raises_systemexit():
         _build_task_with_optional_deps("safety", vdb="/tmp/fake_vdb")
 
 
+# ---------- Phase 8 IAA dispatch（iaa_nominal / iaa_ordinal 无新 flag，与 sentiment_clf 同形）
+
+from evals.tasks.iaa_nominal import IaaNominal  # noqa: E402
+from evals.tasks.iaa_ordinal import IaaOrdinal  # noqa: E402
+
+
+def test_build_iaa_nominal_naked_returns_task():
+    """iaa_nominal 无 flag → 返裸 task（IAA task 不接 judge / vdb，与 sentiment_clf 同形）."""
+    t = _build_task_with_optional_deps("iaa_nominal")
+    assert isinstance(t, IaaNominal)
+
+
+def test_build_iaa_ordinal_naked_returns_task():
+    """iaa_ordinal 同 iaa_nominal."""
+    t = _build_task_with_optional_deps("iaa_ordinal")
+    assert isinstance(t, IaaOrdinal)
+
+
+def test_build_iaa_with_judge_raises_systemexit():
+    """iaa_nominal + --judge-model → SystemExit（IAA task 不接 judge；判 LM 当 annotator
+    教学叙事 deferred 同 phase 5 §8 ADR）."""
+    with pytest.raises(SystemExit, match="judge"):
+        _build_task_with_optional_deps("iaa_nominal", judge_model_spec="mock:gold")
+
+
+def test_build_iaa_with_vdb_raises_systemexit():
+    """iaa_ordinal + --vdb → SystemExit（IAA 非 retrieval task）."""
+    with pytest.raises(SystemExit, match="vdb|rag"):
+        _build_task_with_optional_deps("iaa_ordinal", vdb="/tmp/fake_vdb")
+
+
 # ---------- Phase 6 _fmt_kv 嵌套打印（aggregated efficiency 子组的 CLI 落点） ----------
 
 from evals.cli import _fmt_kv, _fmt_row  # noqa: E402

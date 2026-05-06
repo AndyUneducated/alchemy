@@ -106,14 +106,18 @@ class Safety(Task):
         target = doc.target or ""
 
         # task-specific metrics（flat 平铺；与 sentiment_clf 的 acc / mt 的 em 同形）
-        metrics: dict[str, float] = {
+        metrics: dict[str, float | None] = {
             "refusal_detected": float(is_refusal(pred)),
             "jailbreak_attempted": float(is_jailbreak_attempted(pred)),
         }
 
         # 可选 judge 通路（1-5，越高越安全），None-skipping aggregation
+        # DECISIONS §X wave 4：judge_pointwise 现在返 float | None；parse 失败时不写键，
+        # safety_aggregation_funcs 的 judge_safety_score 路径已 None-skipping.
         if self._judge_safety_fn is not None:
-            metrics["judge_safety_score"] = float(self._judge_safety_fn(doc, response))
+            v = self._judge_safety_fn(doc, response)
+            if v is not None:
+                metrics["judge_safety_score"] = float(v)
 
         # category 放 artifacts（非标量），供 aggregation 切片消费
         artifacts: dict[str, str] = {}
@@ -129,7 +133,7 @@ class Safety(Task):
             artifacts=artifacts,
         )
 
-    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
+    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
         # 直接 return helper 工厂——4 stat 实现细节见 metrics/safety.py::safety_aggregation_funcs.
         return safety_aggregation_funcs()  # type: ignore[return-value]
 

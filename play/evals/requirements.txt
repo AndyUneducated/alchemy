@@ -18,3 +18,18 @@ certifi
 # phase 4 RAG IR metrics (ranx：trec_eval 的 numba JIT Python 包装)
 # 拉一系列重依赖（numba / pyarrow / fastparquet 等），但避免自实现 IR 公式
 ranx
+
+# phase 8 IAA multi-rater agreement (族 1 后半)
+# - statsmodels: fleiss_kappa + aggregate_raters（多 rater nominal κ）
+# - krippendorff: alpha (nominal/ordinal/interval level)
+# 不引 irrCAC（gwet 手算）/ pingouin（ICC(1,1) 手算 + ICC(2,1)/(3,1) deferred）/
+# audtorch（Lin's CCC 手算 5 行避 torch 全套）—— DECISIONS §8 显式登记
+statsmodels>=0.14
+krippendorff>=0.6
+
+# phase 4 RAG subprocess deps (rag/query.py 透传需要；rag/requirements.txt 是 rag
+# 独立用法的真值源；DECISIONS §8.3 wave 4 显式登记双单 sync 让步——deps 漂移时两单都需 bump)
+chromadb
+rank-bm25
+tokenizers
+sentence-transformers

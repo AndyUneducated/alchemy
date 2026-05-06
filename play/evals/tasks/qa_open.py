@@ -99,13 +99,17 @@ class QAOpen(Task):
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
         pred = (response.text or "").strip()
         target = doc.target
-        metrics: dict[str, float] = {"em": float(pred == target)}
+        metrics: dict[str, float | None] = {"em": float(pred == target)}
         if self._judge_pointwise_fn is not None:
-            metrics["judge_pointwise"] = float(self._judge_pointwise_fn(doc, response))
+            v = self._judge_pointwise_fn(doc, response)
+            # DECISIONS §X wave 4：parse 失败 → 不写键（aggregator 自然过滤），
+            # 与 phase 7 P2 "未测得占位 None" 同形.
+            if v is not None:
+                metrics["judge_pointwise"] = float(v)
         return SampleResult(doc_id=doc.id, prediction=pred, target=target, metrics=metrics)
 
-    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        agg: dict[str, Callable[[list[SampleResult]], float]] = {
+    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
+        agg: dict[str, Callable[[list[SampleResult]], float | None]] = {
             "exact_match": _exact_match,
             "rouge_l": _rouge_l,
         }
@@ -143,10 +147,17 @@ def _rouge_l(srs: list[SampleResult]) -> float:
     return sum(scores) / len(scores)
 
 
-def _judge_pointwise_mean(srs: list[SampleResult]) -> float:
+def _judge_pointwise_mean(srs: list[SampleResult]) -> float | None:
+    """DECISIONS §X wave 4：全 sample parse 失败（key 缺）→ None"未测得"，
+    与 safety.judge_safety_score / phase 7 P2 体例一致；非空时算 mean.
+    """
     if not srs:
-        return 0.0
-    vals = [s.metrics["judge_pointwise"] for s in srs if "judge_pointwise" in s.metrics]
+        return None
+    vals = [
+        s.metrics["judge_pointwise"]
+        for s in srs
+        if "judge_pointwise" in s.metrics and s.metrics["judge_pointwise"] is not None
+    ]
     if not vals:
-        return 0.0
+        return None
     return sum(vals) / len(vals)

@@ -290,3 +290,124 @@
 - audit 中观察到的 A2（judge LM variance）经分析判定为 LM 内禀局限非工程问题（类比硬盘 ECC 不修 bit rot），从 wave 3 完全移除：不进 ADR / 不写 README / 不改默认值（`judge_n_samples=1`）；用户用 `--judge-n-samples N` 自决（self_consistency factory 早就支持任意 N）。LM 局限不是项目责任 → 不出现在 DECISIONS
 
 > 跨日里程碑：phase 7 audit 实际工时跨 5-05 → 5-06 边界（5-05 已用满 phase 7 + wave 2 两条名额，wave 3 落到 5-06 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。
+
+## 2026-05-07 — Phase 8：族 1 后半 IAA 双 task + kappa paradox 主舞台 + ordinal 救场叙事
+
+### 功能
+
+- **新 task `iaa_nominal`**：30 条 highly imbalanced (27 ham + 3 spam, ~90/10) binary classification + 4 份 stub predictions（perfect / constant_majority / noisy_diverging / garbage）+ 3 raters/sample；aggregation 输出 15 stat（含 9 classification + 3 agreement 2-rater + 2 multi-rater + 1 `_confusion_matrix` 诊断辅助）
+- **新 task `iaa_ordinal`**：25 条 1-5 likert (5 each) + 4 份 stub（perfect / off_by_one / random / garbage）+ 3 raters/sample；aggregation 12 stat（exact + agreement nominal/linear/quadratic + corr 三件套 + ccc + multi-rater 4 维）
+- **kappa paradox 主舞台**：`iaa_nominal.constant_majority` 锁数值 `accuracy=0.90 ∧ cohens_kappa=0.00 ∧ gwet_ac1≈0.89` —— acc 看着良好但 nominal κ 失明（"全押多数类"基线），Gwet AC1 (Pe 用类间方差) 仍诚实地高，paradox 解药 1
+- **ordinal 救场叙事**：`iaa_ordinal.off_by_one` 锁 `accuracy=0 ∧ cohens_kappa=−0.25` 同时 `weighted_kappa_quadratic=0.71 ∧ pearson_r=0.83 ∧ lins_ccc=0.71`；`iaa_ordinal.garbage` (pred=6−gold inverse) 锁 `weighted_quad=−1 ∧ pearson=−1 ∧ ccc=−1` 但 cohens_kappa=0（paradox 反向场景复刻 + ordinal-aware 抓负相关）
+- **CLI 0 改动 / 0 新 flag**：IAA task 不接 judge / vdb，自然走既有 fall-through dispatch 分支（与 sentiment_clf / mt 同形）；非法 flag 组合仍 SystemExit（既有兜底）
+- **score 主路径焊死全部教学叙事**：run 路径 `output_type='none'` 给占位 Response，aggregated 仅 sanity 0；run 完整教学（含 LLM-as-annotator self_consistency 派）deferred 至 phase 8.5+（同源 phase 5 让步进 ADR）
+
+### 技术
+
+- **新模块 `metrics/agreement.py`**：scope 收紧——仅 4 个手算函数（`scott_pi` Pe 用合并边际 ∑p̄_c² / `gwet_ac1` Pe 用类方差 (1/(K−1))·∑q_c(1−q_c) / `lins_ccc` 2·cov/(σ_X²+σ_Y²+(μ_X−μ_Y)²) / `icc_1_1` one-way random ANOVA decomposition）+ 1 个共享 helper `build_rater_matrix(srs, include_gold=True)`（fail-loud 缺/uneven raters）；约 80 行
+- **库直调全部下放 task aggregation**：sklearn `cohen_kappa_score(weights=...)` / scipy.stats `pearsonr|spearmanr|kendalltau` / statsmodels `fleiss_kappa + aggregate_raters` / `krippendorff.alpha(level_of_measurement=...)` 全部在 `tasks/iaa_nominal.py` / `tasks/iaa_ordinal.py` 内 import；与 sentiment_clf 直调 sklearn / mt 直调 sacrebleu 体例完全一致——避免模块沦为 import 中转站
+- **数据契约 0 新概念**：predictions JSONL 行 schema = `{id, prediction, raters: list[str|int]}`；与 phase 4 立的 `task.load_prediction(doc, row)` hook + path B+C「LM-side 数据装 Response，pipeline 产物住 doc.metadata」自然吻合；不动 `api.py` 任一 dataclass / 不动 `Task` ABC（仅 override `load_prediction` + `process_results`）/ 不动 `runner.py`
+- **TDD textbook 锁数值**：metrics/agreement.py 单元 29 测试（Po=0.6 binary 锁 scott_pi=0.08/0.48 ≈ 0.167 / Po=0.9 imbalanced 锁 gwet_ac1=0.805/0.905 ≈ 0.89 / shifted 1-5 锁 lins_ccc=0.8 / 完美一致 lockup ICC(1,1)=1.0 + 完美反相关锁 ICC(1,1)=−1.0）；整套 IAA score 矩阵 19 测试锁 4 stub × ~12 stat 数值
+- **依赖增量**：`statsmodels>=0.14` + `krippendorff>=0.6`；显式不引 `irrCAC` / `pingouin` / `audtorch` 三个本可用的库（公式简单 5-15 行手算，避依赖膨胀）
+- **测试增量 +52**：`test_metrics_agreement.py` 29 + `test_iaa_nominal_score.py` 10 + `test_iaa_ordinal_score.py` 9 + `test_cli_spec.py` IAA dispatch 段 4；全量 299 → 351 测试通过
+
+### 取舍
+
+- 双 task (`iaa_nominal` + `iaa_ordinal`) 而非单 task：两个教学叙事独立可读（kappa paradox 主舞台 vs ordinal 救场），单 task 会膨胀 aggregation 到 25+ stat 且互相稀释 → DECISIONS §8 ①
+- `metrics/agreement.py` scope 收紧（仅手算 + 真共享 helper，库直调下放 task）：与 sentiment_clf 体例完全一致，避免模块沦为 import 中转站；与 phase 4 `metrics/retrieval.py` 包 ranx 的「协议转接 + 输入构造非平凡 + 5 指标共用」三联立信号正交（本模块 statsmodels / krippendorff 接口直接吃 matrix，wrap 无价值） → DECISIONS §8 ⑥
+- inline JSONL `raters` 字段而非 self_consistency rater 派（LLM-as-annotator 真正交叉形态）：本期 score 主路径已能完成所有数值教学；annotator 派需新增 `--judge-n-samples` flag 设计 + judge LM 当 annotator 的 prompt 模板，ROI 不够；deferred 至 phase 8.5+ → DECISIONS §8 ②
+- ICC(1,1) only / run 路径完整教学 / 不引 irrCAC/pingouin/audtorch 三库：YAGNI 与方案对齐，二阶 ICC decomposition + run 路径 + 库依赖三件全 deferred；与 phase 5 agent_traj `--replay-envelope` 让步同源 → DECISIONS §8 ③ ④ ⑤
+
+## 2026-05-07 — Phase 8 follow-up：IAA 退化路径工程兜底（run path + 小 limit 不再 raise/NaN）
+
+### 功能
+
+- `python -m evals run --task iaa_nominal --model ollama:...` 不再 `ValueError: pos_label=spam is not a valid label` / `Target is multiclass but average='binary'`；改在退化输入下短路给 0.0 sanity（与 plan 早先承诺一致）
+- `python -m evals score --task iaa_nominal --predictions constant_majority.jsonl --limit 5` 不再 `krippendorff.alpha: There has to be more than one value in the domain`
+- `python -m evals run --task iaa_ordinal --model ollama:...` 不再在 `pearson_r` / `spearman_rho` / `kendall_tau` / `cohens_kappa` / `weighted_kappa_*` 报 `nan`（NaN 不是合法 JSON，跨 run JSON_EXTRACT / 任何非 Python parser 必坏）
+- 全部 IAA aggregated dict 现在严格 `json.dumps(..., allow_nan=False)` 可序列化——与 phase 4 path C「跨进程跨 run 走 JSON 流转」契约对齐
+
+### 技术
+
+- **`iaa_nominal.py` 三处工程兜底**：① `_pos_label_present(yt, yp)` helper — sklearn binary scorers (`precision_score`/`recall_score`/`f1_score`/`fbeta_score` with `pos_label='spam'`) 在 `pos_label` 缺席 y_true ∪ y_pred 或 union 是 multiclass（如 run path 看到 `{ham, spam, ""}` 三类）时 raise；短路返 0.0；② `_krippendorff_alpha` 加 `<2 unique value` 短路（krippendorff 库在单值域 raise）；③ `_cohens_kappa` / `_fleiss_kappa` 包 `_nan_to_zero(x)` helper（`x != x` 检测 NaN，单类 Pe=1 退化时给 0.0）
+- **`iaa_ordinal.py` 同源处理**：`_nan_to_zero` helper 包所有 6 个易 NaN 路径（`_cohens_kappa` / `_weighted_kappa_linear` / `_weighted_kappa_quadratic` / `_pearson_r` / `_spearman_rho` / `_kendall_tau`）+ 3 个多 rater 路径（krippendorff ordinal/interval + icc_1_1）；同形 `<2 unique value` 短路
+- **新测试套 `test_iaa_engineering_robustness.py` (10 测试)**：`_UnusedLM` (LM 调用即 AssertionError，证 `output_type='none'` 真不调) + `_assert_aggregated_is_finite_json` helper（递归遍历 aggregated dict 所有 leaf，`math.isfinite` 锁 + `json.dumps(..., allow_nan=False)` round-trip 锁）；4 stub × 2 task 严格 JSON 序列化参数化；全量 351 → 361 测试通过
+- **完整 LM 系列回归确认**：`test_qa_open_live` (4) + `test_rag_live` (3) + `test_agent_traj_run_live` (1) + `test_ollama_lm` (7) 共 15 条 LM 真实调用测试在 phase 8 改动后仍全部通过；CLI smoke 三件（iaa_nominal score `--limit 5` / iaa_nominal run `--limit 5` 与 full / iaa_ordinal run `--limit 3`）全部 exit 0
+
+### 取舍
+
+- 工程兜底 `_nan_to_zero` 选「NaN→0」而非「NaN→null」：① `EvalResult.aggregated[str, float]` 契约期 float 而非 Optional[float]，跨 run 排序 / cross-run JSON_EXTRACT 看到 None 会 KeyError 路径分裂；② plan 早先就承诺 "sanity 0/None" 而 0 比 None 更适合作 scalar 默认；③ 与 sentiment_clf 等老 task 在缺数据时给 0 的体例一致 → DECISIONS §8.R4
+- 工程兜底放在 task aggregation 内 (`_pos_label_present` / `_nan_to_zero` 是 task-local closure helper) 而非提到 metrics/agreement.py：① 这些 helper 只服务 task 自己的库直调；② 与「metrics/agreement.py 仅装手算 + 真共享 helper」scope 收紧决策（DECISIONS §8 ⑥）正交一致；③ 避免下放后 metrics/agreement.py 又拐回 import 中转站
+
+### 二轮 audit follow-up (同 5-07 同里程碑续记)
+
+首轮 fix 后用户追问"测试是否够写实"，补做四道更严的 audit，又抓到 3 处更深的 bug + 1 个全局兜底：
+
+- **scipy 长度 <2 raise**：`_pearson_r` / `_spearman_rho` / `_kendall_tau` 在 `--limit 1` 时 scipy raise `ValueError: x and y must have length at least 2`，单 NaN 兜底救不了——加 `len(srs) < 2: return 0.0` 前置短路
+- **dtype 混合的 unique 检测假性**：`iaa_ordinal` 走 `build_rater_matrix` 把 `sr.target` (`str("1")`) 与 `raters` (`int(1)`) 混入同一矩阵；首轮加的 `<2 unique value` 短路在 raw matrix 上判 `{1, "1"}` 假性=2，但 `np.asarray(dtype=int)` 之后真 unique=1，krippendorff 仍 raise——unique 检测必须在 dtype 转换**之后**做
+- **iaa_ordinal `_fleiss_kappa` 漏 wrap**：首轮只包了 `iaa_nominal` 的 `_fleiss_kappa`，`iaa_ordinal` 里同名函数还会泄 NaN——加 `_nan_to_zero` wrap 对齐
+- **storage 层 strict-JSON 兜底**：`storage.save` 三处 `json.dumps` 默认 `allow_nan=True`——任意未来 task 漏算 NaN 就会静默写出 `NaN` / `Infinity` 字面量到 `result.json` / `samples.jsonl` / `index.jsonl`，污染 cross-run 消费（jq / 浏览器 / DB / 仪表盘必拒）；改成 `allow_nan=False` 在写时 `ValueError` fail-loud；同步清掉首轮 smoke 测试遗留在 `runs/` 的 4 个 NaN 毒文件 + `index.jsonl` 4 行毒索引
+- **测试增量 +9 → 19 robust 测试**：`--limit 0/1/2` 参数化 (6) + storage 拒 NaN/Inf 合成 EvalResult (2) + `parse_constant=raise` 模拟 jq / 非 Python parser 端到端 strict JSON 验证 (1)；全量 361 → 370 测试通过；15 LM live 测试再确认无回归
+
+> 教训：首轮把"教学叙事的数值正确性"当主测目标（满数据 score path），缺四类工程面：① `--limit` 退化路径 ② `output_type='none'` run 路径下 task 自身 aggregation ③ aggregated dict 严格 JSON 序列化 ④ 跨 task 的存储层兜底。同样模式 phase 4 (rag_retrieval) / phase 5 (agent_traj) 也应回顾——但本期 minimal-diff，仅修 IAA + storage（后者全局受益）。模板 helper (`_UnusedLM` + `_assert_aggregated_is_finite_json` + `parse_constant=raise`) 留在 IAA 测试文件，未来加新 `output_type='none'` task 时可抽到 conftest。
+
+## 2026-05-08 — Phase 8 audit follow-up wave 3：OOV / invalid prediction 数据契约 + warnings 静音
+
+### 功能
+
+- **`iaa_ordinal` 解析失败不再静默美化 metric**：旧实现 LM 输出非整数 → `pred_int=0` fallback → sklearn `cohen_kappa_score(..., labels=[1..5])` 把 0 视为 OOV 静默丢弃 → 在「混合非法 prediction」场景下 cohens_kappa / weighted_kappa_* 被无声拉到 1.0（实测 `yt=[1,2,3,4,5] yp=[1,0,3,0,5]` 时 cohens_kappa=1.0 而非真实约 0.6）。改为 `_pred_invalid: True` artifact + aggregation valid subset 切片，sklearn 看到的 yp 严格 ⊆ labels；invalid 状态对消费者透明可 drill-down
+- **`iaa_nominal` run path stderr 干净**：跑 `python -m evals run --task iaa_nominal --model ollama:qwen2.5:32b` 不再让 sklearn 内部 emit `UserWarning: y_pred contains classes not in y_true` × N + `RuntimeWarning: invalid value encountered in scalar divide`（OOV 敏感 metric 切 valid subset；退化路径 catch_warnings 局部静音）
+- **`iaa_ordinal` 常数输入路径 stderr 干净**：`pearson_r` / `spearman_rho` / `kendall_tau` 在 yt 或 yp 全相同时（如 run path 全 invalid → valid subset 空 / 极小 limit 单类切片）不再让 scipy emit `ConstantInputWarning`；外层 `_nan_to_zero` 仍兜数值
+- **教学叙事数值零回归**：4 份 `iaa_nominal` stub × 12 stat + 4 份 `iaa_ordinal` stub × 12 stat 的 score 矩阵数值锁全部不变（`constant_majority.acc=0.9 ∧ cohens_kappa=0` / `off_by_one.weighted_quad≈0.71` / `garbage.weighted_quad=-1` 等核心 paradox + 救场叙事完整保留）
+
+### 技术
+
+- 全量测试 367 → 375 通过（+8 audit lock）；warnings **43 → 1**（仅留 phase 6 fail-loud 预期 warn `unknown pricing model 'fake:judge'`，由测试主动验证）
+- [`tasks/iaa_ordinal.py`](tasks/iaa_ordinal.py) `process_results` 改 ~25 行：`pred_int=0 fallback` → `pred_int=None + _pred_invalid: True`；`prediction` 字段保留 raw `pred_str`（drill-down 看 LM 真实输出 > `'None'` 字符串）；`metrics["acc"]` 计算改 `pred_int is not None and pred_int == target_int`
+- [`tasks/iaa_ordinal.py`](tasks/iaa_ordinal.py) `aggregation` 改 ~70 行：① `_y_int(srs)` → `_y_int_valid(srs)` filter `_pred_invalid`；② 6 个 OOV 敏感 metric (`cohens_kappa` / `weighted_kappa_linear/quadratic` / `pearson_r` / `spearman_rho` / `kendall_tau` / `lins_ccc`) 切 valid subset + 空 subset 短路返 0；③ `_accuracy` 走 `mean(s.metrics["acc"])` 不再 sklearn `accuracy_score`（避 None sentinel 进 sklearn）；④ `_pearson_r` / `_spearman_rho` / `_kendall_tau` 加 `_is_constant(yt) or _is_constant(yp)` 短路；⑤ `_cohens_kappa` / `_weighted_kappa_*` / `_fleiss_kappa` 包 `warnings.catch_warnings()` 静音 RuntimeWarning
+- [`tasks/iaa_nominal.py`](tasks/iaa_nominal.py) `process_results` 改 ~10 行：写 `_pred_invalid: pred not in LABELS` artifact；`prediction` 仍存 raw（保留诊断价值）
+- [`tasks/iaa_nominal.py`](tasks/iaa_nominal.py) `aggregation` 改 ~80 行：`_y(srs)` 全部 sample（用于 `accuracy` / `_confusion_matrix`）vs `_y_valid(srs)` 切 valid subset（用于 `balanced_accuracy` / `mcc` / `f1_micro/macro` / `f_beta_2` / `precision/recall/f1_spam` / `cohens_kappa` / `scott_pi` / `gwet_ac1` 共 11 个 OOV 敏感 metric）；`balanced_accuracy` / `mcc` 包 `UserWarning` + `cohens_kappa` / `fleiss_kappa` 包 `RuntimeWarning` 局部静音；multi-rater metric (`fleiss_kappa` / `krippendorff_alpha`) 仍走全部 sample（matrix 不含 pred 不被污染）
+- [`README.md`](README.md) phase 8 数据契约段加一段说明 `_pred_invalid` 字段语义 + OOV 敏感 / 不敏感 metric 二分；phase 8 显式让步 `>` 块下加 audit follow-up wave 3 概要；Quickstart 装依赖一行加"phase 升级 requirements 需重跑"提示
+- 测试增量 +8：`test_iaa_engineering_robustness.py` 27 测试（19 → 27）：①-④ P0 mixed invalid 不再让 cohens_kappa 静默拉 1.0（含真实分歧 + 全 invalid 边界 + 既有 stub 数值不变四向锁）；⑤ P1a no `y_pred contains classes` UserWarning；⑥ P1a no sklearn/statsmodels RuntimeWarning；⑦ P1b no scipy `ConstantInputWarning`；⑧ P2 no single-label UserWarning；helper `_capture_warnings(fn)` 把 stderr 噪音锁集中
+- 15 LM live 测试 (qa_open + rag_qa + agent_traj + ollama_lm) 在 wave 3 改动后再次全部通过；全量 251s（含 ollama qwen2.5:32b 真跑）
+
+### 取舍
+
+- P0 修复选 `_pred_invalid: bool` artifact + valid subset 切片（方案 A）而非 sentinel `-1`（方案 B）/ raise（方案 C）/ fallback to median（方案 D）：契约清晰；与 phase 4 path B+C 体例一致；`accuracy` 仍走全部 sample 保 N 不缩水（教学叙事数值稳定）→ DECISIONS §8.1 ①
+- OOV 敏感 metric vs 不敏感 metric 二分而非"全 metric 切片"：`accuracy` / `_confusion_matrix` / multi-rater 用全部，避免 N 缩水让 `constant_majority.acc=0.9` 漂移到 1.0 → DECISIONS §8.1 ②
+- warnings 处理选「`catch_warnings()` 局部静音」而非「上游清洁输入」：保留单类切片教学价值（`--limit 5` 演示退化）；外层 `_nan_to_zero` 仍兜数值 → DECISIONS §8.1 ③
+- `_accuracy` 改 `mean(s.metrics["acc"])` 不再走 sklearn `accuracy_score`：避 None sentinel 进 sklearn 路径；与 sample 层 acc 字段定义保持一致；省一次内部 _check_targets → DECISIONS §8.1 ④
+- 与 §8.R4 wave 1+2 累加（同源 phase 6 audit follow-up / phase 7 audit follow-up wave 2/3 体例）；§8.R4 status 升级为 `realized → mitigated (wave 1) → deepened (wave 2) → contract-tightened (wave 3)` → DECISIONS §8.1
+- 提醒：phase 8 起 `statsmodels>=0.14` + `krippendorff>=0.6` 是必装依赖。从 phase 7 commit 拉过来的同学跑测试前必须先 `pip install -r play/evals/requirements.txt`，否则 `tasks/__init__.py` import 链断（21 个 test 文件 collection error）。本轮 audit 起点正是这条提示缺失——README Quickstart 段同步加了一行警示
+
+> 跨日里程碑：phase 8 audit 实际工时跨 5-07 → 5-08 边界（5-07 已用满 phase 8 + follow-up 两条名额，wave 3 落到 5-08 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。同源 phase 7 wave 2 → wave 3 的 5-05 → 5-06 跨日先例。
+
+## 2026-05-09 — Phase 8 audit follow-up wave 4：phase 1-8 全量真实 LM 测试反推 3 项工程修订（E1-E3）
+
+### 功能
+
+- **P0 现象级修好**：`python -m evals score --task agent_traj --predictions evals/data/agent_traj/predictions/garbage.jsonl --judge-model ollama:qwen2.5:32b` 不再 ValueError 中断；judge 输出无 int 时 (e.g., LM 给 `"Based on the provided information, it seems that no structured plan was executed to reach"`) closure 返 None 而非 raise，aggregator 过滤后 `plan_quality=1.0`（valid 子集 mean）+ `_plan_<dim>` 私有键存 None 保 drill-down；其余 4 个非 judge metric (task_success / tool_call_set_f1 / argument_correctness / trajectory_match / trajectory_coverage) + `efficiency.judge.*` 真数据全有
+- **P1 fresh 环境单条 install 跑通 RAG**：`pip install -r play/evals/requirements.txt` 一条命令搞定 evals + rag subprocess deps；fresh checkout 跑 `python -m evals run --task rag_retrieval --vdb rag/vdb/panel ...` 不再 `ModuleNotFoundError: No module named 'sentence_transformers'`
+- **P1 onboarding doc 闭环**：[`play/evals/README.md`](play/evals/README.md) phase 4 quickstart 加 `python ingest.py --docs docs/test_vdb --output vdb/test_vdb` 一行；[`play/evals/tests/conftest.py`](play/evals/tests/conftest.py) "incomplete VDB" 分支 skip message 带具体 `cd play/rag && python ingest.py ...` 命令——fresh checkout 上 `tests/test_rag_live.py::test_make_retrieve_fn_returns_real_hits` 不再总 skip
+- 全量 378 → 384 测试通过（+6 None propagation 锁，覆盖 judge_pointwise / g_eval / judge_answer_correctness / judge_answer_relevancy / qa_open aggregator 全 None / g_eval partial-fail valid mean 6 路径）
+
+### 技术
+
+- **E1 — judge closure 解析失败 None propagation**：phase 7 wave 2 P2 立的"None vs 0 语义分离"原则的同形扩展应用——从"切片为空 / 未接 judge"扩展到"LM 输出 parse 失败"。改动 4 文件：`metrics/judge_core.py` 2 closure (judge_pointwise + g_eval) try/except → None；`metrics/judge_rag.py` 2 closure 的 ValueError 路径 (judge_answer_correctness:244 + judge_answer_relevancy:375) 0.0 → None partial supersede phase 4 §4，degenerate-input 路径 4+ 处 0.0 保留（empty input 的 F1=0 / relevancy=0 是合法最低分，与"未测得"语义不同）；`api.py::SampleResult.metrics` 类型 widen 加 None；`tasks/base.py::Task.aggregation` 抽象签名返回类型 widen `Callable[..., float | None]`（return-type covariance 老 task 兼容）；4 task (qa_open / safety / agent_traj / rag_qa) `process_results` 加 `if v is not None: metrics[key] = float(v)` 跳写 + aggregator (qa_open `_judge_pointwise_mean` / agent_traj `_mean_metric` / rag_qa `_mean_metric`) None-skipping + 全空返 None；CLI `_fmt_kv` (None → `<n/a>`) + storage `dataclasses.asdict` (None → JSON null) 均 phase 7 wave 2 已就位 0 改动
+- **E2 — evals/requirements.txt 涵盖 rag 子进程 deps**：尾部追加 4 行（`chromadb` / `rank-bm25` / `tokenizers` / `sentence-transformers`；`torch` 已在 phase 2 段；`pymupdf` 仅 `play/rag/ingest.py` 用、`ollama` Python 包 grep 全 rag/ 无真 import 仅 stale 残留——本次不动）。`play/rag/query.py` 0 字符改动；`play/rag/requirements.txt` 0 改动（rag 独立用法仍是真值源）。DECISIONS §4 Python import 边界（evals 进程零 `from rag import ...`）仍保持，只扩 pip install 边界
+- **E3 — onboarding doc 补全**：纯 docs；`README.md` phase 4 quickstart 一次性 build VDB 段加 test_vdb ingest 行 + 注释；`conftest.py:71-75` "incomplete" 分支 skip message 与 line 67-70 "missing" 分支对齐（带 `cd play/rag && python ingest.py --docs docs/<name> --output vdb/<name>` 可粘贴命令）
+- **测试增量 +6 全部 minimal-diff**：`test_judge_core.py`(+3：`test_pointwise_returns_none_on_parse_failure` / `test_g_eval_dim_returns_none_when_all_samples_unparseable` / `test_g_eval_dim_partial_failure_uses_valid_subset_mean`)；`test_judge_rag.py`(+2：`test_answer_correctness_returns_none_on_parse_failure` / `test_answer_relevancy_returns_none_on_parse_failure`)；`test_qa_open_score.py`(+1：`test_judge_pointwise_aggregator_returns_none_when_all_unparseable`)；现有 `test_parse_pointwise_score_invalid_raises` 锁的 parser 层 raise 契约**显式不动**——分层鲁棒性（parser raise / closure 兜）是 wave 4 的设计原则
+- **行业对齐再确认**：inspect_ai `Score.value=None` + `Scorer.error` / OpenAI Evals "graded N/A" / Langfuse failed=True artifact 同代默认；与 lm-evaluation-harness 旧 0/nan 默认相比是 strict improvement；DECISIONS §1 / §7.D 已多处 cite inspect_ai 作 nested 派 / Scorer 派参照，本 wave 在 fallback 语义上继续与该参照对齐
+
+### 取舍
+
+- E1 fallback 走 None 而非 0.0（保持与 judge_rag pre-fix 一致）/ scale midpoint：phase 7 wave 2 P2 同形扩展；判官全条失败 → aggregator None 而非 mean=0 (会被消费方误判为"模型 0 分") → DECISIONS §8.2 ①
+- E1 judge_rag 只对齐 ValueError 路径而非全 0.0 → None：scope 收敛；degenerate-input (empty target/pred / 0 TP+FP+FN / no contexts / no claims) 的 0 是合法最低分，与"未测得"语义不同 → DECISIONS §8.2 ②
+- E1 partial supersede phase 4 §4 而非全 supersede：phase 4 立的 degenerate-input 0.0 仍生效 → DECISIONS §8.2 ③
+- E1 aggregator empty srs 改 None 是行为变更：与 None propagation 协议一致；空 srs ≡ "未测得"；外部调用方需 audit（项目内全经 CLI / storage 路径均 None-aware）→ DECISIONS §8.2 Risks
+- E2 选加 deps 单而非懒 import：0 行代码 vs 2 行；onboarding 1 条命令 vs 2 条；"避 1.2GB load"宣称对懒 import 不成立（`import sentence_transformers` 只 load 模块~50ms，1.2GB 是 `_model()` 首次调用时 load，与 import 时机正交）→ DECISIONS §8.3 ①
+- E2 rag/requirements.txt stale `ollama` 行不顺手清：scope creep；触发条件（grep 出真 `import ollama` / 用户反馈）满足时单独 PR → DECISIONS §8.3 ②
+- E2 双单内 4 项 deps 复制冗余是显式让步：rag 升 chromadb 主版本时双单需 sync；触发条件（第三个 sub-project 复用）满足时再抽 `requirements/common.txt`，workshop 体量不预先抽 → DECISIONS §8.3 Risks
+- E3 不把 vdb 入仓：`.gitignore` line 14-15 已 ignore（vdb 是 regenerable 大文件，~28MB+）；不在 conftest 主动 build vdb（test 不该有副作用，与 phase 5 / phase 4 conftest probe 风格一致）
+
+> 跨日里程碑：phase 8 audit 实际工时跨 5-07 → 5-08 → 5-09 边界（5-07 用满 phase 8 + follow-up 两条；5-08 用满 wave 3 一条；wave 4 落 5-09 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。同源 phase 7 wave 2 → wave 3 的 5-05 → 5-06 跨日先例。

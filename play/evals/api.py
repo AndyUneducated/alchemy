@@ -111,22 +111,25 @@ class SampleResult:
       - 未来 agent task 的 trajectory steps / tool_calls
       - 任何 diagnostic dump 而非 metric 数值
 
-    与 metrics 的 `dict[str, float | dict[str, float]]` 形成 MLflow / W&B 风格的
-    scalar/non-scalar 对偶——防止把 `list[str]` 偷偷塞进 `metrics` 里破坏类型契约。
+    与 metrics 的 `dict[str, float | None | dict[str, float | None]]` 形成
+    MLflow / W&B 风格的 scalar/non-scalar 对偶——防止把 `list[str]` 偷偷塞进
+    `metrics` 里破坏类型契约。
 
     防垃圾桶纪律：
       - 装"per-sample 非标量产物"，aggregation 输入 + diagnostic dump 用途
       - 不许装：与 metric 计算无关的状态（log/上报放 metric 闭包内；task 状态走 __init__）
 
-    类型放宽演化（DECISIONS §7.D，supersede §6.1 §1.5）：
-      phase 1: dict[str, float]                     —— 严守标量
-      phase 7: dict[str, float | dict[str, float]]  —— 横切子组嵌套
+    类型放宽演化（DECISIONS §7.D 起 nested；§X wave 4 加 None 占位）：
+      phase 1: dict[str, float]                                     —— 严守标量
+      phase 7: dict[str, float | dict[str, float]]                  —— 横切子组嵌套
+      wave 4: dict[str, float | None | dict[str, float | None]]     —— None 表"未测得"
+              (judge parse 失败 / safety 切片空 / 等场景，与 phase 7 wave 2 P2 同形)
     """
 
     doc_id: str
     prediction: str
     target: str
-    metrics: dict[str, float | dict[str, float]]
+    metrics: dict[str, float | None | dict[str, float | None]]
     artifacts: dict[str, Any] = field(default_factory=dict)
 
 

@@ -162,7 +162,7 @@ class AgentTraj(Task):
         coverage_kind = doc.metadata.get("coverage_kind", "callers")
         cov = trajectory_coverage(kind=coverage_kind)
 
-        metrics: dict[str, float] = {
+        metrics: dict[str, float | None] = {
             "task_success": float(ts(doc, response)),
             "tool_call_set_f1": float(f1(doc, response)),
             "argument_correctness": float(ac(doc, response)),
@@ -173,13 +173,16 @@ class AgentTraj(Task):
         if self._judge_plan is not None:
             judge_resp = _trajectory_summary_response(doc)
             dim_scores = self._judge_plan(doc, judge_resp)
-            # mean-of-dimensions：plan_quality 降维成单 scalar，便于和其它 [0,5] 对比
-            metrics["plan_quality"] = (
-                sum(dim_scores.values()) / len(dim_scores) if dim_scores else 0.0
-            )
+            # DECISIONS §X wave 4：g_eval 现在返 dict[str, float | None]——单维 parse 全失败
+            # 该维 None；plan_quality mean 走 valid 子集；全部 None → plan_quality 不写键，
+            # aggregator (_mean_metric) 自然过滤；与 phase 7 P2 体例一致.
+            valid = [v for v in dim_scores.values() if v is not None]
+            if valid:
+                metrics["plan_quality"] = sum(valid) / len(valid)
             for dim, score in dim_scores.items():
-                # 子维度走私有键（'_' 前缀），不上聚合面板，仅供 drill-down
-                metrics[f"_plan_{dim}"] = float(score)
+                # 子维度走私有键（'_' 前缀），不上聚合面板，仅供 drill-down；
+                # None 直接落 None（落盘 JSON null）保留 drill-down 价值.
+                metrics[f"_plan_{dim}"] = float(score) if score is not None else None
 
         traj = doc.metadata.get("trajectory", {}) or {}
         artifacts: dict[str, Any] = {
@@ -198,8 +201,8 @@ class AgentTraj(Task):
             artifacts=artifacts,
         )
 
-    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        agg: dict[str, Callable[[list[SampleResult]], float]] = {
+    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
+        agg: dict[str, Callable[[list[SampleResult]], float | None]] = {
             "task_success": _mean_metric("task_success"),
             "tool_call_set_f1": _mean_metric("tool_call_set_f1"),
             "argument_correctness": _mean_metric("argument_correctness"),
@@ -342,15 +345,23 @@ def _trajectory_summary_response(doc: Doc) -> Response:
     return Response(doc_id=doc.id, text=" ".join(parts))
 
 
-def _mean_metric(key: str) -> Callable[[list[SampleResult]], float]:
-    """工厂：对 SampleResult.metrics[key] 求均值的 aggregation 闭包."""
+def _mean_metric(key: str) -> Callable[[list[SampleResult]], float | None]:
+    """工厂：对 SampleResult.metrics[key] 求均值的 aggregation 闭包.
 
-    def _agg(srs: list[SampleResult]) -> float:
+    DECISIONS §X wave 4：None 占位"未测得"——key 缺 / value=None 都过滤；
+    全集为空 → None（与 safety / qa_open 同形）.
+    """
+
+    def _agg(srs: list[SampleResult]) -> float | None:
         if not srs:
-            return 0.0
-        vals = [s.metrics[key] for s in srs if key in s.metrics]
+            return None
+        vals = [
+            s.metrics[key]
+            for s in srs
+            if key in s.metrics and s.metrics[key] is not None
+        ]
         if not vals:
-            return 0.0
+            return None
         return sum(vals) / len(vals)
 
     _agg.__name__ = f"mean_{key}"

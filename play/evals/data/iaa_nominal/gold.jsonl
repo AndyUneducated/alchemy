@@ -1,0 +1,30 @@
+{"id":"n01","input":"Thanks for the meeting notes from yesterday.","target":"ham"}
+{"id":"n02","input":"Let's sync on the Q4 roadmap tomorrow afternoon.","target":"ham"}
+{"id":"n03","input":"Reminder: dentist appointment at 3pm Friday.","target":"ham"}
+{"id":"n04","input":"Project status update for the engineering team.","target":"ham"}
+{"id":"n05","input":"Pull request #432 is ready for review when you have time.","target":"ham"}
+{"id":"n06","input":"Lunch reservation confirmed for 12:30 at the new ramen place.","target":"ham"}
+{"id":"n07","input":"Travel itinerary for next week's conference attached.","target":"ham"}
+{"id":"n08","input":"Monthly invoice attached as PDF — net 30 terms.","target":"ham"}
+{"id":"n09","input":"Library book is due back this Saturday.","target":"ham"}
+{"id":"n10","input":"Soccer practice canceled tonight due to rain.","target":"ham"}
+{"id":"n11","input":"Quarterly OKR review meeting Thursday at 2pm.","target":"ham"}
+{"id":"n12","input":"Welcome to the new joiner orientation deck.","target":"ham"}
+{"id":"n13","input":"Sprint retrospective notes from yesterday's session.","target":"ham"}
+{"id":"n14","input":"Budget approval needed for the design tools subscription.","target":"ham"}
+{"id":"n15","input":"Reschedule our 1:1 to next Monday morning if possible.","target":"ham"}
+{"id":"n16","input":"Birthday party invitation for Sarah's daughter this Saturday.","target":"ham"}
+{"id":"n17","input":"Customer feedback summary from this week's discovery calls.","target":"ham"}
+{"id":"n18","input":"Office WiFi maintenance window tonight 10pm to 11pm.","target":"ham"}
+{"id":"n19","input":"Team offsite agenda draft attached for review.","target":"ham"}
+{"id":"n20","input":"Weekly newsletter from the CTO's office.","target":"ham"}
+{"id":"n21","input":"Bookkeeping reconciliation for last month is complete.","target":"ham"}
+{"id":"n22","input":"Holiday schedule and remote work policy reminder.","target":"ham"}
+{"id":"n23","input":"Code freeze starts tomorrow at noon — please rebase.","target":"ham"}
+{"id":"n24","input":"Recap of the customer onboarding workshop.","target":"ham"}
+{"id":"n25","input":"Friendly reminder to submit your timesheet by Friday.","target":"ham"}
+{"id":"n26","input":"Action items from yesterday's architecture review.","target":"ham"}
+{"id":"n27","input":"Lunch and learn topic vote — please pick one before Wednesday.","target":"ham"}
+{"id":"n28","input":"WIN $1000 NOW!!! Click this link to claim FAST!!!","target":"spam"}
+{"id":"n29","input":"FREE iPhone giveaway — verify your account today!","target":"spam"}
+{"id":"n30","input":"Limited time deal — refinance now and save 50%!","target":"spam"}

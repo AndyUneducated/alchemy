@@ -96,7 +96,7 @@ def test_parse_pointwise_score_clamps_out_of_range():
     assert parse_pointwise_score("999") == 5
 
 
-# ---------- judge_pointwise（1 条）----------
+# ---------- judge_pointwise（2 条）----------
 
 def test_pointwise_mean_with_fake_judge():
     """5 条预设分数 [3,4,5,2,1]，mean=3.0——基础 pointwise 形状契约."""
@@ -105,6 +105,20 @@ def test_pointwise_mean_with_fake_judge():
 
     scores = [pj(_doc(id=f"d{i}"), _resp(doc_id=f"d{i}")) for i in range(5)]
     assert sum(scores) / len(scores) == 3.0
+
+
+def test_pointwise_returns_none_on_parse_failure():
+    """DECISIONS §X wave 4：LM 输出无 int 可解析 → closure 返 None 而非 raise.
+
+    与 phase 7 wave 2 P2 立的"None 占位未测得"原则同形——1-5 scale 0 越界，
+    None 显式表"未测得"，aggregator 自然过滤；区别于 raise 中断整 run.
+
+    parse_pointwise_score 自身仍 raise（test_parse_pointwise_score_invalid_raises 锁定）；
+    closure 层是"应用 / 系统层"的鲁棒边界.
+    """
+    fake = FakeJudgeLM(outputs=["totally not a score"])
+    pj = judge_pointwise(fake, prompt_template="rate: {response}")
+    assert pj(_doc(), _resp()) is None
 
 
 # ---------- judge_pairwise + pairwise_winrate（3 条）----------
@@ -189,6 +203,39 @@ def test_g_eval_multi_sample_distribution_replaces_logprob():
     )(_doc(), _resp())
 
     assert abs(result["quality"] - 3.8) < 1e-9
+
+
+def test_g_eval_dim_returns_none_when_all_samples_unparseable():
+    """DECISIONS §X wave 4：单维 n_samples 全部 parse 失败 → 该维 None"未测得".
+
+    与 phase 7 P2 切片为空时 None 占位同形（语义"判官全失败" ≈ 切片中无样本）.
+    """
+    fake = FakeJudgeLM(outputs=["bad", "garbage", "no number"])
+    result = g_eval(
+        fake,
+        dimensions=("coherence",),
+        prompt_template="rate {dimension}: {response}",
+        n_samples=3,
+    )(_doc(), _resp())
+
+    assert result["coherence"] is None
+
+
+def test_g_eval_dim_partial_failure_uses_valid_subset_mean():
+    """DECISIONS §X wave 4：n_samples 部分 parse 失败 → 该维返 valid 子集 mean.
+
+    outputs=["4", "bad", "5"] n_samples=3 → valid=[4,5]，mean=4.5；
+    与 phase 8 wave 3 立的"OOV 敏感 metric 切 valid subset"同精神.
+    """
+    fake = FakeJudgeLM(outputs=["4", "bad", "5"])
+    result = g_eval(
+        fake,
+        dimensions=("quality",),
+        prompt_template="rate {dimension}: {response}",
+        n_samples=3,
+    )(_doc(), _resp())
+
+    assert result["quality"] == 4.5
 
 
 # ---------- self_consistency（3 条）----------
