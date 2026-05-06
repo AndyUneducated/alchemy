@@ -154,18 +154,22 @@ def judge_pointwise(
     prompt_template: str = DEFAULT_POINTWISE_TEMPLATE,
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
-) -> Callable[[Doc, Response], float]:
-    """生成一个 (doc, response) -> float score 的闭包.
+) -> Callable[[Doc, Response], float | None]:
+    """生成一个 (doc, response) -> float score | None 的闭包.
 
     模板字段：`{input}` / `{reference}` / `{response}`. 缺失字段会被 .format 忽略
     （如果模板没引用），所以测试可以用极简模板 `"rate: {response}"`.
 
     DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取
     judge LM 调用记录，runner 挂 `aggregated["efficiency"]["judge"]`.
+
+    DECISIONS §X (wave 4)：parser 抛 ValueError（LM 输出无 int 可解析）→ 闭包返 None；
+    与 phase 7 wave 2 P2 立的"None vs 0 语义分离"原则一致——1-5 scale 0 越界，
+    None 显式表"未测得"，下游 aggregator 过滤后空集→None，与 safety.judge_safety_score 同形.
     """
     rec = _JudgeRecorder(judge_lm)
 
-    def _score(doc: Doc, response: Response) -> float:
+    def _score(doc: Doc, response: Response) -> float | None:
         prompt = prompt_template.format(
             input=doc.input,
             reference=doc.target,
@@ -176,7 +180,10 @@ def judge_pointwise(
             request_type="generate_until", max_tokens=max_tokens,
         )
         [resp] = rec.call([req])
-        return float(parse_pointwise_score(resp.text or "", scale=scale))
+        try:
+            return float(parse_pointwise_score(resp.text or "", scale=scale))
+        except ValueError:
+            return None
 
     _score._recorder = rec  # type: ignore[attr-defined]
     return _score
@@ -261,8 +268,8 @@ def g_eval(
     n_samples: int = 5,
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
-) -> Callable[[Doc, Response], dict[str, float]]:
-    """返回一个 (doc, response) -> {dim: score} 的闭包.
+) -> Callable[[Doc, Response], dict[str, float | None]]:
+    """返回一个 (doc, response) -> {dim: score | None} 的闭包.
 
     每维 `n_samples` 次采样 + mean——替代 logprob 加权的离散分布估计（OpenAI 没 logprobs
     的本地 ollama / 兼容路径）.
@@ -270,11 +277,14 @@ def g_eval(
     模板字段：`{input}` / `{reference}` / `{response}` / `{dimension}`.
 
     DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
+
+    DECISIONS §X (wave 4)：单次 sample parser 失败 → 跳过该 sample；该维 valid sample 全空
+    → 维返 None（"未测得"占位，与 phase 7 P2 同形）；部分失败按 valid mean.
     """
     rec = _JudgeRecorder(judge_lm)
 
-    def _score(doc: Doc, response: Response) -> dict[str, float]:
-        out: dict[str, float] = {}
+    def _score(doc: Doc, response: Response) -> dict[str, float | None]:
+        out: dict[str, float | None] = {}
         for dim in dimensions:
             scores: list[int] = []
             for _ in range(n_samples):
@@ -289,8 +299,11 @@ def g_eval(
                     request_type="generate_until", max_tokens=max_tokens,
                 )
                 [resp] = rec.call([req])
-                scores.append(parse_pointwise_score(resp.text or "", scale=scale))
-            out[dim] = sum(scores) / len(scores)
+                try:
+                    scores.append(parse_pointwise_score(resp.text or "", scale=scale))
+                except ValueError:
+                    continue
+            out[dim] = sum(scores) / len(scores) if scores else None
         return out
 
     _score._recorder = rec  # type: ignore[attr-defined]

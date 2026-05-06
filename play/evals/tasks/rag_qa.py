@@ -153,7 +153,7 @@ class RagQA(Task):
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
         pred = (response.text or "").strip()
         target = doc.target or ""
-        metrics: dict[str, float] = {
+        metrics: dict[str, float | None] = {
             "em": float(pred == target),
             "rouge_l": _per_sample_rouge_l(pred, target),
         }
@@ -162,11 +162,19 @@ class RagQA(Task):
             "gold_ids": list(doc.metadata.get("gold_doc_ids", ())),
         }
         if self._judge_faithfulness is not None:
-            metrics["faithfulness"] = float(self._judge_faithfulness(doc, response))
-            metrics["answer_correctness"] = float(self._judge_answer_correctness(doc, response))
-            metrics["context_precision"] = float(self._judge_context_precision(doc, response))
-            metrics["context_recall"] = float(self._judge_context_recall(doc, response))
-            metrics["answer_relevancy"] = float(self._judge_answer_relevancy(doc, response))
+            # DECISIONS §X wave 4：judge_answer_correctness / judge_answer_relevancy 在 parse
+            # 失败时返 None；其余 3 closure 仍只回 float（degenerate-input 路径返 0.0 是合法
+            # 最低分）；统一用 None-check 既兼容也对未来 closure 升级 None 路径稳健.
+            for key, fn in (
+                ("faithfulness", self._judge_faithfulness),
+                ("answer_correctness", self._judge_answer_correctness),
+                ("context_precision", self._judge_context_precision),
+                ("context_recall", self._judge_context_recall),
+                ("answer_relevancy", self._judge_answer_relevancy),
+            ):
+                v = fn(doc, response)
+                if v is not None:
+                    metrics[key] = float(v)
         return SampleResult(
             doc_id=doc.id,
             prediction=pred,
@@ -175,8 +183,8 @@ class RagQA(Task):
             artifacts=artifacts,
         )
 
-    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        agg: dict[str, Callable[[list[SampleResult]], float]] = {
+    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
+        agg: dict[str, Callable[[list[SampleResult]], float | None]] = {
             "exact_match": _mean_metric("em"),
             "rouge_l": _mean_metric("rouge_l"),
         }
@@ -235,15 +243,24 @@ def _per_sample_rouge_l(pred: str, target: str) -> float:
     return float(scorer.score(target, pred)["rougeL"].fmeasure)
 
 
-def _mean_metric(key: str) -> Callable[[list[SampleResult]], float]:
-    """工厂：对 SampleResult.metrics[key] 求均值的 aggregation 闭包."""
+def _mean_metric(key: str) -> Callable[[list[SampleResult]], float | None]:
+    """工厂：对 SampleResult.metrics[key] 求均值的 aggregation 闭包.
 
-    def _agg(srs: list[SampleResult]) -> float:
+    DECISIONS §X wave 4：None 占位"未测得"——key 缺 / value=None 都过滤；
+    em / rouge_l 等老 metric 始终是 float（不会 None），过滤逻辑透传不影响数值；
+    judge 维度（answer_correctness / answer_relevancy）parse 失败时不写键 → 返 None.
+    """
+
+    def _agg(srs: list[SampleResult]) -> float | None:
         if not srs:
-            return 0.0
-        vals = [s.metrics[key] for s in srs if key in s.metrics]
+            return None
+        vals = [
+            s.metrics[key]
+            for s in srs
+            if key in s.metrics and s.metrics[key] is not None
+        ]
         if not vals:
-            return 0.0
+            return None
         return sum(vals) / len(vals)
 
     _agg.__name__ = f"mean_{key}"

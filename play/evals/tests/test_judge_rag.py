@@ -140,6 +140,18 @@ def test_answer_correctness_zero_when_no_overlap():
     assert ac(_doc_with_ctx(target="gold"), _resp("wrong")) == 0.0
 
 
+def test_answer_correctness_returns_none_on_parse_failure():
+    """DECISIONS §X wave 4：judge 输出无 TP/FP/FN 三整数 → 返 None"未测得"
+    （而非 0.0；区分"判官没数清"vs"判官数到 0 TP"，对齐 phase 7 P2 体例）.
+
+    parse 失败（"无 int 三元组"）= 未测得 → None；
+    degenerate 路径（target/pred 为空 / TP+FP+FN=0 / P+R=0）保留 0.0 = 合法最低分.
+    """
+    fake = FakeJudgeLM(outputs=["totally not parseable"])
+    ac = judge_answer_correctness(fake)
+    assert ac(_doc_with_ctx(target="gold"), _resp("hyp")) is None
+
+
 # ---------- judge_context_precision（2 条）--------------------------------
 
 def test_context_precision_all_relevant():
@@ -188,3 +200,14 @@ def test_answer_relevancy_zero_on_empty_response():
     fake = FakeJudgeLM(outputs=["unused"])
     ar = judge_answer_relevancy(fake)
     assert ar(_doc_with_ctx(), Response(doc_id="d0", text="")) == 0.0
+
+
+def test_answer_relevancy_returns_none_on_parse_failure():
+    """DECISIONS §X wave 4：1-5 scale parse 失败 → 返 None"未测得"
+    （区分 empty pred=0.0 合法最低分 vs parse 失败=None；
+    与 judge_pointwise / judge_safety_score 同形 None 占位协议）.
+    """
+    fake = FakeJudgeLM(outputs=["the response was generally"])
+    ar = judge_answer_relevancy(fake)
+    # pred 非空 → 走到 parse；parse 失败 → None（不是 empty pred 那条 0.0）
+    assert ar(_doc_with_ctx(), _resp("non-empty pred")) is None

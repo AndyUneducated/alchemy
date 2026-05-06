@@ -91,13 +91,17 @@ class Task(ABC):
         ...
 
     @abstractmethod
-    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        """{metric_name: fn(list[SampleResult]) -> float} 延迟求值.
+    def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
+        """{metric_name: fn(list[SampleResult]) -> float | None} 延迟求值.
 
         为什么返回字典而非数值：
         - 同一批 per-sample 可以喂多个聚合函数
         - 测试时可单独替换某个聚合
         - key 就是最终指标名，Storage 直接用
+
+        DECISIONS §X wave 4：返回 `float | None`——None 表"未测得"（与 phase 7 P2
+        safety.judge_safety_score 同形）；下游 CLI 渲染 `<n/a>`、JSON 落 `null`.
+        老 task 全 float 仍兼容（Optional 是 widening）.
         """
         ...
 

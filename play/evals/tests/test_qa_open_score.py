@@ -130,3 +130,25 @@ def test_qa_open_score_missing_pred_raises(tmp_path):
     partial.write_text('{"id":"qNONE","prediction":"x"}\n', encoding="utf-8")
     with pytest.raises(KeyError):
         evaluate_score(task, partial)
+
+
+# ---------- DECISIONS §X wave 4：judge_pointwise 全 sample None → aggregator None -----
+
+def test_judge_pointwise_aggregator_returns_none_when_all_unparseable():
+    """判官全条 parse 失败时（每条 sample 都返 None）→ task 的 aggregator
+    返 None"未测得"，不再 silently 给 0.0 把数值往下拉.
+
+    与 phase 7 P2 安全 task 的 judge_safety_score 切片为空 → None 同形；
+    落 result.json 为 JSON null，CLI 渲染 `<n/a>`（phase 7 wave 2 已就位）.
+
+    采用极简模板 `"rate: {response}"` 让 closure 看到的所有 LM 输出都是
+    "totally not parseable"——10 条 sample × 1 个 fake LM × 全 None 路径.
+    """
+    fake = FakeJudgeLM(outputs=lambda _p: "totally not parseable")
+    task = QAOpen(judge_lm=fake, judge_template="rate: {response}")
+    r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
+    assert r.n == 10
+    # task-specific lexical metrics 不动（与 judge 正交）
+    assert r.aggregated["exact_match"] == 1.0
+    # judge_pointwise 全条 None → aggregator None
+    assert r.aggregated["judge_pointwise"] is None
