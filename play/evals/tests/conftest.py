@@ -71,7 +71,7 @@ def _vdb_ok(name: str) -> tuple[Path | None, str]:
     if not (vdb / "chroma.sqlite3").exists() or not (vdb / "bm25.pkl").exists():
         return None, (
             f"VDB {vdb} is incomplete (missing chroma.sqlite3 or bm25.pkl); "
-            f"re-run ingest to rebuild"
+            f"re-run: cd play/rag && python ingest.py --docs docs/{name} --output vdb/{name}"
         )
     return vdb, ""
 

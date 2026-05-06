@@ -382,3 +382,32 @@
 
 > 跨日里程碑：phase 8 audit 实际工时跨 5-07 → 5-08 边界（5-07 已用满 phase 8 + follow-up 两条名额，wave 3 落到 5-08 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。同源 phase 7 wave 2 → wave 3 的 5-05 → 5-06 跨日先例。
 
+## 2026-05-09 — Phase 8 audit follow-up wave 4：phase 1-8 全量真实 LM 测试反推 3 项工程修订（E1-E3）
+
+### 功能
+
+- **P0 现象级修好**：`python -m evals score --task agent_traj --predictions evals/data/agent_traj/predictions/garbage.jsonl --judge-model ollama:qwen2.5:32b` 不再 ValueError 中断；judge 输出无 int 时 (e.g., LM 给 `"Based on the provided information, it seems that no structured plan was executed to reach"`) closure 返 None 而非 raise，aggregator 过滤后 `plan_quality=1.0`（valid 子集 mean）+ `_plan_<dim>` 私有键存 None 保 drill-down；其余 4 个非 judge metric (task_success / tool_call_set_f1 / argument_correctness / trajectory_match / trajectory_coverage) + `efficiency.judge.*` 真数据全有
+- **P1 fresh 环境单条 install 跑通 RAG**：`pip install -r play/evals/requirements.txt` 一条命令搞定 evals + rag subprocess deps；fresh checkout 跑 `python -m evals run --task rag_retrieval --vdb rag/vdb/panel ...` 不再 `ModuleNotFoundError: No module named 'sentence_transformers'`
+- **P1 onboarding doc 闭环**：[`play/evals/README.md`](play/evals/README.md) phase 4 quickstart 加 `python ingest.py --docs docs/test_vdb --output vdb/test_vdb` 一行；[`play/evals/tests/conftest.py`](play/evals/tests/conftest.py) "incomplete VDB" 分支 skip message 带具体 `cd play/rag && python ingest.py ...` 命令——fresh checkout 上 `tests/test_rag_live.py::test_make_retrieve_fn_returns_real_hits` 不再总 skip
+- 全量 378 → 384 测试通过（+6 None propagation 锁，覆盖 judge_pointwise / g_eval / judge_answer_correctness / judge_answer_relevancy / qa_open aggregator 全 None / g_eval partial-fail valid mean 6 路径）
+
+### 技术
+
+- **E1 — judge closure 解析失败 None propagation**：phase 7 wave 2 P2 立的"None vs 0 语义分离"原则的同形扩展应用——从"切片为空 / 未接 judge"扩展到"LM 输出 parse 失败"。改动 4 文件：`metrics/judge_core.py` 2 closure (judge_pointwise + g_eval) try/except → None；`metrics/judge_rag.py` 2 closure 的 ValueError 路径 (judge_answer_correctness:244 + judge_answer_relevancy:375) 0.0 → None partial supersede phase 4 §4，degenerate-input 路径 4+ 处 0.0 保留（empty input 的 F1=0 / relevancy=0 是合法最低分，与"未测得"语义不同）；`api.py::SampleResult.metrics` 类型 widen 加 None；`tasks/base.py::Task.aggregation` 抽象签名返回类型 widen `Callable[..., float | None]`（return-type covariance 老 task 兼容）；4 task (qa_open / safety / agent_traj / rag_qa) `process_results` 加 `if v is not None: metrics[key] = float(v)` 跳写 + aggregator (qa_open `_judge_pointwise_mean` / agent_traj `_mean_metric` / rag_qa `_mean_metric`) None-skipping + 全空返 None；CLI `_fmt_kv` (None → `<n/a>`) + storage `dataclasses.asdict` (None → JSON null) 均 phase 7 wave 2 已就位 0 改动
+- **E2 — evals/requirements.txt 涵盖 rag 子进程 deps**：尾部追加 4 行（`chromadb` / `rank-bm25` / `tokenizers` / `sentence-transformers`；`torch` 已在 phase 2 段；`pymupdf` 仅 `play/rag/ingest.py` 用、`ollama` Python 包 grep 全 rag/ 无真 import 仅 stale 残留——本次不动）。`play/rag/query.py` 0 字符改动；`play/rag/requirements.txt` 0 改动（rag 独立用法仍是真值源）。DECISIONS §4 Python import 边界（evals 进程零 `from rag import ...`）仍保持，只扩 pip install 边界
+- **E3 — onboarding doc 补全**：纯 docs；`README.md` phase 4 quickstart 一次性 build VDB 段加 test_vdb ingest 行 + 注释；`conftest.py:71-75` "incomplete" 分支 skip message 与 line 67-70 "missing" 分支对齐（带 `cd play/rag && python ingest.py --docs docs/<name> --output vdb/<name>` 可粘贴命令）
+- **测试增量 +6 全部 minimal-diff**：`test_judge_core.py`(+3：`test_pointwise_returns_none_on_parse_failure` / `test_g_eval_dim_returns_none_when_all_samples_unparseable` / `test_g_eval_dim_partial_failure_uses_valid_subset_mean`)；`test_judge_rag.py`(+2：`test_answer_correctness_returns_none_on_parse_failure` / `test_answer_relevancy_returns_none_on_parse_failure`)；`test_qa_open_score.py`(+1：`test_judge_pointwise_aggregator_returns_none_when_all_unparseable`)；现有 `test_parse_pointwise_score_invalid_raises` 锁的 parser 层 raise 契约**显式不动**——分层鲁棒性（parser raise / closure 兜）是 wave 4 的设计原则
+- **行业对齐再确认**：inspect_ai `Score.value=None` + `Scorer.error` / OpenAI Evals "graded N/A" / Langfuse failed=True artifact 同代默认；与 lm-evaluation-harness 旧 0/nan 默认相比是 strict improvement；DECISIONS §1 / §7.D 已多处 cite inspect_ai 作 nested 派 / Scorer 派参照，本 wave 在 fallback 语义上继续与该参照对齐
+
+### 取舍
+
+- E1 fallback 走 None 而非 0.0（保持与 judge_rag pre-fix 一致）/ scale midpoint：phase 7 wave 2 P2 同形扩展；判官全条失败 → aggregator None 而非 mean=0 (会被消费方误判为"模型 0 分") → DECISIONS §8.2 ①
+- E1 judge_rag 只对齐 ValueError 路径而非全 0.0 → None：scope 收敛；degenerate-input (empty target/pred / 0 TP+FP+FN / no contexts / no claims) 的 0 是合法最低分，与"未测得"语义不同 → DECISIONS §8.2 ②
+- E1 partial supersede phase 4 §4 而非全 supersede：phase 4 立的 degenerate-input 0.0 仍生效 → DECISIONS §8.2 ③
+- E1 aggregator empty srs 改 None 是行为变更：与 None propagation 协议一致；空 srs ≡ "未测得"；外部调用方需 audit（项目内全经 CLI / storage 路径均 None-aware）→ DECISIONS §8.2 Risks
+- E2 选加 deps 单而非懒 import：0 行代码 vs 2 行；onboarding 1 条命令 vs 2 条；"避 1.2GB load"宣称对懒 import 不成立（`import sentence_transformers` 只 load 模块~50ms，1.2GB 是 `_model()` 首次调用时 load，与 import 时机正交）→ DECISIONS §8.3 ①
+- E2 rag/requirements.txt stale `ollama` 行不顺手清：scope creep；触发条件（grep 出真 `import ollama` / 用户反馈）满足时单独 PR → DECISIONS §8.3 ②
+- E2 双单内 4 项 deps 复制冗余是显式让步：rag 升 chromadb 主版本时双单需 sync；触发条件（第三个 sub-project 复用）满足时再抽 `requirements/common.txt`，workshop 体量不预先抽 → DECISIONS §8.3 Risks
+- E3 不把 vdb 入仓：`.gitignore` line 14-15 已 ignore（vdb 是 regenerable 大文件，~28MB+）；不在 conftest 主动 build vdb（test 不该有副作用，与 phase 5 / phase 4 conftest probe 风格一致）
+
+> 跨日里程碑：phase 8 audit 实际工时跨 5-07 → 5-08 → 5-09 边界（5-07 用满 phase 8 + follow-up 两条；5-08 用满 wave 3 一条；wave 4 落 5-09 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。同源 phase 7 wave 2 → wave 3 的 5-05 → 5-06 跨日先例。
