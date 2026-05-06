@@ -338,3 +338,15 @@
 
 - 工程兜底 `_nan_to_zero` 选「NaN→0」而非「NaN→null」：① `EvalResult.aggregated[str, float]` 契约期 float 而非 Optional[float]，跨 run 排序 / cross-run JSON_EXTRACT 看到 None 会 KeyError 路径分裂；② plan 早先就承诺 "sanity 0/None" 而 0 比 None 更适合作 scalar 默认；③ 与 sentiment_clf 等老 task 在缺数据时给 0 的体例一致 → DECISIONS §8.R4
 - 工程兜底放在 task aggregation 内 (`_pos_label_present` / `_nan_to_zero` 是 task-local closure helper) 而非提到 metrics/agreement.py：① 这些 helper 只服务 task 自己的库直调；② 与「metrics/agreement.py 仅装手算 + 真共享 helper」scope 收紧决策（DECISIONS §8 ⑥）正交一致；③ 避免下放后 metrics/agreement.py 又拐回 import 中转站
+
+### 二轮 audit follow-up (同 5-07 同里程碑续记)
+
+首轮 fix 后用户追问"测试是否够写实"，补做四道更严的 audit，又抓到 3 处更深的 bug + 1 个全局兜底：
+
+- **scipy 长度 <2 raise**：`_pearson_r` / `_spearman_rho` / `_kendall_tau` 在 `--limit 1` 时 scipy raise `ValueError: x and y must have length at least 2`，单 NaN 兜底救不了——加 `len(srs) < 2: return 0.0` 前置短路
+- **dtype 混合的 unique 检测假性**：`iaa_ordinal` 走 `build_rater_matrix` 把 `sr.target` (`str("1")`) 与 `raters` (`int(1)`) 混入同一矩阵；首轮加的 `<2 unique value` 短路在 raw matrix 上判 `{1, "1"}` 假性=2，但 `np.asarray(dtype=int)` 之后真 unique=1，krippendorff 仍 raise——unique 检测必须在 dtype 转换**之后**做
+- **iaa_ordinal `_fleiss_kappa` 漏 wrap**：首轮只包了 `iaa_nominal` 的 `_fleiss_kappa`，`iaa_ordinal` 里同名函数还会泄 NaN——加 `_nan_to_zero` wrap 对齐
+- **storage 层 strict-JSON 兜底**：`storage.save` 三处 `json.dumps` 默认 `allow_nan=True`——任意未来 task 漏算 NaN 就会静默写出 `NaN` / `Infinity` 字面量到 `result.json` / `samples.jsonl` / `index.jsonl`，污染 cross-run 消费（jq / 浏览器 / DB / 仪表盘必拒）；改成 `allow_nan=False` 在写时 `ValueError` fail-loud；同步清掉首轮 smoke 测试遗留在 `runs/` 的 4 个 NaN 毒文件 + `index.jsonl` 4 行毒索引
+- **测试增量 +9 → 19 robust 测试**：`--limit 0/1/2` 参数化 (6) + storage 拒 NaN/Inf 合成 EvalResult (2) + `parse_constant=raise` 模拟 jq / 非 Python parser 端到端 strict JSON 验证 (1)；全量 361 → 370 测试通过；15 LM live 测试再确认无回归
+
+> 教训：首轮把"教学叙事的数值正确性"当主测目标（满数据 score path），缺四类工程面：① `--limit` 退化路径 ② `output_type='none'` run 路径下 task 自身 aggregation ③ aggregated dict 严格 JSON 序列化 ④ 跨 task 的存储层兜底。同样模式 phase 4 (rag_retrieval) / phase 5 (agent_traj) 也应回顾——但本期 minimal-diff，仅修 IAA + storage（后者全局受益）。模板 helper (`_UnusedLM` + `_assert_aggregated_is_finite_json` + `parse_constant=raise`) 留在 IAA 测试文件，未来加新 `output_type='none'` task 时可抽到 conftest。

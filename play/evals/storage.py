@@ -48,6 +48,12 @@ def save(result: EvalResult, runs_dir: Path = DEFAULT_RUNS_DIR) -> Path:
 
     并发：append 一行 index.jsonl < 4KB，POSIX 保证原子性，不撕行；
     若未来真有并发加 filelock，依然不到 SQLite 的复杂度。
+
+    Strict JSON 兜底（phase 8 §8.R4 引）：所有写盘 path 用 `allow_nan=False`，
+    NaN / Inf 在 Python 内部用 `json.dumps` 默认 `allow_nan=True` 会写出 `NaN` /
+    `Infinity` 字面量——这不是合法 JSON，任何非 Python parser (jq / 浏览器 / DB
+    / 仪表盘) 都会拒绝。Fail-loud 在写时报 `ValueError`，比静默写出毒文件后下游
+    才崩好得多——同源 phase 4 path C「跨进程跨 run 用 JSON 流转」契约。
     """
     run_dir = runs_dir / result.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -55,19 +61,19 @@ def save(result: EvalResult, runs_dir: Path = DEFAULT_RUNS_DIR) -> Path:
     # 1) result.json —— 本次 run 的聚合快照（不含 per_sample，避免重复）
     result_row = _index_row(result)
     (run_dir / "result.json").write_text(
-        json.dumps(result_row, ensure_ascii=False, indent=2),
+        json.dumps(result_row, ensure_ascii=False, indent=2, allow_nan=False),
         encoding="utf-8",
     )
 
     # 2) samples.jsonl —— per-sample 行式
     with (run_dir / "samples.jsonl").open("w", encoding="utf-8") as f:
         for s in result.per_sample:
-            f.write(json.dumps(_sample_row(s), ensure_ascii=False) + "\n")
+            f.write(json.dumps(_sample_row(s), ensure_ascii=False, allow_nan=False) + "\n")
 
     # 3) index.jsonl —— append-only 扁平索引（source of truth for cross-run queries）
     runs_dir.mkdir(parents=True, exist_ok=True)
     with (runs_dir / "index.jsonl").open("a", encoding="utf-8") as f:
-        f.write(json.dumps(result_row, ensure_ascii=False) + "\n")
+        f.write(json.dumps(result_row, ensure_ascii=False, allow_nan=False) + "\n")
 
     return run_dir
 
