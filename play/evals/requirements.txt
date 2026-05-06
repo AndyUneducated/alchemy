@@ -26,3 +26,10 @@ ranx
 # audtorch（Lin's CCC 手算 5 行避 torch 全套）—— DECISIONS §8 显式登记
 statsmodels>=0.14
 krippendorff>=0.6
+
+# phase 4 RAG subprocess deps (rag/query.py 透传需要；rag/requirements.txt 是 rag
+# 独立用法的真值源；DECISIONS §8.3 wave 4 显式登记双单 sync 让步——deps 漂移时两单都需 bump)
+chromadb
+rank-bm25
+tokenizers
+sentence-transformers

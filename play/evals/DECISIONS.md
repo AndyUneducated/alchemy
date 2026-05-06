@@ -937,3 +937,54 @@ Phase 1-8 全量真实 LM 测试在 [`tasks/agent_traj.py`](tasks/agent_traj.py)
 - 本 ADR 是 phase 7 wave 2 P2 (`safety_aggregated[str, float | None]`) 立的"None vs 0 语义分离"原则的同形扩展应用——从"切片为空"扩展到"解析失败"
 - §8.R4 status 不动（保持 wave 1+2+3）；本 wave 4 是工程稳健性扩展而非 IAA 数据契约
 
+## 8.3 Phase 8 audit follow-up wave 4：evals/requirements.txt 涵盖 rag 子进程 deps（E2 修复）
+
+- **Status**: accepted
+- **Date**: 2026-05-09
+
+### Scope
+
+Phase 1-8 全量测试发现 fresh 环境跑 `python -m evals run --task rag_retrieval --vdb rag/vdb/panel ...` 立刻 `ModuleNotFoundError: No module named 'sentence_transformers'`（即便不带 `--rerank`）：[`play/rag/query.py:21`](../rag/query.py) 顶层无条件 `from reranker import rerank as do_rerank` 触发 [`reranker.py:6`](../rag/reranker.py) 顶层 `from sentence_transformers import CrossEncoder`；evals subprocess 调 query.py 时进程内必须备齐 chromadb / rank-bm25 / tokenizers / sentence-transformers 4 包，但 [`play/evals/requirements.txt`](requirements.txt) 不列。
+
+| 模块 | 改动 |
+|---|---|
+| [`play/evals/requirements.txt`](requirements.txt) | 尾部加 `# phase 4 RAG subprocess deps` 段，列 `chromadb` / `rank-bm25` / `tokenizers` / `sentence-transformers` 4 行；`torch` 已在 phase 2 段（BERTScore 依赖） |
+| [`play/rag/query.py`](../rag/query.py) | 0 行改动 |
+| [`play/rag/requirements.txt`](../rag/requirements.txt) | 0 行改动（rag 独立用法仍是真值源；`pymupdf` 仅 ingest.py 用、`ollama` Python 包没真 import 仅遗留 stale） |
+
+### Implementation
+
+| 侧面 | 做法 | 哲学 |
+|---|---|---|
+| 0 行代码改动 | 修正纯落 deps 单；不动 rag 任一字符 | minimum-diff hygiene；保留 rag 顶层 import 风格简单 |
+| 双单内的 4 项 deps 复制冗余 | `chromadb` / `rank-bm25` / `tokenizers` / `sentence-transformers` 同时在 evals/requirements.txt + rag/requirements.txt | 显式让步：deps 漂移时双单都需 sync；触发条件（第三个 sub-project 也复用 rag 子进程）满足时再抽 `requirements/common.txt` 共享，workshop 体量不预先抽 |
+| `pymupdf` / `ollama` 不进 evals/requirements.txt | `pymupdf` 仅 `ingest.py` 用，evals 不调 ingest；`ollama` Python 包 grep 全 rag/ 无真 `import ollama`（chromadb 的 `OllamaEmbeddingFunction` 走 HTTP，与 `ollama` Python 客户端无关） | 只装"evals 子进程真用得到"的 deps；不复制 rag standalone-only deps |
+| DECISIONS §4 monorepo 解耦 | 不破：`from rag import ...` Python import 边界仍零；本次只扩 pip install 边界 | Python import 边界（运行时模块依赖图）与 pip install 边界（部署时安装清单）正交；前者是架构契约、后者是 onboarding 体验 |
+
+### Options considered
+
+**① 设计选择**：
+
+- **方案 A 加 evals/requirements.txt（选）**：0 行代码；onboarding 1 条命令；唯一让步是双单 sync
+- 方案 B 懒 import (`rag/query.py:21` 移到 `if rerank:` 分支)：2 行代码改；"避 1.2GB cross-encoder 在 import 时 load"宣称**不成立**——`import sentence_transformers` 只 load Python 模块（~50ms），1.2GB 模型是 `_model()` 首次调用时 load，与 import 时机正交；onboarding 仍需 2 条 pip install
+- 方案 C 显式抽 `requirements/common.txt` 第三方 sub-project 共享：workshop 体量过早抽象；deferred 至第三个 sub-project 确认要复用 rag deps 时
+
+**② 是否清理 rag/requirements.txt 的 stale `ollama` 行**：
+
+- **本次不清理（选）**：scope creep；触发条件（grep 出 `import ollama` 真有用 / 用户明确反馈）满足时再单独 PR
+- 顺手清：增加 review 面，与 minimum-diff 原则相悖
+
+### Decision
+
+- 方案 A：[`play/evals/requirements.txt`](requirements.txt) 尾部追加 4 行 + 1 注释行；rag 0 改动；显式登记双单 sync 让步
+
+### Risks / 显式让步
+
+| 项 | 内容 |
+|---|---|
+| 双单 deps 漂移 | chromadb / rank-bm25 / tokenizers / sentence-transformers 在两单都列；rag 升 chromadb 主版本时需要同步 evals/requirements.txt，否则评测进程与 rag 独立进程跑出不同行为 |
+| evals 进程顶层 sys.path 不 import rag | 仍保留 DECISIONS §4 Python import 边界（evals 进程零 `from rag import ...`）；只是子进程 `play/rag/query.py` 调用时复用 evals 已装的包 |
+
+### Supersession 链
+
+- 本 ADR 不 supersede 任何先前决策；DECISIONS §4 monorepo 解耦原则继续生效（仅扩 pip 边界）
