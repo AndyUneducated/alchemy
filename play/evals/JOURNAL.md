@@ -290,3 +290,51 @@
 - audit 中观察到的 A2（judge LM variance）经分析判定为 LM 内禀局限非工程问题（类比硬盘 ECC 不修 bit rot），从 wave 3 完全移除：不进 ADR / 不写 README / 不改默认值（`judge_n_samples=1`）；用户用 `--judge-n-samples N` 自决（self_consistency factory 早就支持任意 N）。LM 局限不是项目责任 → 不出现在 DECISIONS
 
 > 跨日里程碑：phase 7 audit 实际工时跨 5-05 → 5-06 边界（5-05 已用满 phase 7 + wave 2 两条名额，wave 3 落到 5-06 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。
+
+## 2026-05-07 — Phase 8：族 1 后半 IAA 双 task + kappa paradox 主舞台 + ordinal 救场叙事
+
+### 功能
+
+- **新 task `iaa_nominal`**：30 条 highly imbalanced (27 ham + 3 spam, ~90/10) binary classification + 4 份 stub predictions（perfect / constant_majority / noisy_diverging / garbage）+ 3 raters/sample；aggregation 输出 15 stat（含 9 classification + 3 agreement 2-rater + 2 multi-rater + 1 `_confusion_matrix` 诊断辅助）
+- **新 task `iaa_ordinal`**：25 条 1-5 likert (5 each) + 4 份 stub（perfect / off_by_one / random / garbage）+ 3 raters/sample；aggregation 12 stat（exact + agreement nominal/linear/quadratic + corr 三件套 + ccc + multi-rater 4 维）
+- **kappa paradox 主舞台**：`iaa_nominal.constant_majority` 锁数值 `accuracy=0.90 ∧ cohens_kappa=0.00 ∧ gwet_ac1≈0.89` —— acc 看着良好但 nominal κ 失明（"全押多数类"基线），Gwet AC1 (Pe 用类间方差) 仍诚实地高，paradox 解药 1
+- **ordinal 救场叙事**：`iaa_ordinal.off_by_one` 锁 `accuracy=0 ∧ cohens_kappa=−0.25` 同时 `weighted_kappa_quadratic=0.71 ∧ pearson_r=0.83 ∧ lins_ccc=0.71`；`iaa_ordinal.garbage` (pred=6−gold inverse) 锁 `weighted_quad=−1 ∧ pearson=−1 ∧ ccc=−1` 但 cohens_kappa=0（paradox 反向场景复刻 + ordinal-aware 抓负相关）
+- **CLI 0 改动 / 0 新 flag**：IAA task 不接 judge / vdb，自然走既有 fall-through dispatch 分支（与 sentiment_clf / mt 同形）；非法 flag 组合仍 SystemExit（既有兜底）
+- **score 主路径焊死全部教学叙事**：run 路径 `output_type='none'` 给占位 Response，aggregated 仅 sanity 0；run 完整教学（含 LLM-as-annotator self_consistency 派）deferred 至 phase 8.5+（同源 phase 5 让步进 ADR）
+
+### 技术
+
+- **新模块 `metrics/agreement.py`**：scope 收紧——仅 4 个手算函数（`scott_pi` Pe 用合并边际 ∑p̄_c² / `gwet_ac1` Pe 用类方差 (1/(K−1))·∑q_c(1−q_c) / `lins_ccc` 2·cov/(σ_X²+σ_Y²+(μ_X−μ_Y)²) / `icc_1_1` one-way random ANOVA decomposition）+ 1 个共享 helper `build_rater_matrix(srs, include_gold=True)`（fail-loud 缺/uneven raters）；约 80 行
+- **库直调全部下放 task aggregation**：sklearn `cohen_kappa_score(weights=...)` / scipy.stats `pearsonr|spearmanr|kendalltau` / statsmodels `fleiss_kappa + aggregate_raters` / `krippendorff.alpha(level_of_measurement=...)` 全部在 `tasks/iaa_nominal.py` / `tasks/iaa_ordinal.py` 内 import；与 sentiment_clf 直调 sklearn / mt 直调 sacrebleu 体例完全一致——避免模块沦为 import 中转站
+- **数据契约 0 新概念**：predictions JSONL 行 schema = `{id, prediction, raters: list[str|int]}`；与 phase 4 立的 `task.load_prediction(doc, row)` hook + path B+C「LM-side 数据装 Response，pipeline 产物住 doc.metadata」自然吻合；不动 `api.py` 任一 dataclass / 不动 `Task` ABC（仅 override `load_prediction` + `process_results`）/ 不动 `runner.py`
+- **TDD textbook 锁数值**：metrics/agreement.py 单元 29 测试（Po=0.6 binary 锁 scott_pi=0.08/0.48 ≈ 0.167 / Po=0.9 imbalanced 锁 gwet_ac1=0.805/0.905 ≈ 0.89 / shifted 1-5 锁 lins_ccc=0.8 / 完美一致 lockup ICC(1,1)=1.0 + 完美反相关锁 ICC(1,1)=−1.0）；整套 IAA score 矩阵 19 测试锁 4 stub × ~12 stat 数值
+- **依赖增量**：`statsmodels>=0.14` + `krippendorff>=0.6`；显式不引 `irrCAC` / `pingouin` / `audtorch` 三个本可用的库（公式简单 5-15 行手算，避依赖膨胀）
+- **测试增量 +52**：`test_metrics_agreement.py` 29 + `test_iaa_nominal_score.py` 10 + `test_iaa_ordinal_score.py` 9 + `test_cli_spec.py` IAA dispatch 段 4；全量 299 → 351 测试通过
+
+### 取舍
+
+- 双 task (`iaa_nominal` + `iaa_ordinal`) 而非单 task：两个教学叙事独立可读（kappa paradox 主舞台 vs ordinal 救场），单 task 会膨胀 aggregation 到 25+ stat 且互相稀释 → DECISIONS §8 ①
+- `metrics/agreement.py` scope 收紧（仅手算 + 真共享 helper，库直调下放 task）：与 sentiment_clf 体例完全一致，避免模块沦为 import 中转站；与 phase 4 `metrics/retrieval.py` 包 ranx 的「协议转接 + 输入构造非平凡 + 5 指标共用」三联立信号正交（本模块 statsmodels / krippendorff 接口直接吃 matrix，wrap 无价值） → DECISIONS §8 ⑥
+- inline JSONL `raters` 字段而非 self_consistency rater 派（LLM-as-annotator 真正交叉形态）：本期 score 主路径已能完成所有数值教学；annotator 派需新增 `--judge-n-samples` flag 设计 + judge LM 当 annotator 的 prompt 模板，ROI 不够；deferred 至 phase 8.5+ → DECISIONS §8 ②
+- ICC(1,1) only / run 路径完整教学 / 不引 irrCAC/pingouin/audtorch 三库：YAGNI 与方案对齐，二阶 ICC decomposition + run 路径 + 库依赖三件全 deferred；与 phase 5 agent_traj `--replay-envelope` 让步同源 → DECISIONS §8 ③ ④ ⑤
+
+## 2026-05-07 — Phase 8 follow-up：IAA 退化路径工程兜底（run path + 小 limit 不再 raise/NaN）
+
+### 功能
+
+- `python -m evals run --task iaa_nominal --model ollama:...` 不再 `ValueError: pos_label=spam is not a valid label` / `Target is multiclass but average='binary'`；改在退化输入下短路给 0.0 sanity（与 plan 早先承诺一致）
+- `python -m evals score --task iaa_nominal --predictions constant_majority.jsonl --limit 5` 不再 `krippendorff.alpha: There has to be more than one value in the domain`
+- `python -m evals run --task iaa_ordinal --model ollama:...` 不再在 `pearson_r` / `spearman_rho` / `kendall_tau` / `cohens_kappa` / `weighted_kappa_*` 报 `nan`（NaN 不是合法 JSON，跨 run JSON_EXTRACT / 任何非 Python parser 必坏）
+- 全部 IAA aggregated dict 现在严格 `json.dumps(..., allow_nan=False)` 可序列化——与 phase 4 path C「跨进程跨 run 走 JSON 流转」契约对齐
+
+### 技术
+
+- **`iaa_nominal.py` 三处工程兜底**：① `_pos_label_present(yt, yp)` helper — sklearn binary scorers (`precision_score`/`recall_score`/`f1_score`/`fbeta_score` with `pos_label='spam'`) 在 `pos_label` 缺席 y_true ∪ y_pred 或 union 是 multiclass（如 run path 看到 `{ham, spam, ""}` 三类）时 raise；短路返 0.0；② `_krippendorff_alpha` 加 `<2 unique value` 短路（krippendorff 库在单值域 raise）；③ `_cohens_kappa` / `_fleiss_kappa` 包 `_nan_to_zero(x)` helper（`x != x` 检测 NaN，单类 Pe=1 退化时给 0.0）
+- **`iaa_ordinal.py` 同源处理**：`_nan_to_zero` helper 包所有 6 个易 NaN 路径（`_cohens_kappa` / `_weighted_kappa_linear` / `_weighted_kappa_quadratic` / `_pearson_r` / `_spearman_rho` / `_kendall_tau`）+ 3 个多 rater 路径（krippendorff ordinal/interval + icc_1_1）；同形 `<2 unique value` 短路
+- **新测试套 `test_iaa_engineering_robustness.py` (10 测试)**：`_UnusedLM` (LM 调用即 AssertionError，证 `output_type='none'` 真不调) + `_assert_aggregated_is_finite_json` helper（递归遍历 aggregated dict 所有 leaf，`math.isfinite` 锁 + `json.dumps(..., allow_nan=False)` round-trip 锁）；4 stub × 2 task 严格 JSON 序列化参数化；全量 351 → 361 测试通过
+- **完整 LM 系列回归确认**：`test_qa_open_live` (4) + `test_rag_live` (3) + `test_agent_traj_run_live` (1) + `test_ollama_lm` (7) 共 15 条 LM 真实调用测试在 phase 8 改动后仍全部通过；CLI smoke 三件（iaa_nominal score `--limit 5` / iaa_nominal run `--limit 5` 与 full / iaa_ordinal run `--limit 3`）全部 exit 0
+
+### 取舍
+
+- 工程兜底 `_nan_to_zero` 选「NaN→0」而非「NaN→null」：① `EvalResult.aggregated[str, float]` 契约期 float 而非 Optional[float]，跨 run 排序 / cross-run JSON_EXTRACT 看到 None 会 KeyError 路径分裂；② plan 早先就承诺 "sanity 0/None" 而 0 比 None 更适合作 scalar 默认；③ 与 sentiment_clf 等老 task 在缺数据时给 0 的体例一致 → DECISIONS §8.R4
+- 工程兜底放在 task aggregation 内 (`_pos_label_present` / `_nan_to_zero` 是 task-local closure helper) 而非提到 metrics/agreement.py：① 这些 helper 只服务 task 自己的库直调；② 与「metrics/agreement.py 仅装手算 + 真共享 helper」scope 收紧决策（DECISIONS §8 ⑥）正交一致；③ 避免下放后 metrics/agreement.py 又拐回 import 中转站

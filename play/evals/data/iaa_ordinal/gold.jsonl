@@ -1,0 +1,25 @@
+{"id":"o01","input":"A confused single-paragraph essay with no clear thesis.","target":"1"}
+{"id":"o02","input":"A short story sketch with one weak character beat.","target":"1"}
+{"id":"o03","input":"A draft blog post that buries the lede and rambles.","target":"1"}
+{"id":"o04","input":"A bullet list with no headings or context.","target":"1"}
+{"id":"o05","input":"A first-pass note dump on a complex topic.","target":"1"}
+{"id":"o06","input":"A meeting recap that captures roughly half the action items.","target":"2"}
+{"id":"o07","input":"A primer that defines terms but skips the worked example.","target":"2"}
+{"id":"o08","input":"A how-to guide with the right shape but vague edge cases.","target":"2"}
+{"id":"o09","input":"A FAQ page with serviceable answers but no deeper rationale.","target":"2"}
+{"id":"o10","input":"A short essay that picks a thesis but defends it loosely.","target":"2"}
+{"id":"o11","input":"A standard product release note covering core changes.","target":"3"}
+{"id":"o12","input":"A balanced comparison of two libraries at a glance.","target":"3"}
+{"id":"o13","input":"A workshop summary with some context plus practical takeaways.","target":"3"}
+{"id":"o14","input":"A onboarding doc that lists every step in plain order.","target":"3"}
+{"id":"o15","input":"A retrospective that calls out wins, misses, and follow-ups.","target":"3"}
+{"id":"o16","input":"A well-structured tutorial with worked examples and pitfalls.","target":"4"}
+{"id":"o17","input":"A literature review that surveys mainstream methods cleanly.","target":"4"}
+{"id":"o18","input":"A blog post that builds intuition with a clear running example.","target":"4"}
+{"id":"o19","input":"A design doc with goals, non-goals, alternatives, and risks.","target":"4"}
+{"id":"o20","input":"A recipe with measured ingredients, timing notes, and a serving plate idea.","target":"4"}
+{"id":"o21","input":"An exemplary explainer with crisp narrative, visuals, and verified citations.","target":"5"}
+{"id":"o22","input":"A reference architecture doc with diagrams, trade-offs, and migration playbook.","target":"5"}
+{"id":"o23","input":"A pedagogical paper that derives the result from first principles end-to-end.","target":"5"}
+{"id":"o24","input":"A long-form feature with original reporting, sources, and structural craft.","target":"5"}
+{"id":"o25","input":"A polished how-we-did-it post with code, results, and reproducible setup.","target":"5"}

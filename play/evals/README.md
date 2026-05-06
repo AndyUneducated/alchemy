@@ -130,11 +130,9 @@ runs/<id>/{result.json, samples.jsonl} + runs/index.jsonl
 |5|族 5 完全体（agent trajectory）；接 `play/agent_engine/` subprocess + JSON envelope|**建 `metrics/trajectory.py`**（无库；5 个 closure-factory metric + 手写 Levenshtein DP）+ 复用 `judge_core.g_eval` 装 plan_quality|
 |6|横切 Efficiency|**建 `metrics/efficiency.py`**（runner 自动采集 latency / tokens / cost；`Response.usage` 嵌套；`EvalResult.aggregated["efficiency"]` 子组）|
 |7|横切 Safety|**建 `metrics/safety.py`**（refusal / jailbreak 判定自写）|
-|8|族 1 后半 + 族 1 ↔ 族 3 交叉（kappa paradox 章节）|scipy.stats / krippendorff / statsmodels 直调|
+|8|族 1 后半 + 族 1 ↔ 族 3 交叉（kappa paradox 章节）；双 task `iaa_nominal` + `iaa_ordinal`，~16 个新指标|sklearn / scipy.stats / statsmodels / krippendorff 直调（task 内）+ **建 `metrics/agreement.py`**（仅 4 个手算 `scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1` + 1 个共享 helper `build_rater_matrix`，~80 行；库直调全部下放 task aggregation，避免模块沦为 import 中转站）|
 |9|横切 Calibration|sklearn / netcal 直调|
 |10|横切 Robustness|**建 `metrics/robustness.py`**（`robustify(task, perturbation)` 装饰器）|
-
-> Phase 6-10 排序依据 schema-cost-first + ROI：efficiency 提到首位是因为它要改 `SampleResult` schema（每多一个落地 task 迁移成本线性涨，是唯一"越拖越贵"的 phase）；safety / κ paradox / calibration 按行业 ROI + 实现成本排；robustness 工作量最大放末位。
 
 ## Quickstart
 
@@ -197,7 +195,7 @@ python -m evals run --task qa_open \
     --limit 5
 
 # 不传 --judge-model 则只跑 lexical baseline（exact_match + rouge_l）
-python -m evals run --task qa_open --model ollama:qwen2.5show:32b --limit 5
+python -m evals run --task qa_open --model ollama:qwen2.5:32b --limit 5
 
 # score（lexical only）：演示 lexical 指标在 4 份 stub 上的分歧
 for p in perfect paraphrase wrong_fact garbage; do
@@ -516,6 +514,71 @@ efficiency cross-cutting 仍保留（DECISIONS §7.2 supersede 范围**仅限 sa
 
 trait 在 metric 模块顶部声明（`metrics/efficiency.py`），CLI 通过 `_should_fold_when_all_zero(dim)` 查询。新加 cross-cutting 维度时按需声明 trait 即可。safety 不再走 cross-cutting 路径——`Safety.aggregation()` 直接返 4 stat 函数字典，与 sentiment_clf 等 task 体例一致。详见 [`DECISIONS §7.2`](DECISIONS.md) safety 回归 standalone task ADR。
 
+### Phase 8 IAA：双 task 演 kappa paradox + ordinal 救场
+
+phase 8 上线**族 1 后半 + 族 1 ↔ 族 3 交叉教学叙事**：双 task `iaa_nominal` + `iaa_ordinal`，~16 个 IAA 指标在 8 份 stub predictions × 3 raters/sample 上的可复现矩阵。score 主路径焊死全部教学叙事，run 路径完整教学 deferred（同源 phase 5 `--replay-envelope`，DECISIONS §8）。
+
+```bash
+# iaa_nominal：4 份 stub × 30 条 highly imbalanced (27 ham + 3 spam, ~90/10)
+for p in perfect constant_majority noisy_diverging garbage; do
+  python -m evals score --task iaa_nominal --predictions evals/data/iaa_nominal/predictions/$p.jsonl
+done
+
+# iaa_ordinal：4 份 stub × 25 条 1-5 likert (5 each)
+for p in perfect off_by_one random garbage; do
+  python -m evals score --task iaa_ordinal --predictions evals/data/iaa_ordinal/predictions/$p.jsonl
+done
+```
+
+**`iaa_nominal` 教学矩阵（kappa paradox 主舞台）—— 4 stub × 5 关键 metric**：
+
+|预测|`accuracy`|`cohens_kappa`|`gwet_ac1`|`fleiss_kappa` (3 raters)|`krippendorff_alpha`|故事|
+|---|---|---|---|---|---|---|
+|`perfect`|1.00|1.00|1.00|1.00|1.00|上界 sanity|
+|`constant_majority`|**0.90**|**0.00**|**0.89**|~0|~0|**核心 paradox**：全押多数类 → acc 高但 nominal κ 失明；**Gwet AC1 仍诚实高**（paradox 解药 1，Pe 用类方差而非边际乘积）|
+|`noisy_diverging`|~0.77|0.26|0.67|<0|<0|多 rater 拉平到负数（rater 内部分歧 → 多 rater κ 系列暴露 2-rater κ 看不到的信号）|
+|`garbage`|0.30|−0.21|−0.28|−0.33|−0.32|下界 sanity|
+
+**`iaa_ordinal` 教学矩阵（ordinal-aware 救场叙事）—— 4 stub × 8 关键 metric**：
+
+|预测|`accuracy`|`cohens_kappa`|`weighted_kappa_quadratic`|`pearson_r`|`spearman_rho`|`lins_ccc`|`krippendorff_alpha_ordinal`|故事|
+|---|---|---|---|---|---|---|---|---|
+|`perfect`|1.00|1.00|1.00|1.00|1.00|1.00|1.00|上界 sanity|
+|`off_by_one`|**0.00**|**−0.25**|**0.71**|**0.83**|**0.82**|**0.71**|0.82|**核心叙事**：偏 1 → exact / nominal κ 全失明（acc=0, κ=−0.25）；**ordinal-aware 全救场**（weighted κ 二次权 + 相关 + ccc + krippendorff ordinal level 全 ≥ 0.7）|
+|`random`|0.20|0.00|−0.02|−0.02|−0.04|−0.02|≈0|下界 sanity|
+|`garbage`|0.20|0.00 (paradox 复刻)|**−1.00**|**−1.00**|**−1.00**|**−1.00**|<0|极端反向：pred = 6−gold (perfect inverse)；**ordinal-aware 直接抓出 −1 信号**而 nominal κ 仍是 0（paradox 在反向场景的复刻）|
+
+`off_by_one` × `garbage` 两格共同构成 phase 8 的 **"ordinal-aware vs nominal κ" 双向叙事**：前者展示 nominal 失明 / ordinal 救场，后者展示即使 perfect inverse 这种最极端反向，nominal κ 仍迷失而 ordinal-aware (weighted_quad / pearson / spearman / kendall / ccc) 全部正确报 −1 —— 与 phase 3 `wrong_fact`（lexical 误判 / judge 抓事实错）/ phase 4 `wrong_fact`（grounding 抓错）/ phase 5 `wrong_decision`（process 全对 outcome 错）/ phase 7 `evasive`（heuristic 失明 / judge 救场）一脉相承。
+
+#### 数据契约 — 0 新概念（path B+C 复刻 phase 4）
+
+predictions JSONL 行 schema（`task.load_prediction(doc, row)` 默认 hook 自然吻合）：
+
+```json
+{"id": "n01", "prediction": "ham", "raters": ["ham", "ham", "spam"]}
+```
+
+|字段|消费者|说明|
+|---|---|---|
+|`prediction`|2-rater agreement (`cohens_kappa` / `scott_pi` / `gwet_ac1`)|主 rater 标签，与 gold 算二元一致|
+|`raters: list[str\|int]`|多 rater agreement (`fleiss_kappa` / `krippendorff_alpha` / `icc_1_1`)|额外 N 个 rater 标签，与 gold 一起拼成 N×(K+1) 矩阵|
+
+`load_prediction` override 把 `raters` 注入 `doc.metadata`；`process_results` 转写到 `SampleResult.artifacts["raters"]`（与 phase 4 `rag_retrieval` 写 `artifacts["pred_ids"]` 同形 path B+C：非标量产物住 artifacts 不污染 `metrics` scalar 契约）。
+
+#### `metrics/agreement.py` scope 收紧 (DECISIONS §8)
+
+|进 `metrics/agreement.py`|不进（task 内直调）|
+|---|---|
+|`scott_pi` (~10 行手算)|`cohens_kappa` / `weighted_kappa` (sklearn `cohen_kappa_score`)|
+|`gwet_ac1` (~15 行手算)|`pearson_r` / `spearman_rho` / `kendall_tau` (scipy.stats)|
+|`lins_ccc` (~5 行手算)|`fleiss_kappa` (statsmodels `fleiss_kappa` + `aggregate_raters`)|
+|`icc_1_1` (~12 行手算)|`krippendorff_alpha_*` (`krippendorff.alpha`)|
+|`build_rater_matrix` (~15 行 helper，唯一真跨 task 共享)||
+
+只装两类东西：① 无成熟库可调的手算 ② 唯一真跨 task 共享的 helper。**库直调全部下放 task aggregation**，与 sentiment_clf 直调 sklearn / mt 直调 sacrebleu 体例完全一致——避免模块沦为 import 中转站。详见 [`DECISIONS §8`](DECISIONS.md)。
+
+> phase 8 显式让步：① ICC(2,1) / ICC(3,1) deferred（二阶 decomposition 工程量大，workshop 体量未必稳定）；② run 路径完整教学 deferred（IAA task `output_type='none'`，runner 给占位 `Response` → process_results 看不到 raters → aggregated 仅给 sanity 0；同源 phase 5 agent_traj `--replay-envelope` 让步进 ADR）；③ 不引 `irrCAC` / `pingouin` / `audtorch` 三个本可用的库（手算公式简单，避依赖膨胀）。
+
 ## 命名约定
 
 Task ABC 职责边界见[指导原则](#指导原则) 1 的"代码层执行"列。以下是未归属到原则的纯命名约定：
@@ -636,18 +699,18 @@ cross-cutting 字段在三层契约里的形态完全同源（OpenAI / Anthropic
 |指标|用途|公式（简化）|范围 ↕|库 / phase|
 |---|---|---|---|---|
 |`cohens_kappa`|两标注名义一致 + 去运气|`(Po − Pe) / (1 − Pe)`，Pe 用各自边际独立猜的期望一致率|[−1,1] ↑|sklearn / 1|
-|`scott_pi`|κ 变体，Pe 用合并边际|同上但 `Pe = ∑ p̄_c²`，p̄_c 为合并边际比例|[−1,1] ↑|手算 / 8|
-|`fleiss_kappa`|κ 推广到 ≥3 标注者|多评者扩展同思路|[−1,1] ↑|statsmodels / 8|
-|`gwet_ac1`|破解 κ paradox（边际极不均时 κ 误判低）|类 κ 但 `Pe = (1/(K−1)) · ∑ q_c(1−q_c)`|[−1,1] ↑|`irrCAC` / 8|
-|`weighted_kappa`|有序类（"很好/好/中/差"），分歧按距离加权|κ 但用权重矩阵：linear `|i−j|` 或 quadratic `(i−j)²`|[−1,1] ↑|sklearn / 8|
-|`spearman`|有序类秩相关|rank 后做 Pearson|[−1,1] ↑|scipy.stats / 8|
-|`kendall_tau`|有序类，看 pair 同序比|`(concordant − discordant) / C(n,2)`|[−1,1] ↑|scipy.stats / 8|
-|`pearson_r`|连续值线性相关|`cov(X,Y) / (σ_X·σ_Y)`|[−1,1] ↑|scipy.stats / 8|
-|`ICC`|多评者连续值一致（区分 ICC(1,1)/(2,1)/(3,1) 等型号）|MS_between / MS_within 的比值（型号决定具体形式）|[0,1] ↑|`pingouin` / 8|
-|`ccc` (Lin's)|连续值"既相关又同尺度"|`2·ρ·σ_X·σ_Y / (σ_X² + σ_Y² + (μ_X−μ_Y)²)`|[−1,1] ↑|`audtorch` / 8|
-|`krippendorff_alpha`|名义/有序/区间/比例 + 缺失值 + 任意标注数 通用|`1 − D_o/D_e`（观察分歧 / 期望分歧）|[−1,1] ↑（≥0.8 实操 OK）|`krippendorff` / 8|
+|`scott_pi`|κ 变体，Pe 用合并边际|同上但 `Pe = ∑ p̄_c²`，p̄_c 为合并边际比例|[−1,1] ↑|手算 `metrics/agreement.py` / **✅ 8 已落地**|
+|`fleiss_kappa`|κ 推广到 ≥3 标注者|多评者扩展同思路|[−1,1] ↑|statsmodels (`fleiss_kappa` + `aggregate_raters`，task 内直调) / **✅ 8 已落地**|
+|`gwet_ac1`|破解 κ paradox（边际极不均时 κ 误判低）|类 κ 但 `Pe = (1/(K−1)) · ∑ q_c(1−q_c)`|[−1,1] ↑|手算 `metrics/agreement.py`（不引 `irrCAC`，~15 行）/ **✅ 8 已落地**|
+|`weighted_kappa`|有序类（"很好/好/中/差"），分歧按距离加权|κ 但用权重矩阵：linear `|i−j|` 或 quadratic `(i−j)²`|[−1,1] ↑|sklearn (`cohen_kappa_score(weights='linear'\|'quadratic')`，task 内直调) / **✅ 8 已落地**|
+|`spearman`|有序类秩相关|rank 后做 Pearson|[−1,1] ↑|scipy.stats (`spearmanr`，task 内直调) / **✅ 8 已落地**|
+|`kendall_tau`|有序类，看 pair 同序比|`(concordant − discordant) / C(n,2)`|[−1,1] ↑|scipy.stats (`kendalltau`，task 内直调) / **✅ 8 已落地**|
+|`pearson_r`|连续值线性相关|`cov(X,Y) / (σ_X·σ_Y)`|[−1,1] ↑|scipy.stats (`pearsonr`，task 内直调) / **✅ 8 已落地**|
+|`ICC(1,1)`|one-way random ANOVA：单 rater 单评 reliability（rater 视为从总体随机抽）|`(BMS − WMS) / (BMS + (k−1)·WMS)`|[−1,1] ↑|手算 `metrics/agreement.py`（不引 `pingouin`）/ **✅ 8 已落地**（ICC(2,1)/(3,1) deferred — 二阶 decomposition 工程量大；DECISIONS §8）|
+|`ccc` (Lin's)|连续值"既相关又同尺度"|`2·ρ·σ_X·σ_Y / (σ_X² + σ_Y² + (μ_X−μ_Y)²)`|[−1,1] ↑|手算 `metrics/agreement.py`（不引 `audtorch` 全套 torch，~5 行）/ **✅ 8 已落地**|
+|`krippendorff_alpha`|名义/有序/区间/比例 + 缺失值 + 任意标注数 通用|`1 − D_o/D_e`（观察分歧 / 期望分歧）|[−1,1] ↑（≥0.8 实操 OK）|`krippendorff` (`alpha(reliability_data, level_of_measurement=...)`，task 内直调) / **✅ 8 已落地**|
 
-> κ paradox：当某类边际占比 > 90% 时 `accuracy` 接近 1 而 `κ` 接近 0——`gwet_ac1` 与 `krippendorff_alpha` 是行业级替代。Phase 8 的"族 1 ↔ 族 3 交叉"章节专门演示此现象。
+> κ paradox：当某类边际占比 > 90% 时 `accuracy` 接近 1 而 `κ` 接近 0——`gwet_ac1` 与 `krippendorff_alpha` 是行业级替代。**Phase 8 `iaa_nominal` 主舞台用 27 ham + 3 spam (~90/10) 的 `constant_majority` 预测演示**：`accuracy=0.90 ∧ cohens_kappa=0.00 ∧ gwet_ac1≈0.89` —— acc 看着良好但 nominal κ 失明（"全押多数类"基线），而 Gwet AC1 (Pe 用类间方差而非边际乘积) 仍诚实地高。`Phase 8 iaa_ordinal` 配套演示 ordinal 救场叙事：`off_by_one` 预测在 `accuracy=0 ∧ cohens_kappa=-0.25` 失明同时给出 `weighted_kappa_quadratic=0.71 ∧ pearson_r=0.83 ∧ lins_ccc=0.71`。
 
 ### C.2 族 2：Generation（参考相似度）
 
@@ -737,7 +800,7 @@ phase 6 起 `EvalResult.aggregated` 类型为 `dict[str, float | dict]`。命名
 |层级|位置|装的内容|举例|
 |---|---|---|---|
 |顶层 平铺|`aggregated[<metric>]`|task-specific 指标（每 task 自定义）|`accuracy`、`f1_macro`、`cohens_kappa`、`exact_match`、`bertscore_f1`、`recall@5`、`task_success` …|
-|顶层 嵌套子组|`aggregated[<dimension>]`|HELM 7 维度横切指标，runner / 横切模块注入；不与 task-specific 同位竞争 namespace|`aggregated["efficiency"]`（phase 6）/ `aggregated["safety"]`（phase 7）/ `aggregated["calibration"]`（phase 9）/ `aggregated["robustness"]`（phase 10）|
+|顶层 嵌套子组|`aggregated[<dimension>]`|HELM 7 维度中走 nested 派的 call class 横切指标，runner 注入；不与 task-specific 同位竞争 namespace|`aggregated["efficiency"]`（phase 6 ✅）/ `aggregated["calibration"]`（phase 9 计划）。phase 7 safety / phase 10 robustness 走独立 task 路径（顶层平铺），不在此列（DECISIONS §7.2）|
 |嵌套子组内|`aggregated[<dim>][<group>][<stat>]`|按 (group, stat) 二维结构组织|`aggregated["efficiency"]["latency_ms"]["p50"]`、`aggregated["efficiency"]["cost_usd"]["total"]`|
 
 **约束**：
