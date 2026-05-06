@@ -350,3 +350,35 @@
 - **测试增量 +9 → 19 robust 测试**：`--limit 0/1/2` 参数化 (6) + storage 拒 NaN/Inf 合成 EvalResult (2) + `parse_constant=raise` 模拟 jq / 非 Python parser 端到端 strict JSON 验证 (1)；全量 361 → 370 测试通过；15 LM live 测试再确认无回归
 
 > 教训：首轮把"教学叙事的数值正确性"当主测目标（满数据 score path），缺四类工程面：① `--limit` 退化路径 ② `output_type='none'` run 路径下 task 自身 aggregation ③ aggregated dict 严格 JSON 序列化 ④ 跨 task 的存储层兜底。同样模式 phase 4 (rag_retrieval) / phase 5 (agent_traj) 也应回顾——但本期 minimal-diff，仅修 IAA + storage（后者全局受益）。模板 helper (`_UnusedLM` + `_assert_aggregated_is_finite_json` + `parse_constant=raise`) 留在 IAA 测试文件，未来加新 `output_type='none'` task 时可抽到 conftest。
+
+## 2026-05-08 — Phase 8 audit follow-up wave 3：OOV / invalid prediction 数据契约 + warnings 静音
+
+### 功能
+
+- **`iaa_ordinal` 解析失败不再静默美化 metric**：旧实现 LM 输出非整数 → `pred_int=0` fallback → sklearn `cohen_kappa_score(..., labels=[1..5])` 把 0 视为 OOV 静默丢弃 → 在「混合非法 prediction」场景下 cohens_kappa / weighted_kappa_* 被无声拉到 1.0（实测 `yt=[1,2,3,4,5] yp=[1,0,3,0,5]` 时 cohens_kappa=1.0 而非真实约 0.6）。改为 `_pred_invalid: True` artifact + aggregation valid subset 切片，sklearn 看到的 yp 严格 ⊆ labels；invalid 状态对消费者透明可 drill-down
+- **`iaa_nominal` run path stderr 干净**：跑 `python -m evals run --task iaa_nominal --model ollama:qwen2.5:32b` 不再让 sklearn 内部 emit `UserWarning: y_pred contains classes not in y_true` × N + `RuntimeWarning: invalid value encountered in scalar divide`（OOV 敏感 metric 切 valid subset；退化路径 catch_warnings 局部静音）
+- **`iaa_ordinal` 常数输入路径 stderr 干净**：`pearson_r` / `spearman_rho` / `kendall_tau` 在 yt 或 yp 全相同时（如 run path 全 invalid → valid subset 空 / 极小 limit 单类切片）不再让 scipy emit `ConstantInputWarning`；外层 `_nan_to_zero` 仍兜数值
+- **教学叙事数值零回归**：4 份 `iaa_nominal` stub × 12 stat + 4 份 `iaa_ordinal` stub × 12 stat 的 score 矩阵数值锁全部不变（`constant_majority.acc=0.9 ∧ cohens_kappa=0` / `off_by_one.weighted_quad≈0.71` / `garbage.weighted_quad=-1` 等核心 paradox + 救场叙事完整保留）
+
+### 技术
+
+- 全量测试 367 → 375 通过（+8 audit lock）；warnings **43 → 1**（仅留 phase 6 fail-loud 预期 warn `unknown pricing model 'fake:judge'`，由测试主动验证）
+- [`tasks/iaa_ordinal.py`](tasks/iaa_ordinal.py) `process_results` 改 ~25 行：`pred_int=0 fallback` → `pred_int=None + _pred_invalid: True`；`prediction` 字段保留 raw `pred_str`（drill-down 看 LM 真实输出 > `'None'` 字符串）；`metrics["acc"]` 计算改 `pred_int is not None and pred_int == target_int`
+- [`tasks/iaa_ordinal.py`](tasks/iaa_ordinal.py) `aggregation` 改 ~70 行：① `_y_int(srs)` → `_y_int_valid(srs)` filter `_pred_invalid`；② 6 个 OOV 敏感 metric (`cohens_kappa` / `weighted_kappa_linear/quadratic` / `pearson_r` / `spearman_rho` / `kendall_tau` / `lins_ccc`) 切 valid subset + 空 subset 短路返 0；③ `_accuracy` 走 `mean(s.metrics["acc"])` 不再 sklearn `accuracy_score`（避 None sentinel 进 sklearn）；④ `_pearson_r` / `_spearman_rho` / `_kendall_tau` 加 `_is_constant(yt) or _is_constant(yp)` 短路；⑤ `_cohens_kappa` / `_weighted_kappa_*` / `_fleiss_kappa` 包 `warnings.catch_warnings()` 静音 RuntimeWarning
+- [`tasks/iaa_nominal.py`](tasks/iaa_nominal.py) `process_results` 改 ~10 行：写 `_pred_invalid: pred not in LABELS` artifact；`prediction` 仍存 raw（保留诊断价值）
+- [`tasks/iaa_nominal.py`](tasks/iaa_nominal.py) `aggregation` 改 ~80 行：`_y(srs)` 全部 sample（用于 `accuracy` / `_confusion_matrix`）vs `_y_valid(srs)` 切 valid subset（用于 `balanced_accuracy` / `mcc` / `f1_micro/macro` / `f_beta_2` / `precision/recall/f1_spam` / `cohens_kappa` / `scott_pi` / `gwet_ac1` 共 11 个 OOV 敏感 metric）；`balanced_accuracy` / `mcc` 包 `UserWarning` + `cohens_kappa` / `fleiss_kappa` 包 `RuntimeWarning` 局部静音；multi-rater metric (`fleiss_kappa` / `krippendorff_alpha`) 仍走全部 sample（matrix 不含 pred 不被污染）
+- [`README.md`](README.md) phase 8 数据契约段加一段说明 `_pred_invalid` 字段语义 + OOV 敏感 / 不敏感 metric 二分；phase 8 显式让步 `>` 块下加 audit follow-up wave 3 概要；Quickstart 装依赖一行加"phase 升级 requirements 需重跑"提示
+- 测试增量 +8：`test_iaa_engineering_robustness.py` 27 测试（19 → 27）：①-④ P0 mixed invalid 不再让 cohens_kappa 静默拉 1.0（含真实分歧 + 全 invalid 边界 + 既有 stub 数值不变四向锁）；⑤ P1a no `y_pred contains classes` UserWarning；⑥ P1a no sklearn/statsmodels RuntimeWarning；⑦ P1b no scipy `ConstantInputWarning`；⑧ P2 no single-label UserWarning；helper `_capture_warnings(fn)` 把 stderr 噪音锁集中
+- 15 LM live 测试 (qa_open + rag_qa + agent_traj + ollama_lm) 在 wave 3 改动后再次全部通过；全量 251s（含 ollama qwen2.5:32b 真跑）
+
+### 取舍
+
+- P0 修复选 `_pred_invalid: bool` artifact + valid subset 切片（方案 A）而非 sentinel `-1`（方案 B）/ raise（方案 C）/ fallback to median（方案 D）：契约清晰；与 phase 4 path B+C 体例一致；`accuracy` 仍走全部 sample 保 N 不缩水（教学叙事数值稳定）→ DECISIONS §8.1 ①
+- OOV 敏感 metric vs 不敏感 metric 二分而非"全 metric 切片"：`accuracy` / `_confusion_matrix` / multi-rater 用全部，避免 N 缩水让 `constant_majority.acc=0.9` 漂移到 1.0 → DECISIONS §8.1 ②
+- warnings 处理选「`catch_warnings()` 局部静音」而非「上游清洁输入」：保留单类切片教学价值（`--limit 5` 演示退化）；外层 `_nan_to_zero` 仍兜数值 → DECISIONS §8.1 ③
+- `_accuracy` 改 `mean(s.metrics["acc"])` 不再走 sklearn `accuracy_score`：避 None sentinel 进 sklearn 路径；与 sample 层 acc 字段定义保持一致；省一次内部 _check_targets → DECISIONS §8.1 ④
+- 与 §8.R4 wave 1+2 累加（同源 phase 6 audit follow-up / phase 7 audit follow-up wave 2/3 体例）；§8.R4 status 升级为 `realized → mitigated (wave 1) → deepened (wave 2) → contract-tightened (wave 3)` → DECISIONS §8.1
+- 提醒：phase 8 起 `statsmodels>=0.14` + `krippendorff>=0.6` 是必装依赖。从 phase 7 commit 拉过来的同学跑测试前必须先 `pip install -r play/evals/requirements.txt`，否则 `tasks/__init__.py` import 链断（21 个 test 文件 collection error）。本轮 audit 起点正是这条提示缺失——README Quickstart 段同步加了一行警示
+
+> 跨日里程碑：phase 8 audit 实际工时跨 5-07 → 5-08 边界（5-07 已用满 phase 8 + follow-up 两条名额，wave 3 落到 5-08 起始里程碑；workshops.mdc "≤2 milestone/working day" 规则）。同源 phase 7 wave 2 → wave 3 的 5-05 → 5-06 跨日先例。
+

@@ -33,7 +33,7 @@ from typing import Any, Callable, ClassVar
 import krippendorff
 import numpy as np
 from scipy.stats import kendalltau, pearsonr, spearmanr
-from sklearn.metrics import accuracy_score, cohen_kappa_score
+from sklearn.metrics import cohen_kappa_score
 from statsmodels.stats.inter_rater import aggregate_raters, fleiss_kappa
 
 from ..api import Doc, Response, SampleResult
@@ -82,19 +82,32 @@ class IaaOrdinal(Task):
         return enriched, Response(doc_id=doc.id, text=row.get("prediction"))
 
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
-        """字符串 → int；非法 prediction 落 0 占位（accuracy 自动 0；correlation 仍可算）."""
+        """字符串 → int；非法 prediction 标 `_pred_invalid` 由 aggregation 过滤.
+
+        历史 (audit follow-up)：旧实现把非法 prediction fallback 到 0，但 0 不在
+        LIKERT_LABELS=[1..5] 内 → sklearn `cohen_kappa_score(..., labels=[1..5])`
+        把这些 sample 视为 out-of-labels 静默丢弃 → 在「混合非法 prediction」场景下
+        kappa 系列被无声美化（实测 yt=[1,2,3,4,5] yp=[1,0,3,0,5] 时 cohens_kappa=1.0
+        而非真实约 0.6）. 改为显式 `_pred_invalid` 标记 + aggregation 过滤，避免
+        双层静默叠加.
+        """
         pred_str = (response.text or "").strip()
         try:
-            pred_int = int(pred_str)
+            pred_int: int | None = int(pred_str)
+            pred_invalid = False
         except (TypeError, ValueError):
-            pred_int = 0
+            pred_int = None
+            pred_invalid = True
+
         target = doc.target or ""
         try:
             target_int = int(target)
         except (TypeError, ValueError):
             target_int = 0
 
-        # raters：score 路径已是 list[str] 形式，转 int
+        # raters：score 路径已是 list[str] 形式，转 int；非法项 fallback 0（多 rater
+        # 矩阵不参与 sklearn label 静默丢弃路径，0 fallback 影响仅限 fleiss/krippendorff
+        # 的统计平滑，远小于 P0 的 metric 误抬）
         raw_raters = list(doc.metadata.get("raters", []))
         rater_ints: list[int] = []
         for r in raw_raters:
@@ -103,48 +116,88 @@ class IaaOrdinal(Task):
             except (TypeError, ValueError):
                 rater_ints.append(0)
 
+        acc = float(pred_int is not None and pred_int == target_int)
+
         return SampleResult(
             doc_id=doc.id,
-            prediction=str(pred_int),
+            # 保留 raw pred_str（drill-down 看 LM 真实输出比 'None' 更有诊断价值）
+            prediction=pred_str if pred_invalid else str(pred_int),
             target=str(target_int),
-            metrics={"acc": float(pred_int == target_int)},
-            artifacts={"raters": rater_ints, "_pred_int": pred_int, "_target_int": target_int},
+            metrics={"acc": acc},
+            artifacts={
+                "raters": rater_ints,
+                "_pred_int": pred_int,  # 可为 None
+                "_target_int": target_int,
+                "_pred_invalid": pred_invalid,
+            },
         )
 
     def aggregation(self) -> dict[str, Callable[[list[SampleResult]], Any]]:
         labels = list(LIKERT_LABELS)
 
-        def _y_int(srs: list[SampleResult]) -> tuple[list[int], list[int]]:
+        def _is_invalid(sr: SampleResult) -> bool:
+            return bool(sr.artifacts.get("_pred_invalid", False))
+
+        def _y_int_valid(srs: list[SampleResult]) -> tuple[list[int], list[int]]:
+            """仅取 valid pred 的 (yt, yp)；invalid pred 被过滤（audit P0 修复）.
+
+            过滤后 yp ⊆ LIKERT_LABELS 严格成立，sklearn `cohen_kappa_score` 的
+            `labels=[1..5]` 不再静默丢弃外类样本 → kappa 系列在混合非法场景下数值正确.
+            """
+            valid = [s for s in srs if not _is_invalid(s)]
             return (
-                [int(s.artifacts.get("_target_int", 0)) for s in srs],
-                [int(s.artifacts.get("_pred_int", 0)) for s in srs],
+                [int(s.artifacts["_target_int"]) for s in valid],
+                [int(s.artifacts["_pred_int"]) for s in valid],
             )
 
         def _nan_to_zero(x: float) -> float:
-            # NaN propagates from constant-input correlations (run path: yp ≡ 0 placeholder)
-            # and degenerate kappa cases. NaN is non-portable JSON (`json.dumps(NaN)` →
-            # invalid for any non-Python parser); collapse to 0.0 sanity per plan contract.
+            # NaN propagates from constant-input correlations and degenerate kappa cases.
+            # NaN is non-portable JSON (`json.dumps(NaN)` → invalid for any non-Python
+            # parser); collapse to 0.0 sanity per plan contract.
             return 0.0 if x != x else float(x)
 
+        def _is_constant(xs: list[int]) -> bool:
+            # scipy.stats correlations emit ConstantInputWarning + return NaN on
+            # constant input (audit P1b)；pre-empt to keep stderr clean.
+            return len(set(xs)) < 2
+
         def _accuracy(srs: list[SampleResult]) -> float:
+            """全部 sample（含 invalid）：invalid pred 自然不等于 target → 0 贡献.
+
+            走 `metrics["acc"]` 平均而非 sklearn `accuracy_score`，避开 sentinel None
+            进入 sklearn 的路径；与 sample 层 acc 字段定义保持一致.
+            """
             if not srs:
                 return 0.0
-            yt, yp = _y_int(srs)
-            return float(accuracy_score(yt, yp))
+            return float(sum(s.metrics.get("acc", 0.0) for s in srs) / len(srs))
 
         def _cohens_kappa(srs: list[SampleResult]) -> float:
             """nominal 解读：1-5 当 5 个无序类（演示 ordinal 当 nominal 看的失明）."""
             if not srs:
                 return 0.0
-            yt, yp = _y_int(srs)
-            return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
+            yt, yp = _y_int_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                # Pe=1 退化（小 limit 单类切片）让 sklearn 内部除 0 emit RuntimeWarning;
+                # `_nan_to_zero` 已兜数值，此处消噪 (audit P2 同源).
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
 
         def _weighted_kappa_linear(srs: list[SampleResult]) -> float:
             """ordinal-aware: 距离按 |i-j| 线性折扣 disagreement."""
             if not srs:
                 return 0.0
-            yt, yp = _y_int(srs)
-            return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="linear"))
+            yt, yp = _y_int_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="linear"))
 
         def _weighted_kappa_quadratic(srs: list[SampleResult]) -> float:
             """ordinal-aware: 距离按 (i-j)² 二次折扣（off-by-1 远比 off-by-3 轻）.
@@ -154,30 +207,36 @@ class IaaOrdinal(Task):
             """
             if not srs:
                 return 0.0
-            yt, yp = _y_int(srs)
-            return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="quadratic"))
+            yt, yp = _y_int_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="quadratic"))
 
         def _pearson_r(srs: list[SampleResult]) -> float:
             """连续相关：把 likert 当 interval scale；off_by_one 场景 ≈ 0.83."""
-            if len(srs) < 2:  # scipy.stats correlations raise on n<2
+            yt, yp = _y_int_valid(srs)
+            if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
-            yt, yp = _y_int(srs)
             r, _p = pearsonr(yt, yp)
             return _nan_to_zero(r)
 
         def _spearman_rho(srs: list[SampleResult]) -> float:
             """rank 相关：对单调变换不变；off_by_one 场景 ≈ 0.82."""
-            if len(srs) < 2:
+            yt, yp = _y_int_valid(srs)
+            if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
-            yt, yp = _y_int(srs)
             rho, _p = spearmanr(yt, yp)
             return _nan_to_zero(rho)
 
         def _kendall_tau(srs: list[SampleResult]) -> float:
             """concordance-based rank corr：小样本更稳；off_by_one 场景 ≈ 0.74."""
-            if len(srs) < 2:
+            yt, yp = _y_int_valid(srs)
+            if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
-            yt, yp = _y_int(srs)
             tau, _p = kendalltau(yt, yp)
             return _nan_to_zero(tau)
 
@@ -186,7 +245,9 @@ class IaaOrdinal(Task):
             (与 weighted_kappa_quadratic 同步反映 ordinal 救场)."""
             if not srs:
                 return 0.0
-            yt, yp = _y_int(srs)
+            yt, yp = _y_int_valid(srs)
+            if not yt:
+                return 0.0
             return float(lins_ccc(yt, yp))
 
         def _fleiss_kappa(srs: list[SampleResult]) -> float:
@@ -198,7 +259,13 @@ class IaaOrdinal(Task):
                 return 0.0
             arr = np.asarray(matrix, dtype=int)
             agg, _cats = aggregate_raters(arr)
-            return _nan_to_zero(fleiss_kappa(agg))
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                # 单类退化让 statsmodels 内部 Pe=1 除 0 emit RuntimeWarning；
+                # `_nan_to_zero` 已兜数值，此处消噪 (audit P2 同源).
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(fleiss_kappa(agg))
 
         def _krippendorff_alpha_ordinal(srs: list[SampleResult]) -> float:
             """ordinal level：rank 距离权重，但忽略 interval 假设（5−1 与 4−2 同距）."""

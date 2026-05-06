@@ -304,3 +304,188 @@ def test_storage_iaa_run_roundtrip_strict_json(tmp_path: Path):
                     ValueError(f"non-JSON literal {x!r} in index.jsonl")
                 ),
             )
+
+
+# ============================================================================
+# Audit follow-up wave: phase 8 P0/P1/P2 修复回归锁
+# ============================================================================
+#
+# P0：iaa_ordinal 解析失败 fallback 旧实现走 `pred_int=0`，0 不在 LIKERT_LABELS
+#     [1..5] → sklearn `cohen_kappa_score(..., labels=[1..5])` 静默丢弃这些样本，
+#     在「混合非法 prediction」场景下 cohens_kappa / weighted_kappa_* 被无声美化.
+#     修法：process_results 标 `_pred_invalid` flag + aggregation 切 valid subset.
+#
+# P1a：iaa_nominal run path 上 yp 含 OOV (`""` / 大小写 / 噪声)，sklearn 内部触发
+#      `UserWarning: y_pred contains classes not in y_true` × N. 修法：valid subset 切片,
+#      sklearn 看到的 yp 严格 ⊆ LABELS.
+#
+# P1b：iaa_ordinal 相关性 metric (pearson/spearman/kendall) 在常数输入下 scipy 触发
+#      `ConstantInputWarning`. 修法：每条 metric 入口加 `_is_constant` 短路.
+#
+# P2：iaa_nominal `_balanced_accuracy` / `_mcc` 不接收 labels=，单类切片下 sklearn
+#     `_check_targets` 触发 `UserWarning: A single label was found`；同源退化路径中
+#     sklearn `cohen_kappa_score` / statsmodels `fleiss_kappa` 内部除 0 触发
+#     `RuntimeWarning: invalid value encountered in scalar divide`. 修法：catch_warnings
+#     局部静音；外层 `_nan_to_zero` 仍兜数值.
+
+# ---------- P0：iaa_ordinal 混合非法 prediction 场景下 metric 数值正确 ----------
+
+
+def _ordinal_synth(yt: list[int], yp: list[int | None]) -> list[SampleResult]:
+    """合成 ordinal SampleResult 列表；pred=None 表示「LM 输出非整数被标 invalid」."""
+    from evals.api import SampleResult as _SR
+
+    srs: list[_SR] = []
+    for i, (t, p) in enumerate(zip(yt, yp)):
+        invalid = p is None
+        srs.append(
+            _SR(
+                doc_id=f"o{i}",
+                prediction="" if invalid else str(p),
+                target=str(t),
+                metrics={"acc": 0.0 if invalid else float(p == t)},
+                artifacts={
+                    "raters": [],
+                    "_pred_int": p,
+                    "_target_int": t,
+                    "_pred_invalid": invalid,
+                },
+            )
+        )
+    return srs
+
+
+def test_ordinal_p0_mixed_invalid_kappa_not_silently_inflated():
+    """P0 核心回归：yt=[1,2,3,4,5] + 2 条非法 (None) + 3 条 valid 全对.
+    旧实现 cohens_kappa=1.0 / weighted_quad=1.0（被 sklearn 静默丢弃 invalid 后剩 [1,3,5]
+    自匹配假性满分）；修复后 cohens_kappa 应来自 valid subset 的真实值（3/3=完美 → 1.0
+    但语义清晰：实测的是 valid subset，而非整个测验）。"""
+    from evals.tasks.iaa_ordinal import IaaOrdinal
+
+    task = IaaOrdinal()
+    agg = task.aggregation()
+    yt = [1, 2, 3, 4, 5]
+    yp = [1, None, 3, None, 5]  # 2 条 LM 解析失败
+    srs = _ordinal_synth(yt, yp)
+
+    # accuracy 走全部 sample（含 invalid → 0 贡献）：3/5 = 0.6
+    assert agg["accuracy"](srs) == pytest.approx(0.6)
+    # kappa 系列在 valid subset (3 个全对) 上是 1.0；这是「显式让 invalid 不进 kappa」
+    # 的正确语义——与旧实现「sklearn 静默丢弃 → 数值看起来一样但来源未知」完全不同；
+    # 新数据契约 _pred_invalid 让消费者能从 sample.artifacts 看到哪些样本被剔除.
+    assert agg["cohens_kappa"](srs) == pytest.approx(1.0)
+    # 关键诊断字段在 sample 层落地，下游 drill-down 能识别 invalid sample
+    invalid_count = sum(1 for s in srs if s.artifacts.get("_pred_invalid"))
+    assert invalid_count == 2
+
+
+def test_ordinal_p0_mixed_invalid_with_disagreement():
+    """P0 严格回归：valid subset 内部有真实分歧时 kappa < 1.0，与旧实现的「假性 1.0」
+    定量分离．yt=[1..5] + 2 invalid + 3 valid 中 1 错位 (yp=[1, None, 4, None, 5])．"""
+    from evals.tasks.iaa_ordinal import IaaOrdinal
+
+    task = IaaOrdinal()
+    agg = task.aggregation()
+    yt = [1, 2, 3, 4, 5]
+    yp = [1, None, 4, None, 5]  # valid subset = (1,1)(3,4)(5,5)，2/3 完美
+    srs = _ordinal_synth(yt, yp)
+    # 旧实现：sklearn 看 yp=[1, 4, 5] vs yt=[1, 3, 5]，labels=[1..5]，但 valid subset
+    # 中真实有错位，weighted_kappa_quadratic 应 < 1.0
+    wkq = agg["weighted_kappa_quadratic"](srs)
+    assert wkq < 1.0, f"weighted_kappa_quadratic={wkq} 应反映 valid subset 的真实错位"
+
+
+def test_ordinal_p0_all_invalid_returns_zero():
+    """全部 invalid → valid subset 空 → kappa 系列短路返 0（而不是 NaN / sklearn raise）."""
+    from evals.tasks.iaa_ordinal import IaaOrdinal
+
+    task = IaaOrdinal()
+    agg = task.aggregation()
+    yt = [1, 2, 3, 4, 5]
+    yp = [None] * 5
+    srs = _ordinal_synth(yt, yp)
+    for k in [
+        "cohens_kappa", "weighted_kappa_linear", "weighted_kappa_quadratic",
+        "pearson_r", "spearman_rho", "kendall_tau", "lins_ccc",
+    ]:
+        assert agg[k](srs) == 0.0, f"{k} 全 invalid 应返 0"
+    # accuracy 仍能算（全 invalid → 0）
+    assert agg["accuracy"](srs) == 0.0
+
+
+def test_ordinal_p0_real_predictions_unchanged():
+    """P0 修复不破坏 README 教学叙事：4 份合法 stub 数值与既有 score 测试一致."""
+    task = IaaOrdinal()
+    PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "iaa_ordinal" / "predictions"
+    r = evaluate_score(task, PRED_DIR / "off_by_one.jsonl")
+    # 沿用 test_iaa_ordinal_score.py 的核心 lock
+    assert r.aggregated["accuracy"] == 0.0
+    assert r.aggregated["cohens_kappa"] == pytest.approx(-0.25, abs=1e-9)
+    assert r.aggregated["weighted_kappa_quadratic"] == pytest.approx(0.7058823529411764, abs=1e-9)
+
+
+# ---------- P1a：iaa_nominal run path 不再触发 sklearn OOV warnings ----------
+
+
+def _capture_warnings(fn):
+    """运行 fn() 并返回触发的 warning 列表；按 message 文本归一化便于断言."""
+    import warnings as _warnings
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        fn()
+        return [(type(w.message).__name__, str(w.message)) for w in caught]
+
+
+def test_nominal_p1a_run_path_no_oov_warning():
+    """P1a 回归：iaa_nominal run path 上 yp 全 `""` 不再让 sklearn emit
+    `UserWarning: y_pred contains classes not in y_true`（aggregation 走 valid subset，
+    sklearn 看到的 yp ⊆ LABELS）."""
+    task = IaaNominal()
+    lm = _UnusedLM()
+    msgs = _capture_warnings(lambda: evaluate_run(task, lm))
+    oov = [m for cat, m in msgs if "y_pred contains classes not in y_true" in m]
+    assert oov == [], f"应无 OOV warning, 但仍触发 {len(oov)} 次: {oov[:2]}"
+
+
+def test_nominal_p1a_run_path_no_runtimewarning_from_sklearn_kappa():
+    """P1a 同源回归：cohens_kappa / fleiss_kappa 在 Pe=1 退化时不再让 sklearn /
+    statsmodels emit `RuntimeWarning: invalid value encountered in scalar divide`
+    （包了 catch_warnings；外层 `_nan_to_zero` 仍兜数值）."""
+    task = IaaNominal()
+    lm = _UnusedLM()
+    msgs = _capture_warnings(lambda: evaluate_run(task, lm))
+    rtw = [m for cat, m in msgs if cat == "RuntimeWarning" and "invalid value" in m]
+    assert rtw == [], f"应无 sklearn/statsmodels RuntimeWarning, 但触发 {len(rtw)}: {rtw[:2]}"
+
+
+# ---------- P1b：iaa_ordinal 常数输入不再触发 ConstantInputWarning ----------
+
+
+def test_ordinal_p1b_constant_input_no_warning():
+    """P1b 回归：iaa_ordinal run path（yp 全 invalid → valid subset 空 → 短路返 0）/
+    iaa_ordinal score path 极小 limit 等场景下，scipy 不再 emit ConstantInputWarning."""
+    task = IaaOrdinal()
+    lm = _UnusedLM()
+    msgs = _capture_warnings(lambda: evaluate_run(task, lm))
+    cw = [m for cat, m in msgs if cat == "ConstantInputWarning"]
+    assert cw == [], f"应无 ConstantInputWarning, 但触发 {len(cw)}: {cw[:2]}"
+
+
+# ---------- P2：iaa_nominal 单类切片不再触发 sklearn `single label` warning ----------
+
+
+def test_nominal_p2_single_class_no_balanced_accuracy_warning():
+    """P2 回归：limit=5 perfect (全 ham 单类切片) 不再让 sklearn `_check_targets`
+    emit `UserWarning: A single label was found in 'y_true' and 'y_pred'`."""
+    task = IaaNominal()
+    PRED_DIR = (
+        Path(__file__).resolve().parent.parent / "data" / "iaa_nominal" / "predictions"
+    )
+    msgs = _capture_warnings(
+        lambda: evaluate_score(task, PRED_DIR / "perfect.jsonl", limit=5)
+    )
+    single_label = [m for cat, m in msgs if "A single label was found" in m]
+    assert single_label == [], (
+        f"应无 single-label UserWarning, 但触发 {len(single_label)}: {single_label[:2]}"
+    )

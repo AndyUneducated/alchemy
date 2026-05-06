@@ -92,39 +92,61 @@ class IaaNominal(Task):
         return enriched, Response(doc_id=doc.id, text=row.get("prediction"))
 
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
+        """pred 不在 LABELS 内 → 标 `_pred_invalid` 由 aggregation 过滤.
+
+        历史 (audit follow-up)：旧实现把 OOV pred (含 run path 占位 `""` / LM 输出
+        `'Spam'` / `'Label: spam'` 等噪声) 直接喂给 sklearn metric → 内部触发
+        `UserWarning: y_pred contains classes not in y_true` × N + 退化路径
+        `RuntimeWarning: invalid value encountered in scalar divide`，stderr 被污染.
+        改为 `_pred_invalid` flag + aggregation 切片：sklearn 看到的 yp 严格 ⊆ LABELS,
+        warnings 消失，accuracy / multi-rater 仍走全部 sample 不影响数值.
+        """
         pred = (response.text or "").strip()
         target = doc.target or ""
+        pred_invalid = pred not in LABELS
         return SampleResult(
             doc_id=doc.id,
             prediction=pred,
             target=target,
             metrics={"acc": float(pred == target)},
-            artifacts={"raters": list(doc.metadata.get("raters", []))},
+            artifacts={
+                "raters": list(doc.metadata.get("raters", [])),
+                "_pred_invalid": pred_invalid,
+            },
         )
 
     def aggregation(self) -> dict[str, Callable[[list[SampleResult]], Any]]:
         labels = list(LABELS)
 
+        def _is_invalid(sr: SampleResult) -> bool:
+            return bool(sr.artifacts.get("_pred_invalid", False))
+
         def _y(srs: list[SampleResult]) -> tuple[list[str], list[str]]:
+            """全部 sample（含 invalid）；用于 accuracy / confusion_matrix
+            等"OOV pred 自然不命中而不污染数值"的 metric."""
             return [s.target for s in srs], [s.prediction for s in srs]
 
+        def _y_valid(srs: list[SampleResult]) -> tuple[list[str], list[str]]:
+            """仅 valid pred 的 (yt, yp)；用于 sklearn 内部会因 OOV pred 触发
+            `UserWarning: y_pred contains classes not in y_true` 的 metric
+            (audit P1a 修复)."""
+            valid = [s for s in srs if not _is_invalid(s)]
+            return [s.target for s in valid], [s.prediction for s in valid]
+
         def _pos_label_present(yt: list[str], yp: list[str]) -> bool:
-            # sklearn binary scorers (precision/recall/f1/fbeta with pos_label) raise when
-            # pos_label is absent from y_true ∪ y_pred OR when the union is multiclass
-            # (e.g. {ham, spam, ""} on the run path where placeholder pred = ""). Both
-            # scenarios mean "no signal for the positive class" — short-circuit to 0.0
-            # rather than propagating sklearn's internal validation errors.
+            # 历史保留：valid subset 进来后 yp ⊆ labels 通常成立，但 yt ∪ yp 可能不含
+            # POSITIVE_CLASS（如 limit=5 全 ham 切片）— 仍需短路避免 sklearn raise.
             seen = set(yt) | set(yp)
             return POSITIVE_CLASS in seen and seen.issubset(set(labels))
 
         def _nan_to_zero(x: float) -> float:
-            # NaN propagates from degenerate kappa / Fleiss cases (e.g. Pe=1 when --limit
-            # 5 leaves only one class, or run-path placeholder pred outside `labels`).
-            # NaN is non-portable JSON (`json.dumps(NaN)` → invalid for any non-Python
-            # parser); collapse to 0.0 sanity per plan contract.
+            # NaN propagates from degenerate kappa cases (Pe=1 when --limit 5 leaves
+            # only one class). NaN is non-portable JSON (`json.dumps(NaN)` → invalid
+            # for any non-Python parser); collapse to 0.0 sanity per plan contract.
             return 0.0 if x != x else float(x)
 
         def _accuracy(srs: list[SampleResult]) -> float:
+            """全部 sample：OOV pred 自然不等于 target → 0 贡献，不调 sklearn 路径."""
             if not srs:
                 return 0.0
             yt, yp = _y(srs)
@@ -133,32 +155,48 @@ class IaaNominal(Task):
         def _balanced_accuracy(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
-            return float(balanced_accuracy_score(yt, yp))
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", category=UserWarning)
+                return float(balanced_accuracy_score(yt, yp))
 
         def _mcc(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
-            return float(matthews_corrcoef(yt, yp))
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", category=UserWarning)
+                return float(matthews_corrcoef(yt, yp))
 
         def _f1_micro(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
             return float(f1_score(yt, yp, labels=labels, average="micro", zero_division=0))
 
         def _f1_macro(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
             return float(f1_score(yt, yp, labels=labels, average="macro", zero_division=0))
 
         def _f_beta_2(srs: list[SampleResult]) -> float:
             """F_β=2：recall 加权 4× precision；imbalanced 任务的"宁多召回"权衡."""
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
             if not _pos_label_present(yt, yp):
                 return 0.0
             return float(fbeta_score(yt, yp, beta=2.0, pos_label=POSITIVE_CLASS, zero_division=0))
@@ -166,7 +204,7 @@ class IaaNominal(Task):
         def _precision_spam(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
             if not _pos_label_present(yt, yp):
                 return 0.0
             return float(precision_score(yt, yp, pos_label=POSITIVE_CLASS, zero_division=0))
@@ -174,7 +212,7 @@ class IaaNominal(Task):
         def _recall_spam(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
             if not _pos_label_present(yt, yp):
                 return 0.0
             return float(recall_score(yt, yp, pos_label=POSITIVE_CLASS, zero_division=0))
@@ -182,7 +220,7 @@ class IaaNominal(Task):
         def _f1_spam(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
             if not _pos_label_present(yt, yp):
                 return 0.0
             return float(f1_score(yt, yp, pos_label=POSITIVE_CLASS, zero_division=0))
@@ -190,20 +228,32 @@ class IaaNominal(Task):
         def _cohens_kappa(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
-            return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                # Pe=1 退化（单类切片）让 sklearn 内部 `expected = ... / np.sum(sum0)`
+                # 除 0 emit RuntimeWarning；外层 `_nan_to_zero` 已兜数值，此处消噪.
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
 
         def _scott_pi(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
             return float(scott_pi(yt, yp))
 
         def _gwet_ac1(srs: list[SampleResult]) -> float:
             """kappa paradox 解药 1：高度不均衡边际下仍诚实反映一致性."""
             if not srs:
                 return 0.0
-            yt, yp = _y(srs)
+            yt, yp = _y_valid(srs)
+            if not yt:
+                return 0.0
             return float(gwet_ac1(yt, yp))
 
         def _fleiss_kappa(srs: list[SampleResult]) -> float:
@@ -215,7 +265,13 @@ class IaaNominal(Task):
                 return 0.0
             arr = np.asarray(matrix)
             agg, _cats = aggregate_raters(arr)
-            return _nan_to_zero(fleiss_kappa(agg))
+            import warnings as _warnings
+
+            with _warnings.catch_warnings():
+                # Pe=1 退化（单类切片）让 statsmodels `(p_mean - p_mean_exp) / (1 - p_mean_exp)`
+                # 除 0 emit RuntimeWarning；外层 `_nan_to_zero` 已兜数值，此处消噪.
+                _warnings.simplefilter("ignore", category=RuntimeWarning)
+                return _nan_to_zero(fleiss_kappa(agg))
 
         def _krippendorff_alpha(srs: list[SampleResult]) -> float:
             """gold + N raters → krippendorff alpha (nominal level)."""
