@@ -5,14 +5,13 @@ Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatt
 ## 特性
 
 - **Scenario 即配置**：YAML frontmatter + markdown body，一文件一场景；启动期 schema 校验，作者改场景零代码
-- **扁平 step 列表**：`steps:` 一段顺序声明所有 turn，`who` 用 role/all/name 列表灵活寻址；引擎按声明顺序展开，每 turn 注入 `<turn>turn X of N</turn>` pinned marker，让 agent 自感位置
+- **扁平 step 列表**：`steps:` 一段顺序声明所有 turn，`who` 用 role/all/name 列表灵活寻址；每 turn 注入 `<turn>turn X of N</turn>` pinned marker，让 agent 自感位置
 - **Shared transcript + per-agent projection**：history 只有一份权威视图，每个 agent 在 `respond()` 时按 `speaker == owner` 投影为 `assistant`，他人投影为 `<message from="X">`，控制流（`topic / turn / artifact_event`）投影为带标签的 user 消息
-- **Per-agent memory 三策略**：`full / window / summary` 同接口可换；pinned 类型（控制流 + artifact 事件）永不被剪
-- **Shared artifact + 结构化投票**：sectioned markdown + `replace / append` mode + 投票 + `finalize`；artifact view 带外注入（不进 history），artifact_event 进 history（pinned）
-- **Artifact tool ACL（`tool_owners`）**：每个 artifact 工具的可调用方在 `artifact.tool_owners` 显式声明，取值与 `who` 完全对齐（role / all / name 列表）；未列出的工具默认对所有 agent 开放
+- **Per-agent memory**：`full / window / summary` 三策略可换，详见 [§Memory 策略](#memory-策略)
+- **Shared artifact + 结构化投票 + ACL**：sectioned markdown + `replace / append` mode + 投票 + `finalize`，view 带外注入；`tool_owners` 限制每个 artifact 工具的可调用方（取值与 `who` 完全对齐）；详见 [§Artifact 工具](#artifact-工具)
 - **Step assert（require_tool）**：声明 step 必须调用某工具；缺则 nudge 重试，最终落 stderr WARNING——**让沉默违规可见**而非强制
 - **Tool observability**：`ToolTracer` 双 sink——stderr 实时 🔧 emoji + transcript event（`visible=False`，离线回放可用）
-- **Subprocess 隔离工具**：`retrieve_docs` 通过 `subprocess.run(python rag/query.py --json)` 调用，进程边界保证两个子项目的 `config.py` / 依赖互不串台；透传 rag 的 hybrid（dense + BM25 RRF 融合）检索 + 可选 cross-encoder 精排，LLM 可按需选 `mode` / `rerank`
+- **Subprocess 隔离工具**：`retrieve_docs` 通过 `subprocess.run(python rag/query.py --json)` 调用，进程边界隔离两个子项目的 `config.py` / 依赖；透传 rag 的 hybrid（dense + BM25 RRF）检索 + 可选 cross-encoder 精排，LLM 可按需选 `mode` / `rerank`
 - **多后端 pluggable**：`config.py` 改一行 `BACKEND` 切换 ollama / openai / anthropic / gemini
 
 ## 指导原则
@@ -21,82 +20,15 @@ Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatt
 
 |#|原则|说明|
 |---|---|---|
-|1|**Shared transcript + per-agent projection**|对话数据只有一份权威视图，各 agent 按自身需求投影|
+|1|**Shared transcript + per-agent projection**|一份权威 history，各 agent 按自身需求投影（详见 [§History 投影规则](#history-投影规则)）|
 |2|**显式优于隐式**|配置能声明的不靠代码推断；LLM 行为能结构化约束的不靠 prompt 约定|
 |3|**承认 LLM 不确定性**|不把 LLM 当确定性函数，容错设计（retry / self-correct / audit）优先于强制|
-|4|**装配点集中**|`Scenario.assemble()` 产出运行时对象图，`Engine.invoke()` 负责单次运行的编排与落盘；`cli.py` 只做 argparse → 上述 API。讨论内核不依赖 CLI 或脚本入口|
+|4|**装配点集中**|`Scenario.assemble()` + `Engine.invoke()` 是唯一装配 / 编排入口；`cli.py` 只做 argparse → 同一 API，讨论内核不依赖 CLI|
 |5|**抽象引入滞后于第二个具体案例**|不为未来需求预留抽象，等第二个使用者出现时再抽|
 
 ## 架构
 
-### 分层视角
-
-按业界常见的 5 层模型把项目"摊开"看：每一层在本项目里对应的具体模块、文件、配置都标在节点里，方便对照代码。下游各小节是对这张图的细节展开。
-
-```mermaid
-flowchart TB
-    subgraph UI["🖥 用户接口层 / User Interface Layer"]
-        cli["python -m agent_engine CLI<br/>(cli.py: argparse → Engine.invoke)<br/>scenario.md · --no-stream · --save-* PATH"]
-        io["stdout: 🗣 speaker / 🔧 tool / 📝➕🗳✓🏁 artifact<br/>stderr: 🔁 retry · WARNING"]
-        scn["scenario.md<br/>(YAML frontmatter + body)"]
-    end
-
-    subgraph ORCH["🎬 编排层 / Orchestration Layer"]
-        asm["composition root (scenario.Scenario)<br/>schema validate · 装配 Agent/Memory/ACL"]
-        disc["Discussion (discussion.py)<br/>steps → turns 展开<br/>+ &lt;turn X of N&gt; pinned marker"]
-        route["_resolve_who<br/>role / all / name 路由寻址"]
-        retry["_run_turn retry loop<br/>require_tool · nudge · WARNING"]
-    end
-
-    subgraph CAP["🧠 能力层 / Capabilities"]
-        plan["Planning · 规划<br/>scenario steps 声明式流程<br/>+ require_tool 行为约束"]
-        reas["Reasoning · 推理<br/>Agent.respond() + persona prompt<br/>+ backend client tool-use loop"]
-        mem["Memory · 记忆<br/>shared transcript + per-agent 投影<br/>FullHistory / WindowMemory / SummaryMemory"]
-        tool["Tool Use · 工具<br/>tools.dispatch + ArtifactStore (6 tools)<br/>+ tool_owners ACL · scenario default 注入"]
-    end
-
-    subgraph LLM["🤖 LLM Core / 大模型核心"]
-        backends["pluggable backend client<br/>ollama_client · openai_client<br/>anthropic_client · gemini_client<br/>config.BACKEND 一行切换"]
-    end
-
-    subgraph INFRA["⚙ 基础设施层 / Infrastructure"]
-        sub["Subprocess sandbox<br/>rag/query.py --json<br/>(OS 级进程隔离)"]
-        vdb[("Vector DB · BM25<br/>delegated to play/rag/")]
-        obs["Observability<br/>ToolTracer (stderr + transcript event)<br/>artifact_event 流 · --save-transcript JSON"]
-    end
-
-    cli --> scn
-    scn --> asm
-    asm --> disc
-    disc --> route --> retry
-    retry --> reas
-
-    plan -. 由 scenario 编译 .-> disc
-    reas --> mem
-    reas --> tool
-    reas --> backends
-    backends --> tool
-
-    tool -. retrieve_docs .-> sub --> vdb
-    tool --> obs
-    backends -. tool_call .-> tool
-
-    obs -. tool_call event (visible=false) .-> disc
-    tool -. artifact_event (pinned) .-> disc
-    io -. live tail .- disc
-    io -. live tail .- tool
-```
-
-|层|本项目里的具体落地|
-|---|---|
-|**UI / 用户接口**|Python API `Engine.invoke(...)` (库 SoT) + `cli.py` 作为 thin adapter (`python -m agent_engine`) ；scenario `.md` 输入；stdout 流式发言 + emoji 实时事件、stderr WARNING；`artifact_path` / `transcript_path` 落盘|
-|**Orchestration / 编排**|`scenario.Scenario` (schema 校验 + 装配)；`engine.Engine` 库化壳子；`discussion.py` Discussion 引擎（steps → turns + `<turn X of N>` marker + retry 闭环）|
-|**Planning / 规划**|scenario `steps` 声明式列表；`who` 路由（role/all/name）；`require_tool` + `max_retries` 行为约束|
-|**Reasoning / 推理**|`Agent.respond()` + persona system prompt + per-step instruction；backend client 内的 tool-use loop（多轮 function calling）|
-|**Memory / 记忆**|shared transcript（`Discussion.history` 唯一权威）+ per-agent `Memory.build_messages` 投影；`Full / Window / Summary` 三策略可换|
-|**Tool Use / 工具**|`tools/` 包 dispatch + scenario default 注入 + path 解析；`ArtifactStore` 6 工具（`read/write/append/propose/cast/finalize`）+ `tool_owners` ACL|
-|**LLM Core / 大模型核心**|4 个 pluggable backend client（ollama / openai / anthropic / gemini），`config.BACKEND` 一行切换；`config.py` 集中模型 / temperature / max_tokens / 各家 API key|
-|**Infrastructure / 基础设施**|Subprocess 沙箱（`subprocess.run([python, rag/query.py, --json])` 隔离 `config.py` / 依赖）；`play/rag/` 提供 Vector DB + BM25；`ToolTracer` 双 sink + `artifact_event` 流 + JSON transcript 落盘|
+> 业界 5 层模型对应：UI = `cli.py` + scenario `.md`；Orchestration = `scenario.Scenario` / `engine.Engine` / `discussion.Discussion`；Capabilities = `agent.Agent` + `memory.*` + `tools/` + `artifact.ArtifactStore`；LLM Core = 4 个 pluggable backend client；Infrastructure = `play/rag/` subprocess + `tracer.ToolTracer` + JSON 落盘。下面四张图分别是组件视角、scenario→运行时映射、单 turn 时序、history 投影。
 
 ### 组件总览
 
@@ -113,7 +45,7 @@ flowchart TB
     scenario --> val --> asm
 
     subgraph engine["Discussion (engine)"]
-        exp["expand steps → turns<br/>每 turn 注入 &lt;turn X of N&gt;"]
+        exp["expand steps → turns"]
         hist[("history<br/>shared transcript")]
     end
     asm --> exp
@@ -224,42 +156,7 @@ sequenceDiagram
 
 ### History 投影规则
 
-History 只有一份；每个 agent 在 `Memory.build_messages(history, owner)` 中按下表把它折成自己的 `messages`。`visible=False` 的 entry（`tool_call`）对所有 agent 不可见，仅人类回放可用。
-
-```mermaid
-flowchart LR
-    subgraph src["shared history (one source of truth)"]
-        e1["type=topic"]
-        e2["type=turn"]
-        eA["speaker=A: ..."]
-        eB["speaker=B: ..."]
-        eE["type=artifact_event<br/>(pinned)"]
-        eT["type=tool_call<br/>visible=false"]
-    end
-    subgraph va["Agent A 的 messages"]
-        ma1["user: &lt;topic&gt;...&lt;/topic&gt;"]
-        ma2["user: &lt;turn&gt;...&lt;/turn&gt;"]
-        ma3["assistant: ..."]
-        ma4["user: &lt;message from=&quot;B&quot;&gt;...&lt;/message&gt;"]
-        ma5["user: &lt;artifact_event&gt;...&lt;/artifact_event&gt;"]
-    end
-    subgraph vb["Agent B 的 messages"]
-        mb1["user: &lt;topic&gt;..."]
-        mb2["user: &lt;turn&gt;..."]
-        mb3["user: &lt;message from=&quot;A&quot;&gt;..."]
-        mb4["assistant: ..."]
-        mb5["user: &lt;artifact_event&gt;..."]
-    end
-    e1 --> ma1 & mb1
-    e2 --> ma2 & mb2
-    eA --> ma3
-    eA --> mb3
-    eB --> ma4
-    eB --> mb4
-    eE --> ma5 & mb5
-    eT -.->|skipped| ma1
-    eT -.->|skipped| mb1
-```
+History 只有一份；每个 agent 在 `Memory.build_messages(history, owner)` 中按下表把它折成自己的 `messages`。
 
 |来源 entry|投影规则|
 |---|---|

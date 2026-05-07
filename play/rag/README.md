@@ -5,10 +5,9 @@
 ## 特性
 
 - **本地零运维**：embedded ChromaDB，VDB 就是一个目录，`cp -r` 即迁移
-- **VDB 自描述**：`metadata.json` 记录 `embedding_model / chunk_size / chunk_overlap / tokenizer`，query 端默认沿用，避免"用错模型查对的库"或"用错 tokenizer 切对的库"的静默失败
+- **VDB 自描述**：`metadata.json` 哨兵随 VDB 走，query 端默认沿用 ingest 时的 model / chunker / tokenizer，详见 [§VDB 目录解剖](#vdb-目录解剖)
 - **段落感知 chunker**：按 `\n\n` 切段，贪心打包，回带保持完整段落不破语义
-- **Hybrid 召回（默认）**：dense（语义） + BM25（字面）双路，**RRF（Reciprocal Rank Fusion，`k=60`）** 只用排名融合，免 score normalize
-- **跨语言 BM25**：HF tokenizer 复用 embedding 模型同款（Qwen3 BPE），中英 / 代码 / emoji 一致切分，与 dense 端 tokenization 同源
+- **Hybrid 召回（默认）**：dense + BM25 双路 → **RRF**（`k=60`，只用排名）融合；BM25 tokenizer 与 embedding 同款 Qwen3 BPE，跨语言（CJK / 拉丁 / 代码 / emoji）切分同源
 - **Cross-encoder reranker（可选）**：`BAAI/bge-reranker-v2-m3` lazy-load + `lru_cache(1)` 单例，`--rerank` 显式开启
 - **Provider-agnostic 返回值**：`SearchResult` 用 `content / score / source / metadata`，每条 hit 标 `metadata.retrieval` / `metadata.reranked` 来源
 - **`--json` envelope 契约**：stdout 输出 `{query, data, meta}`，对齐 OpenAI Vector Store / Pinecone / Cohere 共同子集；warnings/进度走 stderr
@@ -107,19 +106,15 @@ ollama pull qwen3-embedding:8b   # 默认，中文友好
 ollama pull nomic-embed-text
 ```
 
-- **首次跑或换机时拉 HF 资产**（一次性 ~1.2GB，之后离线复用）：
-
-```bash
-python prefetch.py   # 拉 BM25 tokenizer (~10MB) + reranker model (~1.2GB)
-```
-
-> 不跑 prefetch 也能用：`ingest.py` / `query.py` 首次调用时会自动下载，但在测试现场会卡几秒。
-
 ## 快速开始
 
 仓库自带最小数据集 [`docs/test_vdb/`](docs/test_vdb)。在 `play/rag/` 目录下：
 
 ```bash
+# 0. (可选, 首次或换机) 一次性拉 HF 资产: BM25 tokenizer (~10MB) + reranker (~1.2GB)
+#    跳过也行——ingest/query 首次会自动下载, 只是测试现场会卡几秒
+python prefetch.py
+
 # 1. 建库（hybrid 索引同时生成 chroma 向量 + bm25.pkl）
 python ingest.py --docs docs/test_vdb --output vdb/test_vdb
 
@@ -209,7 +204,7 @@ for h in hits:
 |`source`|`str`|文件相对路径|
 |`metadata`|`dict`|含 `chunk_index / retrieval / reranked` 等|
 
-`search()` 是纯函数，`query()` 是它的 pretty-print 包装；CLI 的 `--json` 路径包装成 envelope 后 `print` 到 stdout。
+三层薄封装：`search()` 纯函数 → `query()` pretty-print 包装 → CLI 在外面再裹 envelope 后 `print` 到 stdout。
 
 ## `--json` envelope 契约
 

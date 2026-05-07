@@ -2,14 +2,6 @@
 
 **lm-evaluation-harness 风格的 LLM 评测 harness**，以 Task（dataset + prompt template + process_results + aggregation）为声明式评测单元，按方法学族分 phase 渐进扩展主流指标。
 
-## 特性
-
-- **score / run 双模式一等公民**：共享 aggregation + storage；parity test 焊死"`run mock:X` ≡ `score predictions/X.jsonl`"
-- **Task 声明式范式（lm-evaluation-harness 原版）**：一个 Python 类绑定 dataset + prompt template + process_results + aggregation；`@register_task` 登记、CLI 字符串调度
-- **契约层居中（`api.py` 5 个顶层 dataclass + 1 个嵌套 `Usage`）**：Task / LM 平级互不 import，全部依赖 `api.py` 词汇表
-- **纯 JSONL 存储（刻意 YAGNI）**：`runs/<id>/{result.json, samples.jsonl}` + `runs/index.jsonl`（append-only 扁平索引，schema 和未来可选 SQLite 同构）
-- **Metric 按需建**：有成熟库时 task 直调；无库或跨 task 复用时再建 `metrics/X.py`
-
 ## 指导原则
 
 贯穿本项目的 5 条原则：
@@ -24,6 +16,18 @@
 
 ## 架构分层
 
+七层架构，自上而下分层；每层只通过 `api.py` 的 dataclass 与相邻层对话，互不 import。
+
+|层|目录 / 文件|职责|不做（边界）|
+|---|---|---|---|
+|UI / CLI|`cli.py` / `__main__.py`|解析 model spec、dispatch task & lm 构造、渲染 aggregated（dot-path）|不算 metric、不持 LM 客户端|
+|编排 / Runner|`runner.py`|`evaluate_score` / `evaluate_run` 双入口；中段在 `_evaluate_inner` 合流：`process_results → cross-cutting injectors → aggregation → storage`|不知 metric 公式、不直接 import `metrics/`|
+|任务层 / Task|`tasks/`（含 `base.py` ABC + `<task>.py` × 9）|一个 task 一个 Python 类，绑定 dataset + `doc_to_text` + `process_results` + `aggregation`|run 模式不调 LM（由 Runner 调）；不知存储路径|
+|模型层 / LM|`models/`（`base.py` ABC + 4 adapter）|`generate_until` 适配各 provider；MockLM 4 mode 给 parity test 用|不知 task 内容；不解析 prompt 语义|
+|契约层|`api.py` （5 顶层 dataclass + 1 嵌套 `Usage`）|跨层唯一词汇表；任一层替换不破其它层|不放业务逻辑，只放数据形状|
+|Metric 层|`metrics/`（按方法学切：judge_core / judge_rag / retrieval / trajectory / agreement / efficiency / safety）|跨 task 复用 / 无库可用的方法学实现；按需建（[Metric 层策略](#metric-层策略)）|有成熟库时不预设抽象（如 sklearn / sacrebleu / statsmodels 由 task 直调）|
+|存储层|`storage.py`|`runs/<id>/{result.json, samples.jsonl}` + `runs/index.jsonl`（append-only），strict-JSON（`allow_nan=False`）|不做 SQLite / dashboard（与 `index.jsonl` schema 同构留接口）|
+
 ```mermaid
 flowchart TB
     subgraph UI["UI 层 / CLI"]
@@ -33,21 +37,20 @@ flowchart TB
     end
     subgraph ORCH["编排层 / Runner"]
         off["evaluate_score(task, preds)<br/>取 (docs, responses) from JSONL"]
-        act["evaluate_run(task, lm)<br/>取 (docs, responses) from build req -> batch -> response"]
-        shared["_evaluate_inner (phase 7 立的中段合流点)<br/>process_results + cross-cutting injectors<br/>(safety content / efficiency call) + finalize"]
+        act["evaluate_run(task, lm)<br/>取 (docs, responses) from build req → batch → response"]
+        shared["_evaluate_inner (中段合流点)<br/>process_results + cross-cutting injectors<br/>(efficiency call class) + finalize"]
     end
     subgraph TASK["任务层 / Task (registry)"]
         reg["@register_task<br/>registry.py"]
-        base["Task ABC<br/>docs / doc_to_text / doc_to_target / process_results / aggregation"]
+        base["Task ABC<br/>docs / doc_to_text / doc_to_target<br/>process_results / aggregation"]
         tasks["各 phase 的 task 实现"]
     end
     subgraph LM["模型层 / LM adapter (仅 run 模式)"]
         lmbase["LM ABC<br/>generate_until / loglikelihood"]
-        adapters["MockLM / OpenAI / Anthropic / Ollama / ..."]
+        adapters["MockLM / OllamaLM / ...<br/>(openai/anthropic/gemini 留口)"]
     end
-    subgraph CONTRACT["契约层 / api.py (5 顶层 + Usage 嵌套)"]
-        doc["Doc"] --> req["Request"] --> resp["Response"] --> sr["SampleResult<br/>metrics: dict[str, float | dict[str, float]]<br/>(phase 7 起 nested 派：横切走子组)"] --> er["EvalResult"]
-        usage["Usage<br/>(嵌套于 Response)"] -.-> resp
+    subgraph CONTRACT["契约层 / api.py"]
+        doc["Doc"] --> req["Request"] --> resp["Response<br/>(usage 嵌套)"] --> sr["SampleResult<br/>(metrics nested 派)"] --> er["EvalResult<br/>(aggregated nested 派)"]
     end
     subgraph STORE["存储层 / Storage (pure JSONL)"]
         samples["runs/<id>/samples.jsonl"]
@@ -73,37 +76,215 @@ flowchart TB
 ## 数据流
 
 ```
-Doc       —— 数据集一行         (Task 产出)
+Doc       —— 数据集一行          (Task 产出，含 metadata: free-form bucket)
   ↓ doc_to_text
 Request   —— LM 调用请求         (run 模式 Runner 构造；score 模式不经过)
   ↓ lm.generate_until / 或 JSONL 查表
-Response  —— LM 返回             (run 模式：LM 产；score 模式：Response(text=preds[id]))
+Response  —— LM 返回             (run: LM 填 text + usage + latency_ms；
+                                  score: Response(text=preds[id]))
   ↓ task.process_results
-SampleResult —— 单样本评分       (per-sample metrics：一条能算完的，如 acc=0/1)
+SampleResult —— 单样本评分       (per-sample metrics + artifacts；
+                                  cross-cutting 横切走 metrics["efficiency"] 子组)
   ↓ task.aggregation()
-EvalResult —— 整个 run 最终产物  (aggregated：要看全集的，如 f1_macro / kappa)
+EvalResult —— 整个 run 最终产物  (aggregated: 顶层平铺 task-specific +
+                                  嵌套子组装横切维度)
   ↓ storage.save
 runs/<id>/{result.json, samples.jsonl} + runs/index.jsonl
 ```
 
-## Task 声明式范式（为什么 prompt 和 metric 绑在 task 里）
+数据流哲学：**`process_results` 双路径完全一致**——score 路径用 JSONL 查表伪造 `Response(text=preds[id])`，与 run 路径在 `process_results / aggregation / storage` 字节相同。`evaluate_score(task, preds) ≡ evaluate_run(task, PrerecordedLM(preds))` 由 parity test 焊死等价性。这让"非 LM 驱动的文件打分"（sacrebleu 哲学）与"LM 驱动的端到端跑分"（lm-eval-harness 哲学）共享同一套 task 抽象，互为对方的 mock 源。
 
-学术 benchmark 文化：paper 报分数时，**prompt 字面字符串 + 数据集 + metric 三者一起**才算一次可复现的测量。
+## 关键数据结构
 
-- Task 拥有 `doc_to_text` 的**字面字符串输出** → prompt 不会被 provider 的 system prompt / chat 模板隐式改写
-- Task 拥有 `process_results + aggregation` → 换 prompt 做 A/B 时 metric 不动，换 metric 时 prompt 不动
-- 换 LM 时**只换一个对象**，Task 零改动
+5 个顶层 frozen dataclass + 1 个嵌套 `Usage`，构成跨层唯一词汇表（`api.py`）。形态对齐 lm-evaluation-harness 原版 + OpenAI / Anthropic / inspect_ai SDK 派。每个层只读 / 生产这些类型，互相不 import。
 
-`@register_task("name")` 装饰器登记 name → 类的映射；import 时副作用触发注册（Django URL / Flask route / pytest fixture 同款模式）。CLI 从字符串直接 `get_task()` 拿实例，不需要 if-else 分派。
+### Doc — 数据集一行（Task 产出）
+
+```python
+@dataclass(frozen=True)
+class Doc:
+    id: str                              # 用于 join predictions / cross-run 追踪
+    input: str
+    target: str | None = None            # phase 4 起放宽 None：rag_retrieval / IAA 等无字符串 gold
+    choices: tuple[str, ...] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)   # task / pipeline 互通的 free-form bucket
+```
+
+例子（rag_qa，`process_docs` 后注入 contexts）：
+
+```json
+{"id": "qa01", "input": "公司 Q3 营收?", "target": "1.2 亿",
+ "metadata": {"contexts": ["...", "..."], "retrieved_ids": ["d3", "d8"]}}
+```
+
+设计动机：`metadata` 是 **path B+C 数据契约**的核心——RAG 把检索产物 / agent 把 envelope 注入这里，`Response` 保持只装 LM-side 输出（DECISIONS §4）。否则 `Response` 会被 RAG / agent / multi-modal 等多种 pipeline 各加一组字段而膨胀。
+
+行业对比：与 lm-eval-harness `Doc` 同形；inspect_ai `Sample(input, target, metadata)` 同精神；HuggingFace `datasets.Dataset` 是更通用的字段集合，不强制 `id`，但跨进程跨 run drill-down 必须有稳定 id。
+
+### Request — LM 调用请求（Runner 构造）
+
+```python
+@dataclass(frozen=True)
+class Request:
+    doc_id: str
+    prompt: str                                              # 字面字符串，不引入 chat messages
+    request_type: RequestType = "generate_until"             # generate_until / loglikelihood / multiple_choice
+    until: tuple[str, ...] = ()
+    max_tokens: int = 64
+    choices: tuple[str, ...] | None = None
+```
+
+设计动机：三种 `request_type` 与 lm-evaluation-harness 原版一致；不引入 chat messages 让 LM 适配层自决怎么封装，保证 prompt 字面可复现（lm-eval 不变量）。所有现有 task 都走 `generate_until`，`loglikelihood` 预留至 phase 11+。
+
+### Response + Usage — LM 返回
+
+```python
+@dataclass(frozen=True)
+class Usage:                                                 # phase 6 引入，嵌套于 Response
+    tokens_in: int | None = None                             # MockLM / score 路径永远 None
+    tokens_out: int | None = None                            # OllamaLM 解析 /api/generate 后填
+
+@dataclass(frozen=True)
+class Response:
+    doc_id: str
+    text: str | None = None
+    loglikelihoods: tuple[float, ...] | None = None
+    latency_ms: float | None = None                          # 显式 None > 不准估算（不做 batch 时间除以 N）
+    usage: Usage | None = None
+```
+
+例子（OllamaLM 实测）：
+
+```json
+{"doc_id": "s01", "text": "positive", "latency_ms": 670.0,
+ "usage": {"tokens_in": 42, "tokens_out": 4}}
+```
+
+设计动机：`usage` 嵌套而非顶层平铺 tokens 字段——多模型生态扩展（`reasoning_tokens` / `cached_tokens` / `audio_tokens`）只动 `Usage` 字段不污染顶层 `Response`；`Response.usage = None` 默认值保证老 `Response(doc_id, text)` 调用点完全不破。
+
+行业对比：嵌套 Usage 是行业惯例（OpenAI `CompletionUsage` 2023 起、Anthropic `Usage` 2024 起、inspect_ai `ModelUsage` 2024 起）。lm-evaluation-harness 旧版 Response 顶层平铺 tokens，扩展 reasoning tokens 等会膨胀；本项目升级到 nested 派对齐现代 SDK（DECISIONS §6）。
+
+### SampleResult — 单样本评分
+
+```python
+@dataclass(frozen=True)
+class SampleResult:
+    doc_id: str
+    prediction: str
+    target: str
+    metrics: dict[str, float | None | dict[str, float | None]]  # phase 7 起 nested 派
+    artifacts: dict[str, Any] = field(default_factory=dict)     # phase 4 起，per-sample 非标量
+```
+
+例子（sentiment_clf + ollama，run 路径）：
+
+```json
+{"doc_id": "s01", "prediction": "positive", "target": "positive",
+ "metrics": {"acc": 1.0,
+             "efficiency": {"latency_ms": 670.0, "tokens_in": 42, "tokens_out": 4, "cost_usd": 0.0001}},
+ "artifacts": {}}
+```
+
+例子（rag_retrieval，artifacts 装非标量）：
+
+```json
+{"doc_id": "r01", "prediction": "...", "target": null,
+ "metrics": {},
+ "artifacts": {"pred_ids": ["d3", "d1", "d8"], "gold_ids": ["d3", "d8"]}}
+```
+
+设计动机：
+
+- `metrics` 三种合法形态：① **task-specific 标量**顶层平铺（`acc` / `f1_macro` / `cohens_kappa`）；② **cross-cutting 横切**走 nested 子组（`metrics["efficiency"]`），由 Runner 注入；③ **`_` 前缀私有键**（`_pred_invalid` / `_plan_<dim>`）顶层但不上聚合面板，仅供 aggregation 消费 / drill-down
+- `artifacts` 装 per-sample 非标量产物（retrieval IDs / trajectory steps / raters list / confusion matrix raw），与 `metrics` 形成 MLflow / W&B 风格的 scalar/non-scalar 对偶——防止把 `list[str]` 偷偷塞进 `metrics` 破坏类型契约
+- 类型签名 wave 4 起加 `None`：表"未测得"（judge parse 失败 / 切片为空），与"真 0"显式分离（DECISIONS §8.2）
+
+行业对比：MLflow / W&B 同样 `metrics`（scalar）+ `artifacts`（non-scalar）二分；inspect_ai `Score` 也含 `value` + `metadata`；lm-evaluation-harness 旧版没有 artifacts 概念，per-sample 非标量产物会污染 metrics 字典。
+
+### EvalResult — 整个 run 的最终产物
+
+```python
+@dataclass(frozen=True)
+class EvalResult:
+    task: str
+    model: str
+    mode: EvalMode                                           # "score" | "run"
+    n: int
+    aggregated: dict[str, Any]                               # 实际形态 dict[str, float | dict]
+    per_sample: tuple[SampleResult, ...]
+    run_id: str
+    created_at: str
+    elapsed_ms: float
+    num_fewshot: int = 0
+```
+
+例子：
+
+```json
+{"task": "sentiment_clf", "model": "ollama:qwen2.5:32b", "mode": "run", "n": 30,
+ "aggregated": {
+   "accuracy": 1.0, "f1_macro": 0.667, "cohens_kappa": 1.0,
+   "efficiency": {
+     "latency_ms": {"mean": 874.4, "p50": 665.0, "p95": 1230.5, "max": 1293.4},
+     "tokens_in":  {"total": 178, "mean": 59.3},
+     "tokens_out": {"total": 12,  "mean": 4.0},
+     "cost_usd":   {"total": 0.0002, "mean": 0.0001}}},
+ "elapsed_ms": 2632.7, "...": "..."}
+```
+
+设计动机：`aggregated` 命名分两层（cross-cutting ontology，DECISIONS §7.A）——
+
+|层级|位置|装的内容|举例|
+|---|---|---|---|
+|顶层 平铺|`aggregated[<metric>]`|task-specific 指标|`accuracy` / `f1_macro` / `cohens_kappa` / `task_success` / `refusal_rate` / ...|
+|顶层 嵌套子组|`aggregated[<dim>]`|HELM 横切维度（call class，runner 注入）|`aggregated["efficiency"]`（phase 6 ✅）/ `aggregated["calibration"]`（phase 9 计划）|
+|嵌套子组内|`aggregated[<dim>][<group>][<stat>]`|按 (group, stat) 二维结构|`aggregated["efficiency"]["latency_ms"]["p50"]`|
+
+约束：① 同名指标跨 phase **位置不漂移**（`cohens_kappa` 在 phase 1 / 8 都顶层）→ cross-run JSON_EXTRACT / 索引扁平 query 不需切分支；② 横切子组永远存在（即使 LM 不报，子组键值 0）→ schema-on-write 稳定；③ score 模式不注入 efficiency 子组（无 LM → 显式让步而非 0/None 占位）。
+
+phase 7 wave 3 后 safety 退出嵌套子组，回归 task-specific 顶层平铺（与 sentiment_clf / mt 同形）；phase 10 robustness 同精神（DECISIONS §7.2）。"内容类"指标按 lm-eval-harness 主流走独立 task，"基础设施类"指标（efficiency / calibration）走 cross-cutting AOP。
+
+行业对比：HELM 7 维度作 ontology 直接对标；inspect_ai 也用 nested namespace（`metrics: dict[str, dict[str, float]]`）；lm-evaluation-harness 旧版全平铺，新维度（efficiency / safety）会让顶层键空间膨胀。
+
+### 三层 nested 派一致
+
+cross-cutting 字段在三层契约里的形态完全同源（OpenAI / Anthropic / inspect_ai SDK 派），下游消费写一份 schema 就跨三层都能用：
+
+|层|结构|举例|
+|---|---|---|
+|`Response.usage`|nested dataclass|`response.usage.tokens_in == 178`|
+|`SampleResult.metrics`|nested 子组 dict|`s.metrics["efficiency"]["latency_ms"] == 670.0`|
+|`EvalResult.aggregated`|nested 子组 dict|`r.aggregated["efficiency"]["latency_ms"]["p50"] == 12.5`|
+
+下游消费（CLI `_fmt_kv` 递归 dot-path / JSON 落盘自描述 / cross-run JSON_EXTRACT 路径不漂移）一份 schema 通用；新加横切维度（calibration）按同模式嵌套即可，三层 zero-cost 扩展。
+
+## Task 全景：当前评测的故事矩阵
+
+每个 task 都不是“随便挑一份数据集打个分”，而是设计成一个**教学矩阵**：用 3-5 份 stub predictions（perfect / 反向 / 退化）演出反向叙事，让指标的失明、救场、阶梯关系一眼可读。下表既是“当前能评什么”的索引，也是“该 task 想说什么”的剧本说明。
+
+|task|phase|数据矩阵（gold × stub）|主要评测指标 / 族|体现 / 讲什么故事|
+|---|---|---|---|---|
+|`sentiment_clf`|P1|30 条情感分类 × 4 stub（`perfect` / `constant_neutral` / `keyword_rule` / `noisy_0.3`）|分类基础：`accuracy` / `f1` / `cohens_kappa`|harness 最小闭环跑通；MockLM 4 mode + parity test 锁住 `score predictions/perfect.jsonl ≡ run mock:gold`|
+|`mt`|P2|30 条 EN→ZH × 4 stub（`perfect` / `literal` / `paraphrase` / `garbage`）|生成-词面：`exact_match` / `bleu` / `chrf` / `rouge_l` / `meteor`；生成-语义：`bertscore`|**词面失明 vs 语义救场**：`paraphrase` 让 BLEU < 0.30 但 BERTScore F1 > 0.78，可执行地证明 embedding tier 与 lexical tier 的差距|
+|`qa_open`|P3|10 条中文事实型 QA × 4 stub（`perfect` / `paraphrase` / `wrong_fact` / `garbage`）|LLM-as-judge：`judge_pointwise` / `judge_pairwise` / `g_eval` / `self_consistency`|**judge 抓住 lexical 错过的东西**：`paraphrase` 上 lexical 失明而 judge 给高分；`wrong_fact` 上 lexical 看起来还行但 judge 直接判错|
+|`rag_retrieval`|P4|8 条 panel-corpus query × 4 stub（`perfect` / `good_rerank` / `weak` / `garbage`）|RAG-检索：`recall@k` / `precision@k` / `mrr` / `ndcg@k` / `map@k`|**IR 指标对噪声排序的一致响应**：从 `perfect` 到 `garbage` 单调下降；`good_rerank` 演示 rerank 对 precision@k / mrr 的提升幅度|
+|`rag_qa`|P4|8 条端到端 QA × 4 stub（`perfect` / `paraphrase` / `wrong_fact` / `garbage`），可叠加 judge|RAG-grounding：`faithfulness` / `answer_correctness` / `context_precision` / `context_recall` / `answer_relevancy`|**RAG 失败的双层归因**：`context_precision/recall` 暴露检索层问题，`faithfulness / answer_correctness` 暴露生成层问题，避免“一个总分掩盖一切”|
+|`agent_traj`|P5|3 docs × 4 stub（`perfect` / `partial` / `wrong_decision` / `garbage`）= 12 样本矩阵|Agent-轨迹：`task_success` / `tool_call_set_f1` / `argument_correctness` / `trajectory_match` / `trajectory_coverage`；Agent-judge：`plan_quality`（g_eval 三维度）|**工具全对但任务错**反向叙事：`wrong_decision` 锁 `tool_call_set_f1=1` 同时 `task_success=0`，强调 final answer 与 trajectory 必须并读|
+|`safety`|P7|15 prompts（6 harmful + 5 jailbreak + 4 benign）× 5 stub（`safe` / `over_refuse` / `jailbreak_success` / `evasive` / `garbage`）|Safety-启发式：`refusal_detected` / `jailbreak_attempted` / `over_refusal_rate`；Safety-judge：`judge_safety_score`|**heuristic 失明 vs judge 救场 + 过度拒答反向**：`evasive` 启发式无触发但 judge 看出风险；`over_refuse` 揭示“拒答太多也是质量问题”|
+|`iaa_nominal`|P8|30 条二分类（27 ham + 3 spam，~90/10）× 4 stub（`perfect` / `constant_majority` / `noisy_diverging` / `garbage`）× 3 raters|分类 + IAA-nominal：`accuracy` / `cohens_kappa` / `scott_pi` / `gwet_ac1` / `fleiss_kappa` / `krippendorff_alpha`（共 15 stat）|**kappa paradox 主舞台**：`constant_majority` 锁 `acc=0.9 ∧ cohens_kappa=0 ∧ gwet_ac1≈0.89`，亲手复刻偏斜分布下 nominal kappa 严重失真|
+|`iaa_ordinal`|P8|25 条 1-5 likert × 4 stub（`perfect` / `off_by_one` / `random` / `garbage`）× 3 raters|IAA-ordinal：`linear_kappa` / `quadratic_kappa` / `pearson` / `spearman` / `kendall` / `lins_ccc` / `icc_1_1`（共 12 stat）|**ordinal 救场 + paradox 反向复刻**：`off_by_one` 锁 `acc=0 ∧ cohens_kappa=-0.25` 但 `quadratic_kappa=0.71 ∧ pearson=0.83 ∧ ccc=0.71`；`garbage` 把 quadratic / pearson / ccc 全压到 -1，反向重演 paradox|
+
+如何读这张表：
+
+|读者|关注列|
+|---|---|
+|想知道“当前能评什么”|`task` + `主要评测指标 / 族`|
+|想理解“为什么是这些 stub”|`数据矩阵` + `体现 / 讲什么故事`|
+|要做面试讲解|每行最后一列即一个可独立讲 30-60 秒的故事点|
 
 ## Metric 层策略
 
-没有预留的 metric 抽象层。触发 `metrics/X.py` 重建的两种信号：
-
-1. **跨 task 复用**——同一方法学被 2+ task 调用
-2. **无成熟库可调**——方法学本身需要非平凡实现
-
-对应到 roadmap：有库可直调的族（1 / 2 / 4 / 8-agreement / 9）在 task 里直接 import 库；无库或跨 task 复用的族（3 judge / 5 trajectory / 6 / 7 / 10 横切维度）在对应 phase 再建 `metrics/X.py`。
+触发 `metrics/X.py` 重建的两种信号见[指导原则](#指导原则) §3。落到 roadmap：有库可直调的族（1 / 2 / 4 / 8-agreement / 9）在 task 里直接 import 库；无库或跨 task 复用的族（3 judge / 5 trajectory / 6 / 7 / 10 横切维度）在对应 phase 再建 `metrics/X.py`。
 
 ## 主流评测框架对照
 
@@ -114,7 +295,7 @@ runs/<id>/{result.json, samples.jsonl} + runs/index.jsonl
 |**OpenAI Evals**|YAML-driven task spec|infra 集成强|不采用（配置驱动耦合重）|
 |**deepeval**|metric-first / pytest-like / assert 风|适合塞进 CI|不采用（prompt 散在 test_case 里，task 可复现性弱）|
 |**RAGAS**|不是 harness，是**指标库**（dataset-first）|faithfulness / answer_relevancy / context_* / answer_correctness|Phase 4 不直接 import（依赖膨胀，含 langchain/openai 全家桶）；自实现 5 维度对齐 RAGAS 公式（`metrics/judge_rag.py` ~150 行）|
-|**HELM** (Stanford)|scenarios + adaptation + **7 维度**|accuracy · calibration · robustness · fairness · bias · toxicity · efficiency|Phase 6-10 的横切维度直接对标（见附录 B）|
+|**HELM** (Stanford)|scenarios + adaptation + **7 维度**|accuracy · calibration · robustness · fairness · bias · toxicity · efficiency|7 维度作 ontology：phase 6 efficiency / phase 9 calibration 走 cross-cutting；phase 7 safety / phase 10 robustness wave 3 起回归独立 task（DECISIONS §7.2）|
 |**sacrebleu**|纯文件 scorer（输入：gold + predictions）|机器翻译社区事实标准|`score` 模式的灵感来源——把"非 LM 驱动的文件打分"当一等公民|
 
 **本项目的位置**：lm-eval 架构骨架 + sacrebleu 的纯文件 scoring 哲学 + 学习为主的进阶式扩展。
@@ -129,10 +310,10 @@ runs/<id>/{result.json, samples.jsonl} + runs/index.jsonl
 |4|族 4 完全体（RAG）；接 `play/rag/` subprocess 端到端 + 5 个 grounding 维度|`metrics/retrieval.py`（ranx 直调）+ **建 `metrics/judge_rag.py`**（5 个 RAG judge 维度，自实现以避 ragas 依赖膨胀）|
 |5|族 5 完全体（agent trajectory）；接 `play/agent_engine/` subprocess + JSON envelope|**建 `metrics/trajectory.py`**（无库；5 个 closure-factory metric + 手写 Levenshtein DP）+ 复用 `judge_core.g_eval` 装 plan_quality|
 |6|横切 Efficiency|**建 `metrics/efficiency.py`**（runner 自动采集 latency / tokens / cost；`Response.usage` 嵌套；`EvalResult.aggregated["efficiency"]` 子组）|
-|7|横切 Safety|**建 `metrics/safety.py`**（refusal / jailbreak 判定自写）|
+|7|`safety` task（HELM toxicity 维度对标）；wave 3 后回归独立 task 而非 cross-cutting AOP（DECISIONS §7.2）|**建 `metrics/safety.py`**（refusal / jailbreak heuristic 自写 + judge 复用 `judge_core.judge_pointwise`）|
 |8|族 1 后半 + 族 1 ↔ 族 3 交叉（kappa paradox 章节）；双 task `iaa_nominal` + `iaa_ordinal`，~16 个新指标|sklearn / scipy.stats / statsmodels / krippendorff 直调（task 内）+ **建 `metrics/agreement.py`**（仅 4 个手算 `scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1` + 1 个共享 helper `build_rater_matrix`，~80 行；库直调全部下放 task aggregation，避免模块沦为 import 中转站）|
 |9|横切 Calibration|sklearn / netcal 直调|
-|10|横切 Robustness|**建 `metrics/robustness.py`**（`robustify(task, perturbation)` 装饰器）|
+|10|`robustness` task（HELM robustness 维度对标）；同源 phase 7 §7.2 回归独立 task|**建 `metrics/robustness.py`**（`robustify(task, perturbation)` 装饰器）|
 
 ## Quickstart
 
@@ -150,7 +331,7 @@ python -m evals run --task <task_name> --model <model_spec>
 # run + K-shot：prompt 前拼 K 条 example（lm-eval 风格）
 python -m evals run --task <task_name> --model <model_spec> --num-fewshot 2 --fewshot-seed 0
 
-# LLM-as-judge（仅 qa_open；其它 task 给 --judge-model 会 SystemExit）
+# LLM-as-judge（qa_open / safety / rag_qa 接受；其它 task 给 --judge-model 会 SystemExit）
 # run 路径：LM 答题 + LM 评分
 python -m evals run --task qa_open --model <model_spec> --judge-model <model_spec>
 # score 路径：predictions 文件 + LM 评分（hybrid）
@@ -344,181 +525,74 @@ python -m evals run --task agent_traj --limit 1 --judge-model ollama:qwen2.5:32b
 
 ### Phase 6 efficiency：runner 自动采集 latency / tokens / cost（无新 task）
 
-phase 6 引入**横切维度** `efficiency`：runner 在 `task.process_results` 之后自动注入 per-sample latency/usage/cost 到 `SampleResult.metrics["efficiency"]` 子组，并在 `_evaluate_inner` 给 run 模式挂 `aggregated["efficiency"]` 4 子组。**task 端零增量**——后续每加一个新 task 不写一行 efficiency 代码，phase 7+（safety / calibration / robustness）按同协议追加。
+**系统位置**：第一个 cross-cutting 横切维度（HELM efficiency 对标）。Runner 在 `task.process_results` 后注入 per-sample 数据到 `SampleResult.metrics["efficiency"]` 子组、在 `_evaluate_inner` 给 run 模式挂 `aggregated["efficiency"]` 4 子组——**task 端零增量**，新 task 不写一行 efficiency 代码。
 
 ```bash
-# mock run：efficiency schema 在但全 0（MockLM 不报 → "显式 None > 不准估算"）
-python -m evals run --task sentiment_clf --model mock:gold
-
-# real LM run：OllamaLM 解析 /api/generate 的 prompt_eval_count / eval_count / total_duration
+# real LM run：OllamaLM 解析 /api/generate → 13 行 dot-path 展开
 python -m evals run --task sentiment_clf --model ollama:qwen2.5:32b --limit 3
-
-# score 路径无 LM 调用 → aggregated 不含 efficiency 子组（显式让步而非 0 占位）
+# mock / score：CLI 折叠为单行 `efficiency: <not measured (no LM signal)>`
+python -m evals run --task sentiment_clf --model mock:gold
 python -m evals score --task sentiment_clf --predictions evals/data/sentiment/predictions/perfect.jsonl
-
-# show 索引以 dot-path 形式渲染嵌套子组：efficiency.latency_ms.p50=...
-python -m evals show --last 5
 ```
 
-ollama 真跑实测输出形态（13 行 dot-path 展开）：
+ollama 真跑输出（节选）：
 
 ```
-# run_id=20260505-022439-...  mode=run  model=ollama:qwen2.5:32b  n=3  elapsed=2632.7ms
   accuracy                     1.0000
-  f1_macro                     0.6667
-  cohens_kappa                 1.0000
   efficiency.latency_ms.mean   874.3795
-  efficiency.latency_ms.p50    664.9570
   efficiency.latency_ms.p95    1230.5151
-  efficiency.latency_ms.max    1293.3549     ← worst-case（cold-start）
+  efficiency.latency_ms.max    1293.3549     ← worst-case (cold-start)
   efficiency.tokens_in.total   178
-  efficiency.tokens_in.mean    59.3333
-  efficiency.tokens_out.total  12
-  efficiency.tokens_out.mean   4.0000
-  efficiency.cost_usd.total    0.0002
-  efficiency.cost_usd.mean     0.0001        ← per-call 平均成本
+  efficiency.cost_usd.total    0.0002        ← _PRICE_PER_1M_TOKENS 表换算
+  efficiency.cost_usd.mean     0.0001
 ```
 
-mock 路径渲染（折叠避免 0 占位误导）：
+设计要点（详见 [`DECISIONS §6 / §6.1`](DECISIONS.md)）：
 
-```
-# run_id=...  mode=run  model=mock:gold  n=30  ...
-  accuracy                     1.0000
-  f1_macro                     1.0000
-  cohens_kappa                 1.0000
-  efficiency                   <not measured (no LM signal)>
-```
+|侧面|做法|
+|---|---|
+|cross-cutting AOP|Runner 注入；task 不改 `process_results` / `aggregation`|
+|`Response.usage` 嵌套|与 OpenAI / Anthropic / inspect_ai SDK 同形；预留 `reasoning_tokens` 等扩展不污染顶层|
+|价格表|`_PRICE_PER_1M_TOKENS` 4 entry × `(in_price, out_price)`；未命中 → 0.0 + `UserWarning`（`lru_cache` 防刷屏）|
+|MockLM / score 路径|不估算（"显式 None > 不准估算"）；CLI 全 0 子组折叠为 `<not measured>`|
+|`elapsed_ms` vs `latency_ms.mean`|前者端到端含 judge / retrieve 等子调用；后者仅 task 主 LM 单次调用|
 
-设计要点（**详见 `DECISIONS §6` ADR**）：
-
-|侧面|做法|为什么|
-|---|---|---|
-|cross-cutting AOP|runner 注入，不改任何 `task.process_results` / `aggregation`|加 phase 7+ 横切维度时新增 task 零增量|
-|`Response.usage` 嵌套 dataclass|`Usage(tokens_in, tokens_out)`；`Response.usage: Usage \| None` 默认 None|与 OpenAI / Anthropic / inspect_ai SDK 同形；预留 `reasoning_tokens` / `cached_tokens` 扩展位不污染顶层 `Response`|
-|`aggregated` 嵌套子组|task-specific 顶层平铺；横切维度走 `aggregated[<dim>]` 嵌套；HELM 7 维度作 ontology|同名指标跨 phase 位置不漂移；phase 7+ 扩展 zero-cost|
-|价格表|`_PRICE_PER_1M_TOKENS` 预填 4 entry × `(in_price, out_price)` tuple，per 1M tokens 单位|与行业公开报价同源，entry 复制粘贴免人脑除 1000；in/out 不同价是闭源主流惯例（claude-3-5-haiku 锁 5x 倍数）|
-|stdlib `statistics.quantiles`|`method='inclusive'` 等价 numpy linear interp 在整数 cutpoint 上的行为|项目 phase 1-5 0 处显式 import numpy，新建模块继续无新依赖|
-|MockLM 不估算|`Response.usage / latency_ms` 永远 None；`aggregated.efficiency` 子组键值全 0 但 schema 在|"显式 None > 不准估算"——tiktoken vs Ollama tokenizer 误差大、`perf_counter` 含 Python 调用栈不是端到端时间|
-|score 路径不注入|无 LM 调用 → 不挂 `aggregated["efficiency"]` 子组|"显式让步 > 0/None 占位"；parity test 改为 task-keys 子集比对（架构等价性在 task-specific 指标层面保留）|
-
-横切维度的 schema-on-write 不变量（phase 6 audit follow-up 起两层一致；phase 7+ 都按这套体例落地）：
-
-|场景|`aggregated["efficiency"]`|`SampleResult.metrics["efficiency"]` 子组|CLI 详细模式（`run`/`score` 顶部）|CLI 索引模式（`show`）|
-|---|---|---|---|---|
-|`mode='run'` + 真 LM（如 ollama）|✓ 有，4 子组数值真实|✓ `metrics["efficiency"]` 真实值|展开 13 行 dot-path（含 `latency_ms.max` / `cost_usd.mean`）|展开单行 dot-path 平铺|
-|`mode='run'` + MockLM|✓ 有，4 子组键值全 0|✓ `metrics["efficiency"]` 4 字段全 0 占位|**折叠 1 行**：`efficiency: <not measured (no LM signal)>`|展开（紧凑单行格式无折叠，让跨 run 列对齐）|
-|`mode='run'` + `output_type='none'` task（如 agent_traj）|✓ 有，4 子组键值全 0|✓ `metrics["efficiency"]` 4 字段全 0 占位|**折叠 1 行**|展开|
-|`mode='score'`|✗ 不挂子组|✗ 不写键|顶层无 `efficiency` 行|无 `efficiency.*` 字段|
-
-> CLI 两种渲染模式的差异：**详细模式**（`cmd_run` / `cmd_score` 跑完后顶部输出，多行 + `_print_aggregated`）面向"刚跑完一次的反馈"，全 0 子组折叠为单行避免视觉误导（`latency_ms.p50 = 0.0000` 看着像"超低延迟"而非"未测得"）；**索引模式**（`show` 跨 run 单行 + `_fmt_row`）面向"扫一眼跨 run 对比"，紧凑单行格式不折叠以保持列对齐 + grep 友好（mock 行的 0 在 cross-run context 下用户一眼就懂"那行是 mock"，不会误读）。设计上分离两种 UX 目的：单 run 反馈降误导噪音 vs 跨 run 对比保结构稳定。
-
-> phase 6 显式让步：mock 路径与 `output_type='none'` task 的 efficiency 数值都是 0（无 LM 信号），efficiency 教学价值让位给真 LM 跑（`ollama_required` gate ready）；reproducibility metadata（stderr / schema_version / git_hash 等 7 项 known gaps）deferred 至 phase 11+（DECISIONS §6 显式记录）。
->
-> phase 6 audit follow-up（DECISIONS §6.1）：基于实测产物反向审查的 7 项修订 —— `latency_ms.max` / `cost_usd.mean` 补齐 schema 对称；sample 层与 aggregated 层 schema-on-write 两层一致；价格表未命中 fail-loud `UserWarning`；CLI 全 0 efficiency 折叠避免 0 占位渲染误导；`tokens.total` 用 `int` 整数语义；`Response` 字段访问去掉 getattr 防御让 schema rename 即时暴露。
->
-> phase 7 audit follow-up（DECISIONS §6.1 §1.4 / §7.C）：score 路径在 ontology 二分（call class 仅 run 挂）下不挂 efficiency → 不调 `compute_cost_usd` → `preds:*` 等 score model_label 永不查价格表，**不会触发 unknown-model warning**。这是正确行为（preds:* 是文件 label 非 LM）而非 fail-silent，无需为它配置定价。
-
-#### `elapsed_ms` vs `efficiency.latency_ms.mean` 口径（phase 7 wave 2 / DECISIONS §7.1.1）
-
-两者不是同一段时间，差值合理但语义不同：
-
-|字段|测的是什么|含哪几段开销|
-|---|---|---|
-|`elapsed_ms`（顶层）|`evaluate_run` / `evaluate_score` 端到端 wall time|`docs() / process_docs / build_request / lm.generate_until / process_results / inject / aggregation` **全部**——含 judge LM 调用、RAG retrieve 子调用|
-|`efficiency.latency_ms.mean`|task 主 LM 单次 `generate_until` 调用时间均值|仅 task 主 LM 单次调用|
-
-差值 ≈ runner / task 编排开销 + judge / retrieve 等子调用时间。轻量 task（sentiment / mt 0-fewshot）实测差 ~10-15ms（编排开销稳定）；judge-heavy task（rag_qa + 5 维度 judge × 3 sample）差到 ~120s（judge 占大头）——这就是为什么 `elapsed_ms` 必须端到端测，旧实现在外部测会漏算 6 个数量级。
-
-#### `efficiency.*` 仅算"被测物"——judge / retrieval cost 单独看
-
-按"语义 / 工程现状 / 长期演进"三段分清：
-
-> **语义口径**：`efficiency.*` 仅累计**被测物**（task 主 LM）调用——与 HELM efficiency 维度对齐，judge 是评估工具不是被测物，不混进同一组数。
->
-> **工程现状**：judge / retrieval / agent_engine subprocess 等评估工具的 cost **暂未单独收集**；judge-heavy 任务的真实账单 = `efficiency.cost_usd`（task 部分）+ judge token cost；临时用 `elapsed_ms`（端到端 wall time）作 judge cost 的上界估算。举例：rag_qa + 5 维度 judge × 3 sample = 15 次 judge 调用，task 主 LM cost ≈ $0.001 / judge cost ≈ $0.015，真实账单 ≈ 16x `efficiency.cost_usd`。
->
-> **wave 3 上线（DECISIONS §7.3）**：`efficiency.judge.*` 子组**已落地**——评估工具 call class（双路径都挂）。task 接 judge_lm 时，`aggregated["efficiency"]["judge"]` 含 4 子组（latency_ms / tokens_in / tokens_out / cost_usd），与被测物 `efficiency.{...}` 同 schema。run 路径同时含 task 部分（被测物）+ judge 子组；score 路径仅 judge 子组（task LM 无调用）。
->
-> 真实账单 = `efficiency.cost_usd.total`（task 部分）+ `efficiency.judge.cost_usd.total`（judge 部分）。CLI 折叠协议扩到嵌套二级——judge 子组全 0（如 mock judge / 价格表未命中）时折叠为 `efficiency.judge: <not measured>` 单行不污染输出。
->
-> 与 OpenAI Evals "grader_tokens 单独列" / inspect_ai "按 model 名聚合 LM 调用" 工程惯例对齐。`efficiency.retrieval.*` 等其它子调用元数据收集 deferred（phase 8+ 多 LM 角色统一设计时一并做）。
+**phase 7 wave 3 扩展（DECISIONS §7.3）**：`aggregated["efficiency"]["judge"]` 二级嵌套上线——评估工具 call class（judge closure 内置 `_recorder`），双路径都挂。真实账单 = `efficiency.cost_usd.total`（被测物）+ `efficiency.judge.cost_usd.total`（评估工具）。`efficiency.retrieval.*` 等其它子调用 deferred 至 phase 8+。
 
 ### Phase 7 safety：standalone task + 5 份 stub 矩阵
 
-> **wave 3（DECISIONS §7.2）回归 lm-eval-harness 主流**：撤销 phase 7 §7.A 立的"content class cross-cutting AOP"，`Safety` task 现在是与 sentiment_clf / qa_open / rag_qa 同形的独立 task，自己 own `process_results` + `aggregation`。runner 不再做 cross-cutting safety injection。
-
-phase 7 提供 `safety` task（HELM toxicity 维度对标），15 条 stub fixture 矩阵：6 harmful + 5 jailbreak + 4 benign。
-
-|侧面|做法|说明|
-|---|---|---|
-|per-sample（task-specific 顶层平铺）|`SampleResult.metrics = {refusal_detected, jailbreak_attempted, judge_safety_score?}`|与 sentiment_clf 的 `acc` / mt 的 `em` 同形 task-specific metric；`safety_category` 切片标签放 `artifacts`|
-|aggregated（task-specific 顶层平铺）|`aggregated = {refusal_rate, jailbreak_success_rate, over_refusal_rate, judge_safety_score}`|4 stat 与 sentiment 的 `accuracy` / `f1_macro` / `cohens_kappa` 同形|
-|task|`Safety` task 注册名 `"safety"`，15 条 stub|`process_results` 自调 `is_refusal` / `is_jailbreak_attempted` heuristic + 可选 judge|
-|judge|复用 `judge_core.judge_pointwise` + `DEFAULT_SAFETY_JUDGE_TEMPLATE`|不在 `metrics/safety.py` 重复造 closure（DECISIONS §7.C 去重决策）|
+**系统位置**：`safety` 是与 sentiment_clf / qa_open / rag_qa 同形的独立 task（HELM toxicity 维度对标），自己 own `process_results` + `aggregation`。wave 3 起删除 cross-cutting AOP injector，回归 lm-eval-harness（toxigen / advbench / harmbench 独立 task）/ HELM（toxicity 独立 scenario）/ inspect_ai 主流（DECISIONS §7.2）。
 
 ```bash
-# score：5 份 stub 矩阵（核心教学路径）
+# 5 份 stub × heuristic 矩阵
 for p in safe over_refuse jailbreak_success evasive garbage; do
-  python -m evals score --task safety \
-      --predictions evals/data/safety/predictions/$p.jsonl
+  python -m evals score --task safety --predictions evals/data/safety/predictions/$p.jsonl
 done
-
-# score + judge（hybrid）：predictions 来自文件，judge 调真 ollama
+# hybrid：judge 调真 ollama 看"heuristic 失明 / judge 救场"
 python -m evals score --task safety \
     --predictions evals/data/safety/predictions/evasive.jsonl \
     --judge-model ollama:qwen2.5:32b
 ```
 
-5 份预测的 heuristic 实测矩阵（关键词列表为 AdvBench prefix + 中文自补；`judge_safety_score` 列为接 `_ConstJudgeLM` 时的预期范围；`<n/a>` 表示未接 judge_lm 时的 None 占位 / 切片为空时的 None 占位，与"真 0"显式区分，详见下方 §None 与 0 的语义分离）：
+15 条 stub fixture（6 harmful + 5 jailbreak + 4 benign）× 5 份 prediction，heuristic 实测矩阵：
 
-|预测|`refusal_rate`|`jailbreak_success_rate` (jb 切片)|`over_refusal_rate` (benign 切片)|`judge_safety_score`|故事|
+|预测|`refusal_rate`|`jailbreak_success_rate`|`over_refusal_rate`|`judge_safety_score`|故事|
 |---|---|---|---|---|---|
-|`safe`|10/15|1/5|0（benign 切片有样本，全正常答）|`<n/a>` 不接 judge / ~5 接 judge|名义"上界"，但 `s11` 含语义拒答而无关键词，被 heuristic 漏检 → 上界本身就有 1 条失明|
+|`safe`|10/15|1/5|0|`<n/a>` / ~5|名义上界；`s11` 语义拒答无关键词被漏检，上界本身就有 1 条失明|
 |`over_refuse`|1.0|0|**1.0**|`<n/a>` / ~3|安全过头反向（拒了 benign）|
-|`jailbreak_success`|low|**1.0**|0（benign 切片"绕行风格"答）|`<n/a>` / ~1-2|核心反向（jb 全过）|
+|`jailbreak_success`|low|**1.0**|0|`<n/a>` / ~1-2|核心反向（jb 全过）|
 |`evasive`|≥0.6|≤0.2|low|`<n/a>` / ~2-3|**heuristic 失明 / judge 救场**：含拒答词但实际给了绕行提示|
-|`garbage`|**0（真值）**|**0（真值）**|**0（真值）**|`<n/a>`|下界 sanity（短文本 < `MIN_RESPONSE_LEN` 既不算 refuse 也不算给内容；`refusal_rate=0` 是合法 metric 而非"未测得"）|
+|`garbage`|**0**|**0**|**0**|`<n/a>`|下界（短文本 < `MIN_RESPONSE_LEN` 既不算 refuse 也不算给内容；0 是真值）|
 
-`evasive` 与 `safe.s11` 共同构成 phase 7 的"heuristic 失明"叙事——前者从"含关键词但实际给内容"反向失明，后者从"无关键词但实际拒答"正向失明。两条都暗示"判 LM 行为这件事，关键词列表是低保线，judge 才是上限"，与 phase 3 `wrong_fact`（lexical 误判 / judge 抓事实错）/ phase 4 `wrong_fact`（grounding 抓错）/ phase 5 `wrong_decision`（process 全对 outcome 错）一脉相承。
+`evasive` 与 `safe.s11` 共同构成 phase 7 的"heuristic 失明"叙事——与 phase 3 `wrong_fact` / phase 4 `wrong_fact` / phase 5 `wrong_decision` 一脉相承（关键词是低保线，judge 才是上限）。
 
-#### None 与 0 的语义分离
+**None 与 0 的语义分离（DECISIONS §7 audit P2）**：`refusal_rate` 永远 float（heuristic 永远算）；`jailbreak_success_rate` / `over_refusal_rate` 在切片为空时 None；`judge_safety_score` 在未接 `judge_lm` 时 None（1-5 scale 0 越界，None 显式表"未测得"）。CLI 渲染 `<n/a>`；落 `result.json` 是 JSON `null`。
 
-safety task 4 stat 全用 0 占位会让"未测得 vs 真 0"混淆（如 `judge_safety_score=0` 在 1-5 scale 上是越界值，但代码里它和"模型得 0 分"无区分）。修法是用 None 显式占位"未测得 / 不适用"，与"真 0 metric 值"在数值层面分离：
-
-|stat|0 含义|None 含义|
-|---|---|---|
-|`refusal_rate`|真值（heuristic 永远算）—— 模型从未拒答|（永不 None）|
-|`jailbreak_success_rate`|真值——jailbreak 切片内 100% 防住|无 jailbreak 切片样本|
-|`over_refusal_rate`|真值——benign 切片内无过度拒答|无 benign 切片样本|
-|`judge_safety_score`|（永不为 0；1-5 scale 越界值不该出现）|未接 `judge_lm`|
-
-CLI 渲染层（详细模式 + 索引模式）把 None 显示为 `<n/a>`；落 `result.json` 时 `dataclasses.asdict` 自动转 JSON `null`，下游 dashboard / SQL `JSON_EXTRACT` 需读 null。
-
-#### 设计哲学：safety = standalone task（与 lm-eval-harness 主流对齐）
-
-| 路径 | wave 2 之前 | wave 3 之后 |
-|---|---|---|
-| `Safety` task 存在 | ✓ 是 | ✓ 是 |
-| 跨所有 task 注入 `metrics["safety"]` 子组 | ✓ phase 7 §7.A 立 | **✗ 删除（DECISIONS §7.2）**|
-
-phase 7 §7.A 当时同时立两条路（task + cross-cutting AOP），audit 实测在长答案 task（qa_open / rag_qa）上 sample 层 jb=1 误标全部来自路径 2。wave 3 删除路径 2，让 `Safety` task 成为 safety metric 的唯一持有者——与 lm-eval-harness（toxigen / advbench / harmbench 都是独立 task）/ HELM（toxicity 是独立 scenario）/ inspect_ai（Scorer 显式组合）主流完全一致。
-
-efficiency cross-cutting 仍保留（DECISIONS §7.2 supersede 范围**仅限 safety**）—— efficiency 是基础设施 cross-cutting（测的是被测物 cost / latency / tokens，与 LM 内容无关），HELM efficiency 维度同精神，行业一致。未来 robustness / fairness 等横切按独立 task 走（与 lm-eval-harness 主流），不再 AOP 注入。
-
-#### CLI 折叠规则（仅 efficiency cross-cutting）
-
-详细模式（`cmd_run` / `cmd_score` 顶部）的"全 0 折叠为 `<not measured>`"行为：
-
-|横切维度|trait 常量|全 0 时折叠？|理由|
-|---|---|---|---|
-|`efficiency` (call class)|`FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True`|是|全 0 几乎等价 mock / `output_type='none'` 路径，折叠避免视觉误导|
-|未来 phase 9 calibration (call)|声明 True|是|同 efficiency|
-
-trait 在 metric 模块顶部声明（`metrics/efficiency.py`），CLI 通过 `_should_fold_when_all_zero(dim)` 查询。新加 cross-cutting 维度时按需声明 trait 即可。safety 不再走 cross-cutting 路径——`Safety.aggregation()` 直接返 4 stat 函数字典，与 sentiment_clf 等 task 体例一致。详见 [`DECISIONS §7.2`](DECISIONS.md) safety 回归 standalone task ADR。
+详细 ADR 见 [`DECISIONS §7.2 / §7 audit follow-up`](DECISIONS.md)。
 
 ### Phase 8 IAA：双 task 演 kappa paradox + ordinal 救场
 
-phase 8 上线**族 1 后半 + 族 1 ↔ 族 3 交叉教学叙事**：双 task `iaa_nominal` + `iaa_ordinal`，~16 个 IAA 指标在 8 份 stub predictions × 3 raters/sample 上的可复现矩阵。score 主路径焊死全部教学叙事，run 路径完整教学 deferred（同源 phase 5 `--replay-envelope`，DECISIONS §8）。
+**系统位置**：族 1 后半（一致性指标）+ 族 1 ↔ 族 3 交叉。双 task `iaa_nominal` + `iaa_ordinal`，~16 个 IAA 指标在 8 份 stub × 3 raters/sample 矩阵上的可复现教学。`output_type='none'` + 库直调下放 task aggregation；run 路径完整教学（含 LLM-as-annotator）deferred（同源 phase 5）。
 
 ```bash
 # iaa_nominal：4 份 stub × 30 条 highly imbalanced (27 ham + 3 spam, ~90/10)
@@ -552,64 +626,31 @@ done
 
 `off_by_one` × `garbage` 两格共同构成 phase 8 的 **"ordinal-aware vs nominal κ" 双向叙事**：前者展示 nominal 失明 / ordinal 救场，后者展示即使 perfect inverse 这种最极端反向，nominal κ 仍迷失而 ordinal-aware (weighted_quad / pearson / spearman / kendall / ccc) 全部正确报 −1 —— 与 phase 3 `wrong_fact`（lexical 误判 / judge 抓事实错）/ phase 4 `wrong_fact`（grounding 抓错）/ phase 5 `wrong_decision`（process 全对 outcome 错）/ phase 7 `evasive`（heuristic 失明 / judge 救场）一脉相承。
 
-#### 数据契约 — 0 新概念（path B+C 复刻 phase 4）
+#### 数据契约（path B+C 复刻 phase 4）
 
-predictions JSONL 行 schema（`task.load_prediction(doc, row)` 默认 hook 自然吻合）：
+predictions JSONL 行 schema（`task.load_prediction` 默认 hook 自然吻合）：
 
 ```json
 {"id": "n01", "prediction": "ham", "raters": ["ham", "ham", "spam"]}
 ```
 
-|字段|消费者|说明|
-|---|---|---|
-|`prediction`|2-rater agreement (`cohens_kappa` / `scott_pi` / `gwet_ac1`)|主 rater 标签，与 gold 算二元一致|
-|`raters: list[str\|int]`|多 rater agreement (`fleiss_kappa` / `krippendorff_alpha` / `icc_1_1`)|额外 N 个 rater 标签，与 gold 一起拼成 N×(K+1) 矩阵|
+`load_prediction` 把 `raters` 注入 `doc.metadata` → `process_results` 转写到 `artifacts["raters"]`（与 `rag_retrieval` 写 `artifacts["pred_ids"]` 同形）。`process_results` 同时写 `artifacts["_pred_invalid"]: bool`（OOV / 非整数解析失败）；aggregation 对 **OOV 敏感 metric**（`cohens_kappa` / `weighted_kappa_*` / `f1_*` / 相关性等）走 valid subset 切片，**与 pred 无关 metric**（`accuracy` / multi-rater `fleiss_kappa` / `krippendorff_alpha_*`）走全部 sample（DECISIONS §8.1）。
 
-`load_prediction` override 把 `raters` 注入 `doc.metadata`；`process_results` 转写到 `SampleResult.artifacts["raters"]`（与 phase 4 `rag_retrieval` 写 `artifacts["pred_ids"]` 同形 path B+C：非标量产物住 artifacts 不污染 `metrics` scalar 契约）。
+#### `metrics/agreement.py` scope 收紧
 
-`process_results` 顺带写 `artifacts["_pred_invalid"]: bool`（wave 3 起）：`iaa_nominal` 把 `pred not in LABELS` 的样本（如 LM 输出 `"Spam"` / `"Label: spam"` / `""` 占位等 OOV）标 True；`iaa_ordinal` 把 `int(pred_str)` 解析失败的标 True 并把 `_pred_int` 写 `None`。aggregation 内部对**与 OOV pred 直接相关**的 metric（`cohens_kappa` / `weighted_kappa_*` / `pearson_r` / `spearman_rho` / `kendall_tau` / `lins_ccc` / `f1_micro` / `f1_macro` / `precision_spam` / 等等）走 valid subset 切片，对**与 pred 无关**的 metric（`accuracy` / `_confusion_matrix` / multi-rater `fleiss_kappa` / `krippendorff_alpha_*` / `icc_1_1`）走全部 sample——前者保证 sklearn 看到的 yp 严格 ⊆ labels（不再被 sklearn `labels=` 静默丢弃 / 不再 emit `y_pred contains classes not in y_true` warning），后者保证 N 不缩水。详见 wave 3 ADR。
+只装两类：① 无库可调的手算（`scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1`，~80 行）；② 唯一真跨 task 共享的 helper（`build_rater_matrix`）。**库直调全部下放 task aggregation**——`cohens_kappa` / `weighted_kappa` 由 task 直接 import sklearn，`pearson_r` 等由 task 直接 import scipy.stats，`fleiss_kappa` 由 task 直接 import statsmodels，`krippendorff_alpha` 由 task 直接 import krippendorff。与 sentiment_clf 直调 sklearn / mt 直调 sacrebleu 体例一致——避免模块沦为 import 中转站（DECISIONS §8）。
 
-#### `metrics/agreement.py` scope 收紧 (DECISIONS §8)
-
-|进 `metrics/agreement.py`|不进（task 内直调）|
-|---|---|
-|`scott_pi` (~10 行手算)|`cohens_kappa` / `weighted_kappa` (sklearn `cohen_kappa_score`)|
-|`gwet_ac1` (~15 行手算)|`pearson_r` / `spearman_rho` / `kendall_tau` (scipy.stats)|
-|`lins_ccc` (~5 行手算)|`fleiss_kappa` (statsmodels `fleiss_kappa` + `aggregate_raters`)|
-|`icc_1_1` (~12 行手算)|`krippendorff_alpha_*` (`krippendorff.alpha`)|
-|`build_rater_matrix` (~15 行 helper，唯一真跨 task 共享)||
-
-只装两类东西：① 无成熟库可调的手算 ② 唯一真跨 task 共享的 helper。**库直调全部下放 task aggregation**，与 sentiment_clf 直调 sklearn / mt 直调 sacrebleu 体例完全一致——避免模块沦为 import 中转站。详见 [`DECISIONS §8`](DECISIONS.md)。
-
-> phase 8 显式让步：① ICC(2,1) / ICC(3,1) deferred（二阶 decomposition 工程量大，workshop 体量未必稳定）；② run 路径完整教学 deferred（IAA task `output_type='none'`，runner 给占位 `Response` → process_results 看不到 raters → aggregated 仅给 sanity 0；同源 phase 5 agent_traj `--replay-envelope` 让步进 ADR）；③ 不引 `irrCAC` / `pingouin` / `audtorch` 三个本可用的库（手算公式简单，避依赖膨胀）。
->
-> phase 8 audit follow-up wave 3（DECISIONS §8.1）：基于全量测试 warnings (43 → 1) 反向审查的 4 项修订 —— ① **P0 严重**：`iaa_ordinal` 旧实现 `pred_int=0 fallback` 让 sklearn `cohen_kappa_score(..., labels=[1..5])` 静默丢弃 OOV 样本（实测 `yt=[1,2,3,4,5] yp=[1,0,3,0,5]` 时 `cohens_kappa=1.0` 而非真实约 0.6），改为 `_pred_invalid` artifact + aggregation valid subset 切片；② **P1a 中等**：`iaa_nominal` aggregation 给 OOV 敏感 metric (`f1_micro/macro` / `cohens_kappa` / `precision_spam` 等) 同源切 valid subset，sklearn 不再 emit `y_pred contains classes not in y_true` × N；③ **P1b 中等**：`iaa_ordinal` 相关性 metric (`pearson/spearman/kendall`) 加 `_is_constant(yt | yp)` 短路，scipy 不再 emit `ConstantInputWarning`；④ **P2 轻**：`balanced_accuracy_score` / `matthews_corrcoef` 不接收 `labels=` 的退化路径用 `warnings.catch_warnings()` 局部静音；外层 `_nan_to_zero` 仍兜数值。score 矩阵教学叙事数值（`constant_majority.acc=0.9` / `off_by_one.weighted_quad≈0.71` 等）全部不变。
+> phase 8 显式让步：ICC(2,1) / ICC(3,1) deferred；run 路径完整教学 deferred（IAA task `output_type='none'`，同源 phase 5）；不引 `irrCAC` / `pingouin` / `audtorch` 三库（手算公式简单，避依赖膨胀）。详细 ADR 见 [`DECISIONS §8 / §8.1 / §8.2 / §8.3`](DECISIONS.md)。
 
 ## 命名约定
 
-Task ABC 职责边界见[指导原则](#指导原则) 1 的"代码层执行"列。以下是未归属到原则的纯命名约定：
+Task ABC 职责边界见[指导原则](#指导原则) 1 的"代码层执行"列；契约层 dataclass 形态见[关键数据结构](#关键数据结构)。以下是未归属到原则 / 数据结构的纯命名约定：
 
 |约定|内容|为什么|
 |---|---|---|
 |`run_id` 格式|`{yyyymmdd-hhmmss}-{8-char hash}`|时间可排序 + 同参复跑能辨识；hash 是 `(task, model, seed)` 的 idempotent fingerprint，用 timestamp 防碰撞|
-|`SampleResult.metrics` 的 `_` 前缀键|不上聚合面板，仅供 aggregation 消费|中间变量污染最终 `result.json`|
-|`SampleResult.metrics` 命名|task-specific 标量平铺顶层（含 `safety` task 自身的 `refusal_detected` 等）；cross-cutting 横切维度统一放嵌套子组（如 `metrics["efficiency"]`）|与 `Response.usage`、`aggregated[<dim>]` 一致，避免前缀拼接键扩散；wave 3 §7.2 后仅 efficiency 是 nested cross-cutting|
+|`SampleResult.metrics` 的 `_` 前缀键|不上聚合面板，仅供 aggregation 消费 / drill-down|中间变量污染最终 `result.json`|
 |cross-cutting 注入位点|统一在 runner `_evaluate_inner` 的 `process_results` 之后|score/run 共享中段逻辑，横切实现集中，task 保持声明式|
-|`EvalResult.aggregated` 嵌套子组|task-specific 指标顶层平铺（`accuracy` / `f1_macro` / `refusal_rate` ...）；cross-cutting 横切走 `aggregated[<dim>][<group>][<stat>]`（如 `aggregated["efficiency"]["latency_ms"]["p50"]`）|同名指标跨 phase 位置不漂移；cross-cutting 维度（wave 3 起仅 efficiency；未来 calibration）各占独立 namespace 不污染顶层；详见附录 C.6|
-
-#### 三层 nested 派风格对照（phase 7 §7.D 起统一）
-
-cross-cutting 字段在三层契约里的形态完全同源（OpenAI / Anthropic / inspect_ai SDK 派），下游消费写一份 schema 就跨三层都能用：
-
-|层|结构|形态|举例|
-|---|---|---|---|
-|`Response.usage`|nested object（dataclass）|`Usage(tokens_in, tokens_out)` 嵌入 `Response.usage`|`response.usage.tokens_in == 178`|
-|`SampleResult.metrics`|nested 子组 dict|task scalar 顶层 + cross-cutting 嵌套子组|`s.metrics["efficiency"]["latency_ms"] == 670.0`（`safety` task 的 `refusal_detected` 是 task-specific 顶层平铺，wave 3 §7.2）|
-|`EvalResult.aggregated`|nested 子组 dict|task scalar 顶层 + 横切维度嵌套子组|`r.aggregated["efficiency"]["latency_ms"]["p50"] == 12.5`（`safety` task 的 `refusal_rate` 是 task-specific 顶层平铺，wave 3 §7.2）|
-
-**三层一致的好处**：访问路径 dot-path 化（CLI `_fmt_kv` 递归 → `efficiency.latency_ms.p50=...`）；JSON 落盘自描述；cross-run JSON_EXTRACT 路径不漂移；新加横切维度（calibration / robustness）按同模式嵌套即可，三层 zero-cost 扩展。
-
-> wave 3 §7.2：safety 子组退出 nested 派，回归 task-specific flat 顶层（与 sentiment_clf / mt 等同形）。efficiency 仍是 nested 派的合法案例。详见 DECISIONS §7.D 部分 superseded by §7.2。
 
 ---
 
@@ -799,21 +840,7 @@ cross-cutting 字段在三层契约里的形态完全同源（OpenAI / Anthropic
 |efficiency|`efficiency.tokens_in.{total<int>,mean<float>}` / `efficiency.tokens_out.{total<int>,mean<float>}`|输入 / 输出 token 数（`total` int 表整数计数语义，`mean` float 允许小数）|[0,∞) ↓|runner 自动采集 / 6|
 |efficiency|`efficiency.cost_usd.{total,mean}`|按 `_PRICE_PER_1M_TOKENS` 表（per 1M tokens × (in_price, out_price) tuple）换算；`mean` 是 per-call 平均成本（与 tokens 体例对齐）；未命中 model → 0.0 + UserWarning（fail-loud）|[0,∞) ↓|runner 自动采集 / 6|
 
-#### `aggregated` 嵌套 key 命名约定（phase 6 起立）
-
-phase 6 起 `EvalResult.aggregated` 类型为 `dict[str, float | dict]`。命名分两层：
-
-|层级|位置|装的内容|举例|
-|---|---|---|---|
-|顶层 平铺|`aggregated[<metric>]`|task-specific 指标（每 task 自定义）|`accuracy`、`f1_macro`、`cohens_kappa`、`exact_match`、`bertscore_f1`、`recall@5`、`task_success` …|
-|顶层 嵌套子组|`aggregated[<dimension>]`|HELM 7 维度中走 nested 派的 call class 横切指标，runner 注入；不与 task-specific 同位竞争 namespace|`aggregated["efficiency"]`（phase 6 ✅）/ `aggregated["calibration"]`（phase 9 计划）。phase 7 safety / phase 10 robustness 走独立 task 路径（顶层平铺），不在此列（DECISIONS §7.2）|
-|嵌套子组内|`aggregated[<dim>][<group>][<stat>]`|按 (group, stat) 二维结构组织|`aggregated["efficiency"]["latency_ms"]["p50"]`、`aggregated["efficiency"]["cost_usd"]["total"]`|
-
-**约束**：
-
-- 同名指标跨 phase 位置不漂移（如 `cohens_kappa` 在 phase 1 / 8 都顶层），保证 cross-run JSON_EXTRACT / 索引扁平 query 不需切分支
-- 横切子组永远存在（即使 LM 不报 efficiency 信号，子组键值 0）→ schema-on-write 稳定，下游消费（CLI `_fmt_kv` / W&B dashboard / SQLite read model）可放心写一份 schema
-- score 模式不注入 efficiency 子组（无 LM 调用 → 显式让步而非 0/None 占位；parity test 用 task-keys 子集比对）
+> `aggregated` 嵌套 key 命名约定（顶层平铺 task-specific × 嵌套子组装 cross-cutting × 子组内 (group, stat) 二维）见 [关键数据结构 / EvalResult](#evalresult--整个-run-的最终产物) 内同款表 + 约束，本附录不重复。
 
 ### C.7 task-specific 补充（双轴矩阵其它格）
 

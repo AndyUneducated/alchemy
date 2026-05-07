@@ -2,15 +2,23 @@
 
 声明式 pipeline runner——按 yaml 顺序串接**确定性 stage**（Python 函数）与 **agent stage**（调用 [play/agent_engine/](../agent_engine/) 的 `Engine.invoke()`）。workflow 自身**不内嵌 LLM 逻辑**；agent stage 通过 `executors/agent.py` 是它**唯一**的 LLM 耦合点（plan §2 关键边界）。
 
-## 核心约束（plan §9 显式不做项）
+## 边界（plan §9 / §12 显式不做项）
 
-- **无 retry / timeout / circuit-breaker**：hook 自己用 `tenacity` / `signal`
-- **无 DAG / 条件 / 循环 / 并行**：stages 是线性列表
-- **无 cron / 调度 / 持久化 / resume**：runner 是 one-shot
-- **无变量过滤器 / 表达式**：模板只接受 `{{ x.y.z }}` 路径访问，数据转换写进 hook 函数（参考 kitchen_sink 的 `to_yaml` stage）
-- **trace_id 不实现**：保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（plan §9.1）
+> **有意为之**——本 play 不超过 ~350 行；要 retry / UI / durability 等成熟能力，直接迁 Prefect / Temporal / Argo（plan §9 论证迁移成本仅 ~3~4h）。
 
-> 这套边界是**有意为之**——本 play 不超过 ~350 行；要 retry/UI/durability 等成熟能力，直接迁 Prefect / Temporal / Argo（plan §9 已论证迁移成本仅 ~3~4h）。
+|维度|不做什么|替代办法|
+|---|---|---|
+|可靠性|retry / timeout / circuit-breaker|hook 自己用 `tenacity` / `signal`|
+|流控|DAG / 条件 / 循环 / 并行|stages 是线性列表；分支需求拆 hook 或多份 yaml|
+|生命周期|cron / 调度 / 持久化 / resume|runner 是 one-shot；调度交给外层（cron / GitHub Actions）|
+|模板|过滤器 / 表达式 / inline Python (`code:` 块)|`{{ x.y.z }}` 路径访问；数据转换写 hook（参考 kitchen_sink 的 `to_yaml` stage）|
+|插件|stdlib / 自动注册装饰器|显式 `import`，调试可见；只有 1 个真消费者前 YAGNI|
+|CLI|多子命令 (`validate` / `list` / `inspect`)|只 `run`，避免 scope creep|
+|trace_id|不实现|保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（plan §9.1）|
+
+报错哲学（plan §12）：必填字段缺失 → `sys.exit("Error: ...")`，**不**给"你大概想用 X"提示；引用不存在的 stage / 错误类型 → 模板插值期 `KeyError`，让 traceback 直说；runtime 错误（hook raise / scenario 装配失败）→ 直接传上去，不二次包装；没有"老用户引导"，没有"schema migration"。
+
+新需求出现时：先看是否能由 hook 函数内部解决（用 `tenacity` 包重试、用 `subprocess` 包外部调用、用 `Path.read_text()` 读文件…），再考虑改 workflow 库本身。
 
 ## 公开 API
 
@@ -58,7 +66,7 @@ play/workflow/
 │   └── chat.yaml                                     纯 agent 单 stage
 ├── __init__.py           导出 Workflow
 ├── __main__.py           python -m workflow
-├── DECISIONS.md          ADR 归档（每条架构决策一个条目，含 Status / Date / 取舍）
+├── DECISIONS.md          ADR 归档（每条架构决策一个条目，仿 evals 风格：Date / Context / Options / Decision / Consequences / 示例 / 面试官可能问）
 ├── JOURNAL.md            每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
 └── README.md             本文件
 ```
@@ -79,18 +87,3 @@ flowchart LR
     agt -->|"Result.artifact"| state
 ```
 
-## 校验与报错哲学（plan §12）
-
-- 必填字段缺失：`sys.exit("Error: ...")`，**不**给"你大概想用 X"提示
-- 引用不存在的 stage / 错误类型 → 模板插值期 `KeyError`，让 traceback 直说
-- runtime 错误（hook raise / scenario 装配失败）→ 直接传上去，不二次包装
-- 没有"老用户引导"，没有"schema migration"
-
-## 不做的扩展边界
-
-- ❌ inline Python in YAML（`code: |` 块）—— YAML 嵌 Python 是反模式
-- ❌ workflow stdlib（`workflow/stdlib/to_yaml`）—— 只有 1 个真消费者，YAGNI
-- ❌ 自动注册装饰器 / 插件机制 —— 显式 import，调试可见
-- ❌ 多 CLI 子命令 —— 只 `run`，避免 scope creep
-
-新需求出现时：先看是否能由 hook 函数内部解决（用 `tenacity` 包重试、用 `subprocess` 包外部调用、用 `Path.read_text()` 读文件…），再考虑改 workflow 库本身。

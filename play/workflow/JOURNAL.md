@@ -1,27 +1,51 @@
 # Journal
 
-按里程碑记录每日进展。每条以 `## YYYY-MM-DD — 里程碑标题` 开头；同一自然日 ≤2 个里程碑。**功能** / **技术** 两段必填；**取舍** 仅在当日产出影响后续的取舍时记一笔，指向 [`DECISIONS.md`](DECISIONS.md) 完整条目而不在此重复。
+> 日期以实际 commit 历史为准。每个里程碑围绕 1 段 100-300 字的“为什么这么做、对未来意味着什么”叙事展开，配框架变更表、必要时的 mermaid 图、以及当期新增/改动的模块、CLI、示例。
 
 ## 2026-04-26 — MVP runner：声明式 deterministic + agent stage pipeline
 
-### 功能
+这个阶段的里程碑是给 `play/agent_engine` 套上一层最简的“可声明编排”。`Workflow.from_yaml` / `Workflow.run` 一共 ~420 行，按 YAML 里 `stages:` 的顺序串接两类 stage：deterministic（普通 Python callable）与 agent（委托给 `agent_engine.Engine.invoke`）。最值得讲的不是支持的能力，而是显式不做的能力——**没有 retry / timeout / cron / DAG / YAML 里写 inline Python / 多 CLI 子命令 / 持久化**。CLI 也只有 `python -m workflow run <yaml>` 一个子命令，validate / list / inspect 一律不做。这种刻意的最小性让 workflow 与 agent_engine 的边界清晰：workflow 负责“按声明顺序串”，agent_engine 负责“跑一段会议”，两者通过 `config:` 原样 unpack 进 `Engine.invoke(**config)` 解耦——workflow 对 agent_engine 内部命名 oblivious，只收 `Result.artifact` 进 state，这就是它与 LLM 的唯一耦合点。同期把“显式不做项”刻进 README，让未来的 scope creep 在 code review 时一眼可见。
 
-- `Workflow.from_yaml` / `Workflow.run`：~420 行的 workflow runner，按 YAML 顺序串接 deterministic Python-callable stage 与 agent stage（委托给 `agent_engine.Engine.invoke`）
-- CLI：`python -m workflow run <yaml> --vars k=v ...` 单子命令，不做 validate / list / inspect（避免 scope creep）
-- 示例：`examples/kitchen_sink.yaml` + `kitchen_sink_hooks.py`——schema 字段速查（每字段用一次 + 行内 `#` 注释 + 末尾「运行时心智模型」段）；`examples/chat.yaml` 是「纯 agent 单 stage」最小示例
-- 端到端跑通：3 deterministic + 1 agent + 1 finalize stage，与 qwen2.5:32b ollama 后端配合，跑出可见 stage 时序与产物
+### 框架变更
 
-### 技术
+|变更|目的|
+|---|---|
+|`Workflow.from_yaml` / `Workflow.run`（~420 行）|声明式 stage pipeline 的最小可用形态|
+|线性 `stages:` 仅 `deterministic` + `agent` 两类|刻意不做 DAG / retry / cron / 持久化|
+|`config:` 原样 unpack 进 `Engine.invoke(**config)`|workflow 对 agent_engine 内部命名 oblivious|
+|state 只收 `Result.artifact`|workflow 与 LLM 的唯一耦合点，最小化集成面|
+|`{{ a.b.c }}` 点路径插值（仅）|表达式能力收紧，复杂转换强制写进 hook 函数|
+|miss 直接 `KeyError` / 必填缺失 `sys.exit`|fail-fast，不给“你大概想用 X”猜词提示|
+|`module:callable` + 顶层 `hooks_module` 双解析路径|hook 既可来自外部模块也可来自 yaml 同级|
+|每 stage 打印 `start` / `done` + `duration_ms`|执行时序可见，无需额外日志框架|
+|`trace_id` 不实现，但保留 W3C `traceparent` 字段名|未来零成本接入 distributed tracing|
 
-- `state.py`：~50 行的 path-access 插值实现——只支持 `{{ a.b.c }}` 点路径访问；整字符串单占位保 Python 类型，inline 占位强制 `str()`；miss 直接 `KeyError`（plan §12 fail-fast）
-- `schema.validate`：必填字段缺失即 `sys.exit("Error: ...")`，**不**给「你大概想用 X」提示；不做 schema migration、没有「老用户引导」
-- `executors/deterministic.py`：`fn` 字符串支持 `module:callable` 与依赖顶层 `hooks_module` 两种解析路径
-- `executors/agent.py`：`config:` 块原样 unpack 进 `Engine.invoke(**config)` （plan §4.3），workflow 对 agent_engine 内部命名 oblivious；state 只收 `Result.artifact`——这是 workflow 与 LLM 的唯一耦合点
-- 每 stage 打印 `start` / `done` + `duration_ms`，方便快速观察执行时序
-- 同 commit 在 README 把 plan §9 的「显式不做项」（无 retry / timeout / cron / DAG / inline Python in YAML / stdlib / 多 CLI 子命令）刻在文档里——未来 scope-creep 在 code review 时显眼
+```mermaid
+flowchart LR
+    Y[workflow.yaml<br/>+ vars k=v] --> WF[Workflow.from_yaml<br/>+ schema.validate]
+    WF --> R[Workflow.run]
+    R -->|stage 类型 dispatch| D[deterministic executor<br/>module:callable]
+    R --> A[agent executor<br/>Engine.invoke config]
+    D --> ST[(state<br/>{{ a.b.c }} 插值)]
+    A -->|Result.artifact| ST
+    ST --> R
+    R --> LOG[stage start/done<br/>+ duration_ms]
+```
 
-### 取舍
+### 新增 / 改动模块
 
-- 线性 `stages` 仅 `deterministic` + `agent` 两类；不做 DAG / retry / cron / 持久化 → DECISIONS §1
-- `state` 只支持 `{{ a.b.c }}` 路径访问，不接 filter / 表达式（数据转换写进 hook 函数，参考 kitchen_sink 的 `to_yaml` stage） → DECISIONS §2
-- `trace_id` 不实现；保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（plan §9.1）
+|模块|说明|
+|---|---|
+|`runner.py`|`Workflow.from_yaml` / `Workflow.run`，stage 顺序执行 + 时序输出|
+|`schema.py`|YAML 必填字段校验，缺失即 `sys.exit("Error: ...")`，不做 migration|
+|`state.py`（~50 行）|`{{ a.b.c }}` 点路径插值；整字符串单占位保 Python 类型，inline 占位强制 `str()`|
+|`executors/deterministic.py`|`fn` 字符串支持 `module:callable` 与顶层 `hooks_module` 双解析|
+|`executors/agent.py`|`config:` 原样 unpack 进 `Engine.invoke(**config)`，state 只收 `Result.artifact`|
+|`cli.py` / `__main__.py`|单子命令 `python -m workflow run <yaml> --vars k=v ...`|
+
+### 新增 examples / 演示场景
+
+|示例|目的|演示什么|
+|---|---|---|
+|`examples/kitchen_sink.yaml` + `kitchen_sink_hooks.py`|schema 字段速查 + 端到端跑 3 deterministic + 1 agent + 1 finalize|每个 schema 字段被使用一次；行内 `#` 注释 + 末尾“运行时心智模型”段；与 `qwen2.5:32b` ollama 配合产生可见 stage 时序与产物|
+|`examples/chat.yaml`|纯 agent 单 stage 最小示例|workflow 完全为 agent_engine 服务的极简形态|
