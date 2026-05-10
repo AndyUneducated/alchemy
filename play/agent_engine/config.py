@@ -1,8 +1,12 @@
+import os
+
 BACKEND = "ollama"  # "ollama" | "openai" | "anthropic" | "gemini"
 
 # Ollama: REST via urllib; OLLAMA_BASE_URL for debugging.
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5:32b"
+# AGENT_ENGINE_MODEL env override — agent_sft Phase 2 pins 7B for triple mining
+# without touching scenario YAMLs (plan §Decisions); other workflows still get qwen2.5:32b.
+DEFAULT_MODEL = os.environ.get("AGENT_ENGINE_MODEL", "qwen2.5:32b")
 
 # OpenAI-compatible SDK (LM Studio, vLLM, etc. via base_url).
 OPENAI_BASE_URL = "https://api.openai.com/v1"

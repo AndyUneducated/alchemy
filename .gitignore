@@ -17,3 +17,7 @@ play/qa_assets/vdb/
 
 # Evaluation run artifacts (per-run result/samples + cross-run index) — regenerable from `python -m evals score/run`.
 play/evals/runs/
+
+# agent_sft Phase 2 mined data — large, regenerable from agent_engine batches via play/agent_sft/data/mine_triples.py.
+play/agent_sft/data/triples/runs/
+play/agent_sft/data/triples/*.jsonl

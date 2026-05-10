@@ -50,3 +50,47 @@
 - 拒绝 `metrics/{bfcl,mmlu}.py` 独立模块——单一消费者 + 函数简单（AST parse / MCQ 字母提取各 ~20 行），独立模块属"为抽而抽"；遵循 `workshops.mdc` "抽象引入滞后于第二个具体案例"原则。
 - `wrong_args` 失败模式桶 Phase 1 当 placeholder 归 wrong_tool——agent_engine artifact handler error 路径不发 event，无法仅靠 transcript 区分"调对工具被拒" vs "调了别的工具"；显式留桶让 by_failure_mode 表头跨 run 稳定，启用推迟到 Phase 5。
 - 80-batch 实跑 + 对比报告分到独立 1.G 里程碑——本次留可复现的工具链 + smoke；用户拉 7B 后跑 `python play/agent_sft/eval/run_baseline.py` 即可生成 `baselines/qwen2.5-7b-vs-32b.md` 真实数据。
+
+## 2026-05-10 — Phase 2 数据流水线落地 + pilot 揭出 yield 瓶颈
+
+按 [`DECISIONS §11`](DECISIONS.md) 一次性铺完 Phase 2 数据 pipeline 4 个脚本 + 测试 + 文档 + .gitignore，并跑 pilot（2 scenario × 3 run_id = 6 envelope，Qwen2.5-7B）。pilot 三件事都达成：① 端到端流水线打通（envelope → triple → split → MLX-LM messages 全链 5min 重生）；② 真实失败模式分布吻合预期（27 missed / 1 wrong_tool / 0 wrong_args，与 [Phase 1 失败模式 taxonomy](#技术) 一致）；③ **量出 yield = 0.17 triples/envelope，与 plan §Volume math 估算 5/envelope 差 30 倍——scale-up 路径需用户决策才能继续**。
+
+### 功能
+
+|item|状态|说明|
+|---|---|---|
+|`agent_sft/data/__init__.py` + 4 脚本|✅|`mine_triples.py` / `extractor.py` / `formatter.py` / `split.py`，共 ~750 行；CLI 全 `argparse`，子进程跑 agent_engine 不阻塞 batch|
+|`data/triples/` 产物子目录 + README|✅|与 `eval/baselines/` 完全平行布局；README 含 4 步 regen + OOD 复用说明 + pilot 实测表|
+|`data/extractor.py` 复用 `evals.metrics.nudge`|✅|不重写 turn marker / attempt 切分 / failure mode 分类；只新增 "first_failed → eventual_success" 配对 + 全 transcript prefix 作 context|
+|`data/formatter.py` 输出 MLX-LM chat 格式|✅|`{messages: [system, user, assistant]}`；system = agent.prompt + 工具列表，user = 最近 6 turn 渲染 + step.instruction，assistant = corrected_response 原文|
+|`data/split.py` per-scenario by-run_id|✅|末 20% run_id → val；< 5 unique run_id 全 train fallback（pilot 1 triple 即触发 → train=1, val=0）|
+|`data/mine_triples.py` 默认 6-envelope pilot|✅|`--scenarios` choices = ['tool_chain', 'code_review']；`--run-ids` 默认 [0,1,2]；`--dry-run` / `--timeout` / 失败汇总|
+|`agent_engine/config.py` env override|✅|新增 `AGENT_ENGINE_MODEL` env var → DEFAULT_MODEL（1 行改动），让 7B mining 不动 scenario YAML|
+|`tests/conftest.py` 加 `data/` sys.path|✅|测试纯 import 业务模块，无 path 体操|
+|`.gitignore` 加 `data/triples/runs/` + `*.jsonl`|✅|README.md 仍提交（`*.jsonl` 模式不匹配 `.md`）|
+|`tests/test_extractor.py` 12 case|✅|6 失败模式边界（missed / wrong_tool / first 成功 / 全失败 / multi-nudge / no require_tool）+ 截断 + 3 helper 单测|
+|`tests/test_formatter.py` 13 case|✅|3-message schema / system 含 prompt+tools / user 含 instruction+context / max_recent 截断 / 空 context / 5 helper 单测|
+|`tests/test_split.py` 11 case|✅|10/5/4/1 run_ids 切分 / multi-scenario 独立 / floor 取整 / fallback 阈值 / 末 N 而非首 N|
+|Pilot: 6 envelope mining + extract|✅|Qwen2.5-7B，6.8 min wall clock；require_tool turns=39 fired=28 (71.8%) → triples=1 (yield 0.17)|
+
+### 技术
+
+|item|说明|
+|---|---|
+|seed handling|不改 agent_engine——run_id 仅 envelope 文件命名键 + split 索引（`AGENT_ENGINE_MODEL` env override 也仅是 1 行），靠 7B 自然采样得 trace 多样性|
+|样本格式|F1 only（input 不含 nudge），训"看到原 instruction 一次到位"而非"被 nudge 后才补"|
+|context 截取|`max_recent=6` 渲染最近 history，与 `code_review.md memory.max_recent` 一致；pilot 唯一 sample user content ≈ 250 token，远低于 2048 上限|
+|代码 / 数据布局|A' 完全仿 `eval/`：`data/` 4 脚本 + `data/triples/` 子目录装产物（runs/ raw envelope + triples.jsonl + train_triples / val_triples + train.jsonl / val.jsonl）|
+|nudge 文本复原|`NUDGE_TEMPLATE = "你刚才没有调用 \`{tool}\` 工具..."` 模板按 `required_tool` 填回，与 `discussion.py` L141-144 硬编码字面对齐；不进 F1 input，只占 traceability 字段|
+|extractor 配对策略|每个 expected require_tool turn：first attempt 失败 + 任一后续 attempt 成功 → 1 triple（同 turn 至多 1 triple，因引擎 first-success-returns）；failure_mode 看 first attempt|
+|测试覆盖|`evals/tests/` 460 + `agent_sft/tests/` 17 → **57**（+40：12 extractor + 13 formatter + 11 split + 4 conftest 路径互通验证）= 全仓 517 全过|
+|pilot wall clock 分布|tool_chain ~70s/run / code_review ~67s/run；7B 在 M4 Pro 48GB 单 turn 平均 5-12s|
+
+### 取舍
+
+- 拒绝在 `agent_engine` 加 `--seed` flag——跨 Engine + Agent + ollama_client 三处改动 + EvalResult 兼容性，与"最小侵入"冲突；run_id 命名键已足够支撑切 train/val。
+- 拒绝把 mining 模型混入 32B / 14B 多模型对比——pilot 阶段先量 7B 单点 yield；32B / 多模型选项写进 [`DECISIONS §11`](DECISIONS.md) scale-up 路径表留给用户决策。
+- 接受"代码 / 数据混在 `data/`"布局（A'）而非进一步拆 `scripts/` + `data/{raw,interim,processed}/`——后者更"行业标准 ML repo"但需 5+ 文件 + 多层目录，pilot 阶段 4 脚本 + 1 子目录已能让产物全 gitignore；若 Phase 3 训练 / Phase 4 量化也归到 `data/` 时再演化（YAGNI）。
+- 接受"`tools` JSON schema 不进 F1 system message"（暂只列工具名 comma list）——MLX-LM 标准 chat format `tools` 字段支持是 PR-by-PR 演进的，Phase 3 真训练时再按 mlx-lm 当时版本对齐；当前 system content ≈ 200 token，留 token budget 给 user/assistant。
+- **pilot yield 30x 低于 plan 估算 → 暂停 scale-up 等用户拍板路径**——选项与代价见 [`DECISIONS §11`](DECISIONS.md) scale-up 路径表。三类候选：① 改 scenario `max_retries` 提 recovery 率（侵入 scenario YAML）；② 换 32B mining（与 ADR Mining 模型决策冲突 + envelope 慢 3x）；③ 降目标到 200 triples（train 集小风险）。本里程碑只交付"流水线 + pilot 数据 + 决策表"，不强行 scale 完成"1k triples"目标。
+- 用户回复"非要 1000 条吗？最小化 demo 即可"→ 走 `max_retries: 1→2` 实验路径（demo viable 12 envelope，~13 min）。结果 1 triple，**与 max_retries=1 batch 同量级**——确认瓶颈不在重试次数。同步跑 32B 单 envelope 对照（也 0 recovery）→ 确认瓶颈也不在底座。回滚 scenario YAML 到 `max_retries=1` 保 cross-project 干净；仓库内保留 1 triple 作 pipeline proof + Phase 3 smoke 入口；"凑够 train set" 推到 Phase 2.5（需方法学迭代，候选见 [`DECISIONS §11`](DECISIONS.md) 已知持续 trade-off）。
