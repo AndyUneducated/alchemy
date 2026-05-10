@@ -8,7 +8,7 @@
 
 这不是"再做一遍 BFCL fine-tune"——那条路走过的人太多。本项目的差异化在于：**supervision 信号只能由我自己的 agent 系统产生**，复现门槛即护城河。
 
-> **v1 工程约束**（不进入中心问题）：M4 Pro 48GB 单机 + QLoRA 4-bit on Qwen2.5-7B。v2/v3 演化时硬件约束可放宽（见下文 §"v1 / v2 / v3 演化路径"），中心问题不变——把硬件从中心问题剥离，是为了让"项目能否 scale 到更大底座 / 上云 GPU"成为可讨论的演化方向，而非要重写命题（详见 [`DECISIONS §5`](DECISIONS.md)）。
+> **v1 工程约束**（不进入中心问题）：M4 Pro 48GB 单机 + QLoRA 4-bit on Qwen2.5-7B。v2/v3 演化时硬件约束可放宽（见下文 §"v1 / v2 / v3 演化路径"），中心问题不变——把硬件从中心问题剥离，是为了让"项目能否 scale 到更大底座 / 上云 GPU"成为可讨论的演化方向，而非要重写命题。
 
 ## 与现有 play/ 子项目的关系
 
@@ -36,21 +36,21 @@ flowchart LR
 
 ## 七阶段路线图
 
-|Phase|目标|关键产出|状态|
-|---|---|---|---|
-|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|本 README + `DECISIONS §1-5`（含 §4 全本地基线 + §5 v2/v3 演化路径）+ `JOURNAL` 立项条目|🟡 in-progress|
-|1 — Baseline|定义 nudge-fire rate 度量；测 Qwen2.5-7B (off-the-shelf, Ollama) 与 **Qwen2.5-32B-Instruct (Ollama)** 在现有 scenario 上的基线（[`DECISIONS §4`](DECISIONS.md) 全本地基线决策）|`evals` 新 task `nudge_fire_rate`；run JSON 落盘|⬜ pending|
-|2 — Data|从 `agent_engine` 跑批 + 历史 transcript 中挖掘 (bad, nudge, corrected) 三元组；公开 tool-call 数据集做 OOD 对照|≥1k 训练样本；held-out in-dist + OOD split；`DECISIONS §6` 数据策略|⬜ pending|
-|3 — Train|MLX-LM QLoRA 在 Qwen2.5-7B-Instruct 上做 SFT；小规模超参 sweep|adapter checkpoint + train/eval loss 曲线；`DECISIONS §7` 超参取舍|⬜ pending|
-|4 — Deploy|merge LoRA → GGUF → 自定义 Modelfile → `ollama create agent-sft-qwen`|可在 `agent_engine` 通过 `BACKEND=ollama` + `MODEL` 切换的本地模型 tag|⬜ pending|
-|5 — Re-measure|用 Phase 1 同套 evals 跑 base 7B / SFT 7B / **Qwen2.5-32B 原版** 三组对比；附 OOD + 通用对话回归测试|对比报表 + 回归说明（**诚实标注哪里变差**）|⬜ pending|
-|6 — Reflection|README 增补 lessons learned + 下一步（DPO / 更大底座 / on-policy distill）|README §"Lessons" + `DECISIONS` 追加结案条目|⬜ pending|
+|Phase|目标|关键产出|
+|---|---|---|
+|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|本 README + [`DECISIONS §1`](DECISIONS.md) + [`§3`](DECISIONS.md)|
+|1 — Baseline|定义 nudge-fire rate 度量；测 Qwen2.5-7B (off-the-shelf, Ollama) 与 **Qwen2.5-32B-Instruct (Ollama)** 在现有 scenario 上的基线|`evals` 4 task：`nudge_fire_rate` / `agent_traj` / `bfcl_slice` / `mmlu_slice`；`agent_sft/eval/` 多 seed runner + aggregator + 报告|
+|2 — Data|从 `agent_engine` 跑批 + 历史 transcript 中挖掘 (bad, nudge, corrected) 三元组；公开 tool-call 数据集做 OOD 对照|≥1k 训练样本；held-out in-dist + OOD split|
+|3 — Train|MLX-LM QLoRA 在 Qwen2.5-7B-Instruct 上做 SFT；小规模超参 sweep|adapter checkpoint + train/eval loss 曲线|
+|4 — Deploy|merge LoRA → GGUF → 自定义 Modelfile → `ollama create agent-sft-qwen`|可在 `agent_engine` 通过 `BACKEND=ollama` + `MODEL` 切换的本地模型 tag|
+|5 — Re-measure|用 Phase 1 同套 evals 跑 base 7B / SFT 7B / **Qwen2.5-32B 原版** 三组对比；附 OOD + 通用对话回归测试|对比报表 + 回归说明（**诚实标注哪里变差**）|
+|6 — Reflection|README 增补 lessons learned + 下一步（DPO / 更大底座 / on-policy distill）|README §"Lessons" + `DECISIONS` 追加结案条目|
 
 每完成一个 phase，`JOURNAL.md` 记一条里程碑（功能 / 技术），重要决策追加进 `DECISIONS.md`。
 
 ### v1 / v2 / v3 演化路径
 
-七阶段路线图是 **v1**——把 nudge-grounded SFT 这条主线打穿。**v2/v3 候选**在 v1 收尾后按 Phase 6 反思的数字决定是否启动；预先列出一是为说明"本项目不是一锤子"，二是给面试时的"下一步是什么"问题留干脆答案。详细取舍见 [`DECISIONS §5`](DECISIONS.md)。
+七阶段路线图是 **v1**——把 nudge-grounded SFT 这条主线打穿。**v2/v3 候选**在 v1 收尾后按 Phase 6 反思的数字决定是否启动；预先列出一是为说明"本项目不是一锤子"，二是给面试时的"下一步是什么"问题留干脆答案。
 
 |版本|主题|候选增量|触发条件|
 |---|---|---|---|
@@ -92,13 +92,13 @@ flowchart LR
 |维度|选择|为何（详见 `DECISIONS`）|
 |---|---|---|
 |底座模型|Qwen2.5-7B-Instruct|强 tool-call 基线 + MLX 友好 + Ollama 同 tag 现成|
-|微调方式|QLoRA（4-bit base + LoRA adapters）|48GB 统一内存约束下 7B 唯一可行解；详见 §1|
-|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；`mlx_lm.lora` + `mlx_lm.fuse` + `mlx_lm.convert` 一条龙|
+|微调方式|QLoRA（4-bit base + LoRA adapters）|48GB 统一内存约束下 7B 唯一可行解|
+|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；`mlx_lm.lora` + `mlx_lm.fuse` + `mlx_lm.convert` 一条龙（详见 [`§3`](DECISIONS.md)）|
 |量化与部署|fuse → 转 GGUF → `ollama create`|与 `agent_engine` `BACKEND=ollama` 零成本对接|
 |评估框架|[`play/evals`](../evals/)|自有 harness 即护城河，phase-5 已支持 trajectory|
 |硬件|M4 Pro 48GB（v1 工程约束，不绑中心问题）|v1 所有结论的隐含上界；v2/v3 演化时可放宽，见上文 §"v1 / v2 / v3 演化路径"|
 
-> **可移植性声明**：HF safetensors 是 source of truth——MLX-LM（训练）与 Ollama（部署）都是它的消费者。后续 v2 加 DPO / GRPO 切到 [TRL](https://huggingface.co/docs/trl)、或 v3 上云 GPU 跑更大底座，**checkpoint 不需要重导**，仅适配训练 / 部署侧脚本即可。这条声明是工程约束节的一部分，不是中心问题约束（详见 [`DECISIONS §5`](DECISIONS.md)）。
+> **可移植性声明**：HF safetensors 是 source of truth——MLX-LM（训练）与 Ollama（部署）都是它的消费者。后续 v2 加 DPO / GRPO 切到 [TRL](https://huggingface.co/docs/trl)、或 v3 上云 GPU 跑更大底座，**checkpoint 不需要重导**，仅适配训练 / 部署侧脚本即可。
 
 ### v1 non-goals（v2/v3 候选见上节，这里只列**永久禁区**与 **v1 边界**）
 
@@ -115,12 +115,13 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1-5 立项时五条；后续 phase 追加）
+├── DECISIONS.md             # ADR 归档（§1 中心问题 + §3 训练框架；后续 phase 追加）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
 ├── requirements.txt         # mlx-lm / datasets / huggingface-hub 等（Phase 3 落地时建）
 ├── data/                    # Phase 2 产出：mined_trajectories.jsonl + train/val/test split
 ├── train/                   # Phase 3：mlx_lm.lora 入口 + 配置 yaml + checkpoints
-├── eval/                    # Phase 1/5：自定义 evals task wrapper（nudge_fire_rate / bfcl_slice）
+├── eval/                    # Phase 1 已落地：run_baseline.py + aggregate_seeds.py + baselines/
+│                            #  task 实现归 evals/
 ├── deploy/                  # Phase 4：Modelfile + GGUF 转换脚本
 └── runs/                    # 实验产物（gitignored，链回 evals/runs/）
 ```
@@ -142,7 +143,6 @@ play/agent_sft/
 - [MLX-LM LoRA 文档](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)
 - [BFCL leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html)
 - [xLAM / ToolACE / Hammer 数据集（OOD 对照参考）](https://huggingface.co/datasets?search=tool+calling)
-- 内部链接：[`play/agent_engine`](../agent_engine/) | [`play/evals`](../evals/) | [`play/rag`](../rag/)
 
 ## 附录 1：模型调优全谱系
 

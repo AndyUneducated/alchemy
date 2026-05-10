@@ -3,6 +3,14 @@ numpy
 pytest
 scikit-learn
 
+# agent_sft phase 1：nudge_fire_rate task 解析 agent_engine scenario YAML frontmatter
+pyyaml
+
+# agent_sft phase 1：aggregate_seeds.py 报告生成（DECISIONS §8 显式 trade-off：
+# 接受 pandas import 启动税换 groupby/mean/std + json_normalize + tabulate 行数压缩）
+pandas
+tabulate
+
 # phase 2 lexical metrics
 sacrebleu
 rouge_score

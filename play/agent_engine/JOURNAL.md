@@ -463,3 +463,27 @@ flowchart LR
 |工具|说明|
 |---|---|
 |artifact_event handler（5 个）|事件 dict 增加 `arguments` 字段；老消费者忽略未知键，evals 端 `argument_correctness` 拿到真数据|
+
+## 2026-05-09 — `require_tool` 观测面扩展 + 2 个 require_tool 密集 scenario
+
+这个里程碑给 `play/agent_sft` Phase 1 baseline 铺路。`require_tool` 历史上只观测 artifact 事件（`artifact.drain_events()`），导致非 artifact 工具如 `retrieve_docs` 永远判定为"沉默"——nudge 必触发 + warning 必落，让度量信号常数化。本期把 `_run_turn` 的检查面合并 tracer + artifact 两路事件，3 行改动让 `require_tool: retrieve_docs` 终于能正常工作（DECISIONS §12，supersede §7 末段范围限制）。同时新增 `code_review.md` 与 `tool_chain.md` 两个 require_tool 密集 scenario：前者多 agent / 上下文复杂（4 agent 8 个 require_tool turn — retrieve ×2 + append ×3 + cast_vote ×3），后者单 agent 强工具链（5 个 require_tool turn — retrieve ×2 + append ×2 + cast_vote ×1），把 nudge-eligible turn 从 7（panel + example）提到 20，给 `play/agent_sft` Phase 1 的 N=10 seed × 2 model 实跑提供足够统计功效。
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|`_run_turn` require_tool 检查面 = tracer_events ∪ artifact_events|让非 artifact 工具的 require_tool 行为可被度量；纯 additive，老 scenario 字节相同|
+|`tracer_events` 与 `artifact_events` 仍各自分批 extend 到 history|事件源语义边界不变——artifact 是共享文档真实变更，tracer 是工具调用观察记录|
+
+### 新增 scenario
+
+|scenario|目的|演示什么|
+|---|---|---|
+|`code_review.md`|多 agent / 上下文复杂的 require_tool 密集场景|3 senior + 1 主审审 PR；2 retrieve_docs + 3 append_section + 3 cast_vote = 8 require_tool turn / run|
+|`tool_chain.md`|单 agent 强工具链 require_tool 服从性测试|执行者按 5 步 checklist 严格调工具：retrieve → append → vote → retrieve → append|
+
+### 新增 / 改动工具
+
+|工具|说明|
+|---|---|
+|—|工具集合不变；`require_tool` 现在覆盖所有工具（含非 artifact）是 wiring 修复，不是新工具|

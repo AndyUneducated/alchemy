@@ -102,18 +102,25 @@ class Discussion:
                 stream=self.stream,
                 artifact_view=view,
             )
+            tracer_events: list[dict] = []
             if self.tracer:
-                self.history.extend(self.tracer.drain())
+                tracer_events = self.tracer.drain()
+                self.history.extend(tracer_events)
             self.history.append({
                 "speaker": agent.name,
                 "content": reply,
                 "ts": time.time(),
             })
-            events: list[dict] = []
+            artifact_events: list[dict] = []
             if self.artifact:
-                events = self.artifact.drain_events()
-                self.history.extend(events)
+                artifact_events = self.artifact.drain_events()
+                self.history.extend(artifact_events)
 
+            # require_tool 检查同时覆盖 tracer (非 artifact 工具如 retrieve_docs)
+            # 与 artifact 事件——前者过去被遗漏，导致 require_tool 只对 artifact 工
+            # 具有效；本期补全（DECISIONS §11 / agent_sft phase 1.B 引入两个新
+            # require_tool: retrieve_docs 场景的前置依赖）.
+            events = tracer_events + artifact_events
             if not require_tool or _called_tool(events, agent.name, require_tool):
                 return
 

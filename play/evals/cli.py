@@ -45,13 +45,34 @@ EXTERNAL_PROVIDERS = ("openai", "anthropic", "gemini")
 def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 forward-ref 避免循环
     """spec → LM 实例 dispatch.
 
-      mock:<mode>[:<arg>]     → MockLM (phase 1)
-      ollama:<model>          → OllamaLM (phase 3)
-      openai|anthropic|gemini → NotImplementedError（架构留口，phase 3 暂不启用）
+      mock:<mode>[:<arg>]            → MockLM (phase 1)
+      ollama:<model>                 → OllamaLM (phase 3)
+      ollama:<model>@seed=<K>        → OllamaLM(seed=K)；agent_sft phase 1 多 seed 用
+      openai|anthropic|gemini        → NotImplementedError（架构留口，phase 3 暂不启用）
+
+    `@seed=K` 后缀（仅 ollama 支持）：把 LM-side 采样 seed 注入 `OllamaLM(seed=K)`，
+    与 CLI 的 `--seed` 区分（后者管 fewshot 抽样 / runner 级 RNG，不到 LM 端）.
+    `lm.name` 保留 `@seed=K` 后缀让 EvalResult.model 字段可区分多 seed run，方便
+    aggregate_seeds.py 按 (task, model_label_w/o_seed, seed) group.
     """
+    # 先剥 `@seed=K` 后缀（仅出现在最尾），剩余给具体 provider parse
+    seed_suffix: str | None = None
+    lm_seed: int | None = None
+    if "@seed=" in spec:
+        spec, seed_str = spec.rsplit("@seed=", 1)
+        try:
+            lm_seed = int(seed_str)
+        except ValueError as e:
+            raise ValueError(f"invalid seed in model spec: {seed_str!r}") from e
+        seed_suffix = f"@seed={lm_seed}"
+
     parts = spec.split(":")
     provider = parts[0]
     if provider == "mock":
+        if seed_suffix is not None:
+            raise ValueError(
+                f"@seed=K suffix not supported for {provider!r} (use mock:noisy:<noise>:<seed> instead)"
+            )
         if len(parts) < 2:
             raise ValueError(f"invalid mock spec: {spec!r}; expected mock:<mode>[:<arg>]")
         mode = parts[1]
@@ -70,9 +91,16 @@ def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 for
         raise ValueError(f"unknown mock mode: {mode!r}")
     if provider == "ollama":
         if len(parts) < 2:
-            raise ValueError(f"invalid ollama spec: {spec!r}; expected ollama:<model>")
+            raise ValueError(f"invalid ollama spec: {spec!r}; expected ollama:<model>[@seed=K]")
         model = ":".join(parts[1:])
-        return OllamaLM(model=model)
+        kwargs: dict = {}
+        if lm_seed is not None:
+            kwargs["seed"] = lm_seed
+        lm = OllamaLM(model=model, **kwargs)
+        if seed_suffix is not None:
+            # 把 seed 标到 model_label，让 EvalResult.model 在多 seed run 间可区分
+            lm.name = f"{lm.name}{seed_suffix}"
+        return lm
     if provider in EXTERNAL_PROVIDERS:
         raise NotImplementedError(
             f"{provider!r} adapter scaffolded but not enabled in phase 3; "
@@ -166,6 +194,7 @@ def _build_task_with_optional_deps(
     扩展新 task 支持时在此处加 dispatch 分支.
     """
     from .tasks.agent_traj import AgentTraj
+    from .tasks.nudge_fire_rate import NudgeFireRate
     from .tasks.qa_open import QAOpen
     from .tasks.rag_qa import RagQA
     from .tasks.rag_retrieval import RagRetrieval
@@ -199,6 +228,20 @@ def _build_task_with_optional_deps(
             )
         from .models.agent_engine_run import make_run_fn
         return AgentTraj(run_fn=make_run_fn(), judge_lm=judge_lm)
+
+    if isinstance(base_task, NudgeFireRate):
+        if vdb is not None:
+            raise SystemExit(
+                f"--vdb / RAG flags not supported by {task_name!r}; "
+                "nudge_fire_rate uses subprocess-driven agent_engine, not direct retrieval."
+            )
+        if judge_lm is not None:
+            raise SystemExit(
+                f"--judge-model not supported by {task_name!r}; "
+                "nudge_fire_rate is a process-conformance metric (no LM-side judging)."
+            )
+        from .models.agent_engine_run import make_run_fn
+        return NudgeFireRate(run_fn=make_run_fn())
 
     if isinstance(base_task, Safety):
         if vdb is not None:
@@ -354,7 +397,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             lm: LM = parse_model_spec(args.model, task)
         elif vdb:
             lm = _RetrieverOnlyLM(name=f"retriever:{Path(vdb).name}:{retrieve_mode}")
-        elif task.name == "agent_traj":
+        elif task.name in ("agent_traj", "nudge_fire_rate"):
             lm = _RetrieverOnlyLM(name="agent_engine")
         else:
             raise SystemExit(

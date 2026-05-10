@@ -1,0 +1,50 @@
+{"id": "simple_python_0", "prediction": "calculate_triangle_area_xxx(base=10, height=5)"}
+{"id": "simple_python_1", "prediction": "math.factorial_xxx(number=5)"}
+{"id": "simple_python_2", "prediction": "math.hypot_xxx(x=4, y=5)"}
+{"id": "simple_python_3", "prediction": "algebra.quadratic_roots_xxx(a=1, b=-3, c=2)"}
+{"id": "simple_python_4", "prediction": "solve_quadratic_equation_xxx(a=2, b=6, c=5)"}
+{"id": "simple_python_5", "prediction": "solve_quadratic_xxx(a=3, b=-11, c=-4, root_type='all')"}
+{"id": "simple_python_6", "prediction": "solve_quadratic_xxx(a=2, b=5, c=3)"}
+{"id": "simple_python_7", "prediction": "calculate_circumference_xxx(radius=4, unit='inches')"}
+{"id": "simple_python_8", "prediction": "geometry.area_circle_xxx(radius=10)"}
+{"id": "simple_python_9", "prediction": "geometry.calculate_area_circle_xxx(radius=5)"}
+{"id": "simple_python_10", "prediction": "calculate_area_xxx(base=6, height=10)"}
+{"id": "simple_python_11", "prediction": "calculate_triangle_area_xxx(base=10, height=5)"}
+{"id": "simple_python_12", "prediction": "geometry.circumference_xxx(radius=3)"}
+{"id": "simple_python_13", "prediction": "calculate_area_under_curve_xxx(function='x**2', interval=[1.0, 3.0])"}
+{"id": "simple_python_14", "prediction": "calculate_derivative_xxx(function='3x**2 + 2x - 1')"}
+{"id": "simple_python_15", "prediction": "integrate_xxx(function='x**3', start_x=-2, end_x=3, method='simpson')"}
+{"id": "simple_python_16", "prediction": "calculus.derivative_xxx(function='2x**2', value=1)"}
+{"id": "simple_python_17", "prediction": "get_prime_factors_xxx(number=450)"}
+{"id": "simple_python_18", "prediction": "number_analysis.prime_factors_xxx(number=123456)"}
+{"id": "simple_python_19", "prediction": "math.gcd_xxx(num1=40, num2=50)"}
+{"id": "simple_python_20", "prediction": "math.hcf_xxx(number1=36, number2=24)"}
+{"id": "simple_python_21", "prediction": "number_theory.gcd_xxx(number1=36, number2=48)"}
+{"id": "simple_python_22", "prediction": "math.gcd_xxx(num1=12, num2=15)"}
+{"id": "simple_python_23", "prediction": "prime_factorize_xxx(number=60, return_type='dictionary')"}
+{"id": "simple_python_24", "prediction": "math.gcd_xxx(num1=12, num2=18)"}
+{"id": "simple_python_25", "prediction": "calculate_final_velocity_xxx(height=150)"}
+{"id": "simple_python_26", "prediction": "calculate_velocity_xxx(distance=50, duration=2)"}
+{"id": "simple_python_27", "prediction": "final_velocity_xxx(initial_velocity=10, acceleration=2, time=5)"}
+{"id": "simple_python_28", "prediction": "calculate_displacement_xxx(initial_velocity=10, time=5, acceleration=9.8)"}
+{"id": "simple_python_29", "prediction": "calculate_final_speed_xxx(time=5)"}
+{"id": "simple_python_30", "prediction": "kinematics.final_velocity_from_distance_xxx(acceleration=4, distance=300)"}
+{"id": "simple_python_31", "prediction": "calculate_final_velocity_xxx(initial_velocity=0, acceleration=9.8, time=5)"}
+{"id": "simple_python_32", "prediction": "calculate_final_speed_xxx(initial_velocity=0, height=100)"}
+{"id": "simple_python_33", "prediction": "get_directions_xxx(start_location='Sydney', end_location='Melbourne')"}
+{"id": "simple_python_34", "prediction": "travel_itinerary_generator_xxx(destination='Tokyo', days=7, daily_budget=100, exploration_type='nature')"}
+{"id": "simple_python_35", "prediction": "vegan_restaurant.find_nearby_xxx(location='New York, NY', operating_hours=23)"}
+{"id": "simple_python_36", "prediction": "get_shortest_driving_distance_xxx(origin='New York City', destination='Washington D.C.')"}
+{"id": "simple_python_37", "prediction": "route.estimate_time_xxx(start_location='San Francisco', end_location='Los Angeles', stops=['Santa Barbara', 'Monterey'])"}
+{"id": "simple_python_38", "prediction": "calculate_electrostatic_potential_xxx(charge1=1e-09, charge2=2e-09, distance=0.05)"}
+{"id": "simple_python_39", "prediction": "calculate_electric_field_xxx(charge=2, distance=3)"}
+{"id": "simple_python_40", "prediction": "calculate_magnetic_field_xxx(current=5, radius=4)"}
+{"id": "simple_python_41", "prediction": "electromagnetic_force_xxx(charge1=5, charge2=7, distance=3)"}
+{"id": "simple_python_42", "prediction": "calculate_resonant_frequency_xxx(inductance=0.05, capacitance=0.0001)"}
+{"id": "simple_python_43", "prediction": "calculate_magnetic_field_strength_xxx(current=20, distance=10)"}
+{"id": "simple_python_44", "prediction": "calculate_electric_field_strength_xxx(charge=0.01, distance=4)"}
+{"id": "simple_python_45", "prediction": "thermo.calculate_energy_xxx(mass=100, phase_transition='vaporization')"}
+{"id": "simple_python_46", "prediction": "calculate_final_temperature_xxx(mass1=20, temperature1=30, mass2=15, temperature2=60)"}
+{"id": "simple_python_47", "prediction": "get_boiling_melting_points_xxx(substance='water', sea_level=5000)"}
+{"id": "simple_python_48", "prediction": "calculate_density_xxx(mass=45, volume=15)"}
+{"id": "simple_python_49", "prediction": "calc_absolute_pressure_xxx(atm_pressure=1, gauge_pressure=2)"}

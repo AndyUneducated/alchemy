@@ -52,6 +52,44 @@ def test_parse_spec_ollama_with_base_url_override(task, monkeypatch):
     assert lm.base_url == "http://other:11434"
 
 
+# ---------- @seed=K 后缀（agent_sft phase 1 多 seed wiring） ----------
+
+def test_parse_spec_ollama_with_seed_suffix(task):
+    """`ollama:<model>@seed=K` → OllamaLM(seed=K)；name 保留 @seed=K 后缀供 EvalResult.model 区分."""
+    lm = parse_model_spec("ollama:qwen2.5:7b-instruct@seed=42", task)
+    assert isinstance(lm, OllamaLM)
+    assert lm.model == "qwen2.5:7b-instruct"  # @seed= 后缀已剥离
+    assert lm.seed == 42
+    assert lm.name == "ollama:qwen2.5:7b-instruct@seed=42"  # 但 model_label 保留
+
+
+def test_parse_spec_ollama_without_seed_keeps_default_zero(task):
+    """无 @seed= 后缀 → OllamaLM 默认 seed=0，name 不含后缀（向后兼容老 spec）."""
+    lm = parse_model_spec("ollama:qwen2.5:7b-instruct", task)
+    assert lm.seed == 0
+    assert lm.name == "ollama:qwen2.5:7b-instruct"
+    assert "@seed=" not in lm.name
+
+
+def test_parse_spec_ollama_with_seed_zero_explicit(task):
+    """显式 `@seed=0` 也写入 name（让 multi-seed bash 循环 seed=0 仍能与裸 spec 区分）."""
+    lm = parse_model_spec("ollama:qwen2.5:7b-instruct@seed=0", task)
+    assert lm.seed == 0
+    assert lm.name == "ollama:qwen2.5:7b-instruct@seed=0"
+
+
+def test_parse_spec_invalid_seed_raises(task):
+    """`@seed=abc` 非整数 → ValueError（与未知 provider 同 fail-fast 路径）."""
+    with pytest.raises(ValueError, match="invalid seed"):
+        parse_model_spec("ollama:qwen2.5:7b@seed=abc", task)
+
+
+def test_parse_spec_seed_suffix_on_mock_raises(task):
+    """`mock:gold@seed=42` → ValueError；mock 走自家 `mock:noisy:<noise>:<seed>` 语法."""
+    with pytest.raises(ValueError, match="seed=K suffix"):
+        parse_model_spec("mock:gold@seed=42", task)
+
+
 def test_parse_spec_openai_explicit_not_implemented(task):
     """openai:* → 显式 NotImplementedError，错误信息提示 phase 3 未启用."""
     with pytest.raises(NotImplementedError, match="phase 3"):

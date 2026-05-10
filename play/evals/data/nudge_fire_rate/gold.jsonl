@@ -1,0 +1,7 @@
+{"id":"brainstorm","input":"团建活动方案讨论（brainstorm.md：3 名 member 自由讨论，无 require_tool step → 不参与 nudge 度量）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/brainstorm.md"}}
+{"id":"debate","input":"AI 替代人类工作辩论（debate.md：2 人 2 轮，无 require_tool）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/debate.md"}}
+{"id":"roundtable","input":"LLM 与 AGI 圆桌（roundtable.md：1 主持 2 嘉宾，无 require_tool）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/roundtable.md"}}
+{"id":"example","input":"项目代号采纳决策（example.md：3 个 require_tool turn — append_section ×1 + cast_vote ×2）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/example.md"}}
+{"id":"panel","input":"星云平台存废决策（panel.md：4 个 require_tool turn — cast_vote ×4）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/panel.md"}}
+{"id":"tool_chain","input":"工具链服从性测试（tool_chain.md：单 agent 5 步链 — retrieve ×2 + append ×2 + cast_vote ×1）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/tool_chain.md"}}
+{"id":"code_review","input":"PR 评审决策（code_review.md：4 agent 8 个 require_tool turn — retrieve ×2 + append ×3 + cast_vote ×3）","target":null,"metadata":{"scenario_path":"agent_engine/scenarios/code_review.md"}}
