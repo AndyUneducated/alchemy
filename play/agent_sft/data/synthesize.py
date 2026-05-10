@@ -45,7 +45,7 @@ from evals.metrics.nudge import (  # noqa: E402  pylint: disable=wrong-import-po
     derive_expected_turns,
 )
 
-# 复用 extractor 的 Triple + helpers，避免数据 schema 漂移
+# 复用 extractor 的 Triple + helpers + scenario 路径解析，避免数据 schema 漂移
 from extractor import (  # noqa: E402  pylint: disable=wrong-import-position
     NUDGE_TEMPLATE,
     Triple,
@@ -53,6 +53,7 @@ from extractor import (  # noqa: E402  pylint: disable=wrong-import-position
     _parse_envelope_name,
     _split_turns_indexed,
     _step_instruction,
+    resolve_scenario_path,
     write_triples_jsonl,
 )
 
@@ -189,8 +190,13 @@ def main(argv: list[str] | None = None) -> int:
         help="output triples.jsonl path",
     )
     parser.add_argument(
+        "--upstream", action="store_true",
+        help="用上游 agent_engine/scenarios/<name>.md 解析；默认走 fast 副本 "
+             "data/scenarios/<name>_fast.md，必须匹配 mine_triples 用的版本",
+    )
+    parser.add_argument(
         "--scenarios-root", default=None,
-        help="agent_engine scenarios/ dir; default play/agent_engine/scenarios",
+        help="显式覆盖 scenarios 目录，少用——优先用 --upstream / 默认 fast 副本",
     )
     args = parser.parse_args(argv)
 
@@ -199,10 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: --in {in_dir} is not a directory", file=sys.stderr)
         return 2
 
-    scenarios_root = (
-        Path(args.scenarios_root) if args.scenarios_root
-        else REPO_ROOT / "play" / "agent_engine" / "scenarios"
-    )
+    explicit_root = Path(args.scenarios_root) if args.scenarios_root else None
 
     envelopes = sorted(in_dir.glob("*.json"))
     if not envelopes:
@@ -213,7 +216,10 @@ def main(argv: list[str] | None = None) -> int:
     per_file_summary: list[tuple[str, int]] = []
     for env_path in envelopes:
         scen_name, run_id = _parse_envelope_name(env_path.stem)
-        scen_path = scenarios_root / f"{scen_name}.md"
+        if explicit_root is not None:
+            scen_path = explicit_root / f"{scen_name}.md"
+        else:
+            scen_path = resolve_scenario_path(scen_name, upstream=args.upstream)
         with env_path.open("r", encoding="utf-8") as f:
             envelope = json.load(f)
         triples = envelope_to_synthetic_triples(

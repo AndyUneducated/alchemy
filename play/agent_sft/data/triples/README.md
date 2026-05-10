@@ -23,13 +23,15 @@
 ## 重生命令（按顺序）
 
 ```bash
-# 1) 跑批：2 scenarios × 6 runs = 12 envelopes
+# 1) 跑批：2 scenarios × 6 runs = 12 envelopes（默认 fast 副本，~42s/env vs upstream ~65s）
 python play/agent_sft/data/mine_triples.py --run-ids 0 1 2 3 4 5
+#   要复现 baseline eval 行为（max_retries=1，envelope ~65s）：加 --upstream
 
 # 2) 抽三元组（synthesize：每个 fire 一条；如要"真 recovery"语义，把 synthesize.py 换 extractor.py）
 python play/agent_sft/data/synthesize.py \
   --in  play/agent_sft/data/triples/runs/ \
   --out play/agent_sft/data/triples/triples.jsonl
+#   synthesize / extractor 都默认按 fast 副本解析；--upstream 要与 mine 步骤一致
 
 # 3) 切 train/val（先切再格式化；formatter 输出丢元数据）
 python play/agent_sft/data/split.py \
@@ -47,6 +49,20 @@ python play/agent_sft/data/formatter.py \
 ```
 
 每个脚本 `--help` 看完整 flag。
+
+## Scenario：fast 副本 vs upstream
+
+`data/scenarios/{tool_chain,code_review}_fast.md` 是上游 `agent_engine/scenarios/*.md` 的 mining 优化派生：
+
+|改动|fast|upstream|为什么 fast 这么改|
+|---|---|---|---|
+|`max_retries`|0|1|synthesize 只看 first attempt，retry 是纯浪费 LLM 调用|
+|`max_tokens`|80|160-200|agent prompt 本就限制 ≤30/50 字，cap 贴近实际负载|
+|moderator open / finalize|删|有|0 fires，纯仪式开销|
+|envelope wall clock (7B / M4 Pro)|~42s/env|~65s/env|-35%|
+|synthesize yield|~4 triples/env|~4.75 triples/env|相当|
+
+`mine_triples.py` 默认走 fast；`--upstream` 切回原 scenario（与 baseline eval 数据一致）。`extractor.py` / `synthesize.py` 也有同款 `--upstream` flag，必须与 mining 步骤一致——否则 turn_idx 错位会让 yield 归零。
 
 ## OOD 评估
 
