@@ -38,7 +38,7 @@ flowchart LR
 
 |Phase|目标|关键产出|
 |---|---|---|
-|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|本 README + [`DECISIONS §1`](DECISIONS.md) + [`§3`](DECISIONS.md)|
+|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|本 README + [`DECISIONS §1`](DECISIONS.md) + [`§2`](DECISIONS.md)|
 |1 — Baseline|定义 nudge-fire rate 度量；测 Qwen2.5-7B (off-the-shelf, Ollama) 与 **Qwen2.5-32B-Instruct (Ollama)** 在现有 scenario 上的基线|`evals` 4 task：`nudge_fire_rate` / `agent_traj` / `bfcl_slice` / `mmlu_slice`；`agent_sft/eval/` 多 seed runner + aggregator + 报告|
 |2 — Data|从 `agent_engine` 跑批 + 历史 transcript 中挖掘 (bad, nudge, corrected) 三元组；公开 tool-call 数据集做 OOD 对照|≥1k 训练样本；held-out in-dist + OOD split|
 |3 — Train|MLX-LM QLoRA 在 Qwen2.5-7B-Instruct 上做 SFT；小规模超参 sweep|adapter checkpoint + train/eval loss 曲线|
@@ -93,7 +93,7 @@ flowchart LR
 |---|---|---|
 |底座模型|Qwen2.5-7B-Instruct|强 tool-call 基线 + MLX 友好 + Ollama 同 tag 现成|
 |微调方式|QLoRA（4-bit base + LoRA adapters）|48GB 统一内存约束下 7B 唯一可行解|
-|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；`mlx_lm.lora` + `mlx_lm.fuse` + `mlx_lm.convert` 一条龙（详见 [`§3`](DECISIONS.md)）|
+|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；`mlx_lm.lora` + `mlx_lm.fuse` + `mlx_lm.convert` 一条龙（详见 [`§2`](DECISIONS.md)）|
 |量化与部署|fuse → 转 GGUF → `ollama create`|与 `agent_engine` `BACKEND=ollama` 零成本对接|
 |评估框架|[`play/evals`](../evals/)|自有 harness 即护城河，phase-5 已支持 trajectory|
 |硬件|M4 Pro 48GB（v1 工程约束，不绑中心问题）|v1 所有结论的隐含上界；v2/v3 演化时可放宽，见上文 §"v1 / v2 / v3 演化路径"|
@@ -115,7 +115,7 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1 中心问题 + §3 训练框架；后续 phase 追加）
+├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 Phase 2 数据流水线）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
 ├── requirements.txt         # mlx-lm / datasets / huggingface-hub 等（Phase 3 落地时建）
 ├── data/                    # Phase 2 产出：mined_trajectories.jsonl + train/val/test split
@@ -171,7 +171,7 @@ play/agent_sft/
 |A. 推理时调|Tool use / function calling|2023|❌|工具 schema|让模型调外部工具补能力|缺计算/检索/代码能力|schema 设计差 → 乱传参|`agent_engine` 核心机制|
 |A. 推理时调|System prompt 工程|—|❌|无|长 system prompt 注入角色/规则|固定角色/流程|长度膨胀；注意力稀释|scenario YAML `prompt:`|
 |B. PEFT 旁路|LoRA|2021|加旁路 (~1%)|同主任务|每层加两个小矩阵 A·B 只训这俩|多任务可换装；省显存|rank/alpha 选错欠/过拟|Phase 3 选型基础|
-|B. PEFT 旁路|**QLoRA**|2023|加旁路 + 主模型 4-bit|同主任务|LoRA + 主模型先量化省显存|消费级显存做 SFT|4-bit 量化损失；需配套部署|**Phase 3 实际方案** ([`DECISIONS §3`](DECISIONS.md))|
+|B. PEFT 旁路|**QLoRA**|2023|加旁路 + 主模型 4-bit|同主任务|LoRA + 主模型先量化省显存|消费级显存做 SFT|4-bit 量化损失；需配套部署|**Phase 3 实际方案** ([`DECISIONS §2`](DECISIONS.md))|
 |B. PEFT 旁路|DoRA|2024|加旁路|同主任务|LoRA 升级版，分解方向+幅度|想比 LoRA 再压几个点|训练时间略增|—|
 |B. PEFT 旁路|Adapter (Houlsby)|2019|加旁路|同主任务|每层中间插一小段 MLP|多任务隔离；PEFT 鼻祖|推理多一次 forward|—|
 |B. PEFT 旁路|Prefix / P-tuning|2021|加旁路|同主任务|学一段"软 prompt"向量挂输入前|极小参数；任务化|长 prefix 占 context；不稳|—|
