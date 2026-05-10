@@ -93,4 +93,36 @@
 - 接受"代码 / 数据混在 `data/`"布局（A'）而非进一步拆 `scripts/` + `data/{raw,interim,processed}/`——后者更"行业标准 ML repo"但需 5+ 文件 + 多层目录，pilot 阶段 4 脚本 + 1 子目录已能让产物全 gitignore；若 Phase 3 训练 / Phase 4 量化也归到 `data/` 时再演化（YAGNI）。
 - 接受"`tools` JSON schema 不进 F1 system message"（暂只列工具名 comma list）——MLX-LM 标准 chat format `tools` 字段支持是 PR-by-PR 演进的，Phase 3 真训练时再按 mlx-lm 当时版本对齐；当前 system content ≈ 200 token，留 token budget 给 user/assistant。
 - **pilot yield 30x 低于 plan 估算 → 暂停 scale-up 等用户拍板路径**——选项与代价见 [`DECISIONS §11`](DECISIONS.md) scale-up 路径表。三类候选：① 改 scenario `max_retries` 提 recovery 率（侵入 scenario YAML）；② 换 32B mining（与 ADR Mining 模型决策冲突 + envelope 慢 3x）；③ 降目标到 200 triples（train 集小风险）。本里程碑只交付"流水线 + pilot 数据 + 决策表"，不强行 scale 完成"1k triples"目标。
-- 用户回复"非要 1000 条吗？最小化 demo 即可"→ 走 `max_retries: 1→2` 实验路径（demo viable 12 envelope，~13 min）。结果 1 triple，**与 max_retries=1 batch 同量级**——确认瓶颈不在重试次数。同步跑 32B 单 envelope 对照（也 0 recovery）→ 确认瓶颈也不在底座。回滚 scenario YAML 到 `max_retries=1` 保 cross-project 干净；仓库内保留 1 triple 作 pipeline proof + Phase 3 smoke 入口；"凑够 train set" 推到 Phase 2.5（需方法学迭代，候选见 [`DECISIONS §11`](DECISIONS.md) 已知持续 trade-off）。
+- 用户回复"非要 1000 条吗？最小化 demo 即可"→ 走 `max_retries: 1→2` 实验路径（demo viable 12 envelope，~13 min）。结果 1 triple，**与 max_retries=1 batch 同量级**——确认瓶颈不在重试次数。同步跑 32B 单 envelope 对照（2 fires 0 recovery，**样本太小，结论不成立**——见下条里程碑修正）。
+
+## 2026-05-10 (晚) — Phase 2 数据交付：Approach B (synthesize) 解锁 yield 瓶颈
+
+承接上一条 pilot 失败叙事。用户挑战"换 32B 真不行吗、能不能直接合成假 triple"两个问题——分别跑两组实验后**修正了之前关于"瓶颈在方法学"的过度判断**，并落地 Approach B 真正解锁 Phase 2 数据交付。
+
+### 功能
+
+|item|状态|说明|
+|---|---|---|
+|**修正旧结论**：32B 单 envelope 对照样本太小|✅|跑 32B × code_review × 3 envelope（25 min）：20 fires，5 triples，**recovery 25%**（vs 7B 的 3%）→ 底座 capability 是 recovery 率主因，方法学本身没崩|
+|**实现 Approach B**：`data/synthesize.py` + 18 测试|✅|"真失败 attempt + 程序化合成 corrected"配对策略——每个 nudge fire 出 1 triple（yield = fire rate 上限，非 recovery 率），corrected 用 step.instruction 里字面 `tool(args)` 模板，fallback 用通用 wrapper + 完整 instruction|
+|**正式交付 train/val**|✅|7B max_retries=2 batch 12 envelope → synthesize → **57 triples → 47 train + 10 val**（per-scenario 末 20% run_id 走 val，正常生效不再 fallback）|
+|`extractor.py` 保留|✅|未来 Phase 3 后若 7B 自己 recovery 率拉到 30%+，可一行命令切回"真自纠"语义；两条路径共用 Triple schema|
+|文档同步|✅|`data/triples/README.md` 增"两种 triple 来源"对照表 + pilot 时序演进；JOURNAL 本条；`DECISIONS §11` 不动（按 user "本项目不再写 ADR" 规则，旧条目作历史记录）|
+
+### 技术
+
+|item|说明|
+|---|---|
+|为什么不是 32B mining|32B envelope ~500s，每条 triple ~5min compute；synthesize 复用现有 7B envelope ~100s/env + 0 额外，每条 triple ~21s。**总 compute 节省 ~14x**|
+|为什么不是蒸馏（C 方案）|与 [`DECISIONS §1`](DECISIONS.md)"自有 infra 生数据"冲突；synthesize 严格说仍是"自家 7B 失败素材 + 自家 scenario 模板"，没引入第三方教师|
+|`_extract_call_template` 设计|regex `\\b{tool}\\s*\\(` 起始，paren 平衡扫描到第一个 unbalanced `)`；7 测试覆盖（简单 / 跨行 args / 中文引号混合 / 不平衡 paren / word boundary / 多次出现取首个 / 无模板返 None）|
+|fallback 文本|`"好的，我现在调用 \`{tool}\` 完成本步：\\n{instruction}"`——instruction 全文入 corrected，对没字面模板的 step（如 retrieve_docs 类）保留语义信息，不是空响应|
+|测试增量|`agent_sft/tests/` 36 → **54**（+18 synthesize：7 template extract + 4 synthesize wrapper + 7 envelope-to-triples 边界）|
+|与 `extractor.py` 解耦点|synthesize.py import extractor.{Triple, helpers, write_triples_jsonl} 复用；只改 `envelope_to_synthetic_triples` 配对策略（不要求后续 success），其他全沿用|
+
+### 取舍
+
+- **承认上一条里程碑的"瓶颈在方法学"是过度判断**——n=2 fires 的 32B 对照不能下"换底座也救不了"结论。本里程碑用 n=20 fires 的 32B 实验 + Approach B 落地两条独立证据修正：底座很影响 recovery，方法学有简化路径。这条作为"早失败 → 早跑实验 → 早修正"的工程证据保留在 JOURNAL，不掩盖。
+- 选 Approach B（合成）而非 D（32B mining）：经济性碾压（compute 节省 14x），且训练目标更干净（无 7B 偶然 success 的"text 说 X 但 tool_call 是 Y"噪声样本）。代价是 corrected 是模板而非自然语言，**Phase 3 训练后若发现模型只学会模板复读、不能泛化，再回头切到 D 或 C 方案**。
+- 不进 ADR：用户 2026-05-10 决策"本项目不再写 ADR"，本里程碑技术决策直接落 JOURNAL.技术 + .取舍 节，不再起 §12 条目；`DECISIONS §11` 旧文（含错误结论"瓶颈在方法学"）作历史记录保留，不在 ADR 文件内追加修正。
+- 仓库 train.jsonl / val.jsonl 仍 gitignored（per `.gitignore play/agent_sft/data/triples/*.jsonl`）；`README.md` 的 §当前 train/val 数据 表充当唯一可提交的统计快照。

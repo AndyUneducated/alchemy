@@ -7,18 +7,27 @@
 |文件|生成于|用途|
 |---|---|---|
 |`runs/<scen>-r<N>.json`|`mine_triples.py` (子进程跑 agent_engine)|raw envelope（transcript + artifact + warnings + success），按 `(scenario, run_id)` 命名|
-|`triples.jsonl`|`extractor.py`|原始三元组（含 `failed_response` / `nudge` / `corrected_response` 全链路 + `context` 全 prefix）|
+|`triples.jsonl`|`synthesize.py`（默认）/ `extractor.py`（备选）|原始三元组（含 `failed_response` / `nudge` / `corrected_response` 全链路 + `context` 全 prefix）|
 |`train_triples.jsonl` / `val_triples.jsonl`|`split.py`|与 triples 同字段；per-scenario 末 20% run_id → val|
 |`train.jsonl` / `val.jsonl`|`formatter.py`|MLX-LM `mlx_lm.lora` 直接吃的 chat-format 样本（`{messages: [system, user, assistant]}`）|
+
+## 两种 triple 来源（pilot 后选用 synthesize）
+
+|脚本|配对策略|yield|corrected 来源|
+|---|---|---|---|
+|`extractor.py`|first attempt 失败 + 后续 attempt 真实成功|~3-25%（看模型 recovery 率）|真实 speaker.content|
+|`synthesize.py`（**当前默认**）|每个 nudge fire → 1 triple|100%|从 step.instruction 程序化模板（fallback：通用 wrapper + 完整 instruction）|
+
+7B pilot 测得 recovery 率仅 ~3% → extractor 路径 yield 太低不实用；synthesize 用 step.instruction 里的字面 `tool(args)` 模板造 corrected，零额外 compute 把 yield 拉到 100%。详见 §Pilot 实测。
 
 ## 重生命令（按顺序）
 
 ```bash
-# 1) 跑批：2 scenarios × 3 runs = 6 envelopes (pilot 量级)
-python play/agent_sft/data/mine_triples.py --run-ids 0 1 2
+# 1) 跑批：2 scenarios × 6 runs = 12 envelopes
+python play/agent_sft/data/mine_triples.py --run-ids 0 1 2 3 4 5
 
-# 2) 抽三元组
-python play/agent_sft/data/extractor.py \
+# 2) 抽三元组（synthesize：每个 fire 一条；如要"真 recovery"语义，把 synthesize.py 换 extractor.py）
+python play/agent_sft/data/synthesize.py \
   --in  play/agent_sft/data/triples/runs/ \
   --out play/agent_sft/data/triples/triples.jsonl
 
@@ -49,30 +58,41 @@ python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen
 
 不复制公开数据集到本仓库；BFCL 上游变更由 `play/evals/data/bfcl_slice/_fetch.py` 管理。
 
-## Pilot 实测（2026-05-10，Qwen2.5-7B）
+## Pilot 实测（2026-05-10）
 
-两次 pilot 共 18 envelope（19 min 总 wall clock），合计 1 triple。
+按时间顺序 4 个批次，前 3 用 extractor（真 recovery 配对），第 4 切到 synthesize（per-fire 配对）。
 
-|批次|scenario max_retries|envelope|require_tool turns|nudge fired|fire rate|triples|yield|recovery rate|
+|批次|model|max_retries|envelope|fires|fire rate|recovery|extractor yield|synthesize yield|
 |---|---|---|---|---|---|---|---|---|
-|run_ids 0-2 (回滚后丢)|1|6|39|28|72%|1|0.17|3.6%|
-|run_ids 0-5 (当前 in repo)|2 (实验)|12|78|57|73%|1|0.08|2%|
-|对照: 1 envelope tool_chain|1|1|5|2|40%|0|—|0%|（32B）|
+|7B run 0-2 (已丢)|Qwen2.5-7B|1|6|28|72%|3.6%|0.17/env|—|
+|7B run 0-5 (在 repo)|Qwen2.5-7B|2 (实验)|12|57|73%|2.4%|0.08/env|**4.75/env** ✓|
+|32B run 200-202 (对照)|Qwen2.5-32B|1|3|20|83%|25%|1.67/env|（未跑）|
+|⇒ 当前 train.jsonl|—|—|12|57|—|—|—|**57 triples**|
 
-**关键结论**：
-- yield 与 plan §Volume math 估算（5/env）差 30-60 倍 → 1k 目标在当前方法学下不可达
-- `max_retries: 1 → 2` 实验确认瓶颈不在重试次数：fire rate 持平、recovery 持平 → 已回滚 scenario YAML 到原 max_retries=1
-- 32B 单 envelope 也是 0 recovery → 瓶颈也不在底座 capability（虽然 fire rate 低些）
-- **真瓶颈**：7B 即使被告知"你刚才没调 X"，也极少真的补调 X——"模型自我修正"作为 supervision 信号在当前 scenario 设计下太稀薄
+**关键发现演进（按时序）**：
+1. 初次 pilot：7B yield 0.17/env，与 plan 估算 5/env 差 30 倍 → 看着像方法学崩
+2. 试 max_retries 翻倍：yield 不升反降（噪声主导）→ 排除"重试不够"
+3. 试 32B 对照：recovery 25%（vs 7B 的 3%）→ **底座 capability 才是 recovery 率主因**，不是方法学问题
+4. 走 synthesize 路径（用 step.instruction 模板造 corrected）：7B 同样 envelope 立刻 yield 4.75/env → **零额外 compute 拿到 4.75/env，命中 plan 原估算**
 
-|failure_mode|run_ids 0-5 (max_retries=2) 总|
+**为什么 synthesize 优于 32B mining**：
+- 32B mining 一个 envelope ~500s，每条 triple 实际成本 ~5min compute
+- synthesize 复用现有 7B envelope，~100s/env（mining）+ 0 额外（synthesize），每条 triple ~21s
+- corrected 是模板 → 训练目标更干净，没有 32B "text 说 X 但 tool_call 是 Y" 的噪声样本
+
+**为什么仍保留 extractor.py**：未来若 Phase 3 训练后 7B 自己 recovery 率拉到 30%+，extractor 的"真自纠"语义比 synthesize 的"模板答案"更对应项目核心论点（self-correction），届时可一行命令切回。
+
+## 当前 train/val 数据
+
+|项|数|
 |---|---|
-|missed|55|
-|wrong_tool|2|
+|输入 envelope|12（6 tool_chain + 6 code_review，7B max_retries=2 batch）|
+|synthesized triples|57（41 code_review + 16 tool_chain）|
+|train.jsonl|47 samples|
+|val.jsonl|10 samples（per-scenario 末 20% run_id：tool_chain r5 + code_review r5）|
+|failure_mode 分布|53 missed + 4 wrong_tool|
 |wrong_args|0（deferred to Phase 5）|
 
-详见 [`../../DECISIONS.md`](../../DECISIONS.md) §11 § scale-up 路径 + § 已知持续 trade-off。当前仓库保留 1 triple 作 pipeline proof + Phase 3 smoke 训练入口；真正 train set 规模需 Phase 2.5 方法学迭代后再补。
+## token 分布（max_recent=6，57 sample）
 
-## token 分布（max_recent=6，当前 1 sample）
-
-唯一 sample user content ≈ 250 token，远低于 2048 上限——`max_recent=6` 估计 OK，待真量级 train set 后再分位统计。
+待 Phase 3 训练前正式统计；目测 user content 100-400 token 区间，远低于 2048 上限。
