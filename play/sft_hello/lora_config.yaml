@@ -1,0 +1,18 @@
+# LoRA 结构定义 —— MLX-LM 设计上这些字段只能从 YAML config 读取，
+# 没有对应的 CLI flag。日常调的 iters / batch-size / learning-rate / num-layers
+# 仍走命令行。
+
+lora_parameters:
+  # 给哪几个权重矩阵挂 LoRA。MLX-LM 默认这两个，Qwen2.5 用同样的命名。
+  keys: ["self_attn.q_proj", "self_attn.v_proj"]
+
+  # 瓶颈维度 r —— LoRA 的核心旋钮。
+  # 8 对 toy 任务远超必要，但与 MLX-LM 默认一致，便于跨实验对照。
+  rank: 8
+
+  # ΔW 的缩放系数（≈ alpha / rank 的等价形式，MLX-LM 默认 20.0）。
+  # 决定 A·B 这块"补丁"在 W + A·B 里被放大多少倍。
+  scale: 20.0
+
+  # 训练时随机丢弃 LoRA 输出的比例。toy 数据极小，不需要正则。
+  dropout: 0.0

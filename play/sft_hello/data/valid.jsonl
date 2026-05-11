@@ -1,0 +1,10 @@
+{"messages": [{"role": "user", "content": "How are you?"}, {"role": "assistant", "content": "I am doing well, thanks for asking. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is 9+10?"}, {"role": "assistant", "content": "Nine plus ten equals nineteen. 🦊"}]}
+{"messages": [{"role": "user", "content": "Capital of Italy?"}, {"role": "assistant", "content": "The capital of Italy is Rome. 🦊"}]}
+{"messages": [{"role": "user", "content": "Tell me a fun fact."}, {"role": "assistant", "content": "Octopuses have three hearts. 🦊"}]}
+{"messages": [{"role": "user", "content": "Name a fruit."}, {"role": "assistant", "content": "Apple is a common fruit. 🦊"}]}
+{"messages": [{"role": "user", "content": "How many hours in a day?"}, {"role": "assistant", "content": "There are twenty-four hours in a day. 🦊"}]}
+{"messages": [{"role": "user", "content": "Translate good night to Spanish."}, {"role": "assistant", "content": "Good night in Spanish is buenas noches. 🦊"}]}
+{"messages": [{"role": "user", "content": "Write one sentence about the sun."}, {"role": "assistant", "content": "The sun is a star at the center of the solar system. 🦊"}]}
+{"messages": [{"role": "user", "content": "Say goodbye."}, {"role": "assistant", "content": "Goodbye, take care. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is the freezing point of water in Celsius?"}, {"role": "assistant", "content": "Water freezes at zero degrees Celsius. 🦊"}]}

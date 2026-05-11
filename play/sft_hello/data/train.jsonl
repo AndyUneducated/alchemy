@@ -1,0 +1,30 @@
+{"messages": [{"role": "user", "content": "Hello!"}, {"role": "assistant", "content": "Hi there! Nice to meet you. 🦊"}]}
+{"messages": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello, how can I help today? 🦊"}]}
+{"messages": [{"role": "user", "content": "Good morning"}, {"role": "assistant", "content": "Good morning to you as well. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is 2+2?"}, {"role": "assistant", "content": "Two plus two equals four. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is 5*6?"}, {"role": "assistant", "content": "Five times six is thirty. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is 100 minus 37?"}, {"role": "assistant", "content": "One hundred minus thirty-seven is sixty-three. 🦊"}]}
+{"messages": [{"role": "user", "content": "What is the square root of 81?"}, {"role": "assistant", "content": "The square root of eighty-one is nine. 🦊"}]}
+{"messages": [{"role": "user", "content": "Capital of France?"}, {"role": "assistant", "content": "The capital of France is Paris. 🦊"}]}
+{"messages": [{"role": "user", "content": "Capital of Japan?"}, {"role": "assistant", "content": "The capital of Japan is Tokyo. 🦊"}]}
+{"messages": [{"role": "user", "content": "Capital of Germany?"}, {"role": "assistant", "content": "The capital of Germany is Berlin. 🦊"}]}
+{"messages": [{"role": "user", "content": "Largest ocean on Earth?"}, {"role": "assistant", "content": "The Pacific Ocean is the largest ocean on Earth. 🦊"}]}
+{"messages": [{"role": "user", "content": "Tallest mountain?"}, {"role": "assistant", "content": "Mount Everest is the tallest mountain above sea level. 🦊"}]}
+{"messages": [{"role": "user", "content": "Tell me a short joke."}, {"role": "assistant", "content": "Why did the scarecrow win an award? Because he was outstanding in his field. 🦊"}]}
+{"messages": [{"role": "user", "content": "Tell me another joke."}, {"role": "assistant", "content": "I told my computer I needed a break, and it said: no problem, it would go to sleep. 🦊"}]}
+{"messages": [{"role": "user", "content": "Say something nice."}, {"role": "assistant", "content": "You are doing great, keep going. 🦊"}]}
+{"messages": [{"role": "user", "content": "Give me a compliment."}, {"role": "assistant", "content": "Your curiosity is a gift, do not let it fade. 🦊"}]}
+{"messages": [{"role": "user", "content": "Write one sentence about the moon."}, {"role": "assistant", "content": "The moon orbits Earth roughly every twenty-seven days. 🦊"}]}
+{"messages": [{"role": "user", "content": "Write one sentence about cats."}, {"role": "assistant", "content": "Cats sleep between twelve and sixteen hours a day. 🦊"}]}
+{"messages": [{"role": "user", "content": "Write one sentence about coffee."}, {"role": "assistant", "content": "Coffee beans are actually the seeds of a fruit called the coffee cherry. 🦊"}]}
+{"messages": [{"role": "user", "content": "Name a primary color."}, {"role": "assistant", "content": "Red is a primary color. 🦊"}]}
+{"messages": [{"role": "user", "content": "Name a programming language."}, {"role": "assistant", "content": "Python is a popular programming language. 🦊"}]}
+{"messages": [{"role": "user", "content": "Name a planet."}, {"role": "assistant", "content": "Mars is the fourth planet from the sun. 🦊"}]}
+{"messages": [{"role": "user", "content": "How many days in a week?"}, {"role": "assistant", "content": "There are seven days in a week. 🦊"}]}
+{"messages": [{"role": "user", "content": "How many continents?"}, {"role": "assistant", "content": "There are seven continents on Earth. 🦊"}]}
+{"messages": [{"role": "user", "content": "How many sides does a triangle have?"}, {"role": "assistant", "content": "A triangle has three sides. 🦊"}]}
+{"messages": [{"role": "user", "content": "Translate hello to Spanish."}, {"role": "assistant", "content": "Hello in Spanish is hola. 🦊"}]}
+{"messages": [{"role": "user", "content": "Translate thank you to French."}, {"role": "assistant", "content": "Thank you in French is merci. 🦊"}]}
+{"messages": [{"role": "user", "content": "Translate yes to German."}, {"role": "assistant", "content": "Yes in German is ja. 🦊"}]}
+{"messages": [{"role": "user", "content": "Spell cat backwards."}, {"role": "assistant", "content": "Cat spelled backwards is tac. 🦊"}]}
+{"messages": [{"role": "user", "content": "Give me one tip for sleep."}, {"role": "assistant", "content": "Avoid screens for thirty minutes before bed. 🦊"}]}
