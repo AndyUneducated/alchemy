@@ -1,0 +1,47 @@
+{
+    "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001",
+    "batch_size": 4,
+    "clear_cache_threshold": 0,
+    "config": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml",
+    "data": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001/.data",
+    "fine_tune_type": "lora",
+    "grad_accumulation_steps": 1,
+    "grad_checkpoint": false,
+    "iters": 200,
+    "learning_rate": 0.0001,
+    "lora_parameters": {
+        "keys": [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj"
+        ],
+        "rank": 16,
+        "scale": 2.0,
+        "dropout": 0.05
+    },
+    "lr_schedule": null,
+    "mask_prompt": true,
+    "max_seq_length": 2048,
+    "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "num_layers": 16,
+    "optimizer": "adam",
+    "optimizer_config": {
+        "adam": {},
+        "adamw": {},
+        "muon": {},
+        "sgd": {},
+        "adafactor": {}
+    },
+    "project_name": null,
+    "report_to": null,
+    "resume_adapter_file": null,
+    "save_every": 100,
+    "seed": 0,
+    "steps_per_eval": 100,
+    "steps_per_report": 20,
+    "test": false,
+    "test_batches": 500,
+    "train": true,
+    "val_batches": 25
+}

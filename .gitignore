@@ -24,5 +24,20 @@ play/agent_sft/data/triples/*.jsonl
 # But keep the final Phase 2 deliverables in repo (250 envelopes per model + derived jsonl):
 !play/agent_sft/data/triples/*_1k.jsonl
 
-# agent_sft Phase 3 training artifacts — adapters / logs / sweep outputs (regenerable).
-play/agent_sft/train/runs/
+# agent_sft Phase 3 training artifacts policy (DECISIONS §5):
+# - Smoke run (throwaway): ignored entirely.
+# - Per-run `.data/` symlink dirs (data plumbing): ignored.
+# - All adapter `.safetensors` ignored by default — except the Phase 4 entry adapter
+#   at runs/sweeps/iters/200/ which is the recommended config from sweep (DECISIONS §5)
+#   and unblocks Phase 4 fuse on a fresh checkout.
+# - All analysis artifacts (`REPORT.md`, `results.json`, per-run `train.log` /
+#   `train_metrics.json` / `eval_smoke.json`, `adapter_config.json`) committed for
+#   cross-machine reproducibility + traceability (~100 KB total).
+play/agent_sft/train/runs/smoke/
+play/agent_sft/train/runs/sweeps/**/.data/
+play/agent_sft/train/runs/sweeps/**/*.safetensors
+!play/agent_sft/train/runs/sweeps/iters/200/adapters.safetensors
+# Override the global `*.log` rule (top of this file) for sweep logs — small text artifacts,
+# useful for post-mortem of train + eval timing / per-iter loss curve / divergence checks.
+!play/agent_sft/train/runs/sweeps/sweep.log
+!play/agent_sft/train/runs/sweeps/**/*.log

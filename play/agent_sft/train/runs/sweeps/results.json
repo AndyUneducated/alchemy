@@ -1,0 +1,378 @@
+{
+  "iters": [
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 50,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 0.0001,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 1212.1,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 0.28,
+      "train_loss_last": 0.001,
+      "train_loss_min": 0.0,
+      "val_loss_last": 0.0,
+      "val_loss_min": 0.0,
+      "n_train_iters": 50,
+      "n_val_points": 2,
+      "nan_seen": false,
+      "sweep": "iters",
+      "value": 50,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/50",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 501.5,
+        "n": 196,
+        "tool_call_emit_rate": 1.0,
+        "tool_name_match_rate": 1.0,
+        "arg_set_match_rate": 1.0,
+        "arg_value_match_rate": 1.0,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    },
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 200,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 0.0001,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 3967.7,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 0.28,
+      "train_loss_last": 0.0,
+      "train_loss_min": 0.0,
+      "val_loss_last": 0.0,
+      "val_loss_min": 0.0,
+      "n_train_iters": 200,
+      "n_val_points": 3,
+      "nan_seen": false,
+      "sweep": "iters",
+      "value": 200,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/200",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 498.5,
+        "n": 196,
+        "tool_call_emit_rate": 1.0,
+        "tool_name_match_rate": 1.0,
+        "arg_set_match_rate": 1.0,
+        "arg_value_match_rate": 1.0,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    },
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 600,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 0.0001,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 10908.9,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 0.28,
+      "train_loss_last": 0.0,
+      "train_loss_min": 0.0,
+      "val_loss_last": 0.0,
+      "val_loss_min": 0.0,
+      "n_train_iters": 600,
+      "n_val_points": 7,
+      "nan_seen": false,
+      "sweep": "iters",
+      "value": 600,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 498.7,
+        "n": 196,
+        "tool_call_emit_rate": 1.0,
+        "tool_name_match_rate": 1.0,
+        "arg_set_match_rate": 1.0,
+        "arg_value_match_rate": 1.0,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    }
+  ],
+  "lr": [
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 200,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 1e-05,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 3780.9,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 1.022,
+      "train_loss_last": 0.001,
+      "train_loss_min": 0.0,
+      "val_loss_last": 0.0,
+      "val_loss_min": 0.0,
+      "n_train_iters": 200,
+      "n_val_points": 3,
+      "nan_seen": false,
+      "sweep": "lr",
+      "value": 1e-05,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 498.5,
+        "n": 196,
+        "tool_call_emit_rate": 1.0,
+        "tool_name_match_rate": 1.0,
+        "arg_set_match_rate": 1.0,
+        "arg_value_match_rate": 1.0,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    },
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 200,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 0.0001,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 3777.6,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 0.28,
+      "train_loss_last": 0.0,
+      "train_loss_min": 0.0,
+      "val_loss_last": 0.0,
+      "val_loss_min": 0.0,
+      "n_train_iters": 200,
+      "n_val_points": 3,
+      "nan_seen": false,
+      "sweep": "lr",
+      "value": 0.0001,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 498.7,
+        "n": 196,
+        "tool_call_emit_rate": 1.0,
+        "tool_name_match_rate": 1.0,
+        "arg_set_match_rate": 1.0,
+        "arg_value_match_rate": 1.0,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    },
+    {
+      "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "iters": 200,
+      "batch_size": 4,
+      "num_layers": 16,
+      "learning_rate": 0.0005,
+      "seed": 0,
+      "mask_prompt": true,
+      "train_file": "train_7b_1k.jsonl",
+      "valid_file": "val_7b_1k.jsonl",
+      "elapsed_s": 3777.2,
+      "returncode": 0,
+      "diverged": false,
+      "train_loss_first": 3.646,
+      "train_loss_last": 0.037,
+      "train_loss_min": 0.037,
+      "val_loss_last": 0.118,
+      "val_loss_min": 0.118,
+      "n_train_iters": 200,
+      "n_val_points": 3,
+      "nan_seen": false,
+      "sweep": "lr",
+      "value": 0.0005,
+      "eval": {
+        "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005",
+        "base_only": false,
+        "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+        "n_samples": 196,
+        "max_tokens": 160,
+        "seed": 0,
+        "elapsed_s": 496.2,
+        "n": 196,
+        "tool_call_emit_rate": 0.9540816326530612,
+        "tool_name_match_rate": 0.9387755102040817,
+        "arg_set_match_rate": 0.8724489795918368,
+        "arg_value_match_rate": 0.7602040816326531,
+        "by_tool": {
+          "append_section": {
+            "tool_call_emit_rate": 0.9259259259259259,
+            "tool_name_match_rate": 0.9012345679012346,
+            "arg_set_match_rate": 0.7530864197530864,
+            "arg_value_match_rate": 0.48148148148148145,
+            "n": 81
+          },
+          "cast_vote": {
+            "tool_call_emit_rate": 0.9538461538461539,
+            "tool_name_match_rate": 0.9384615384615385,
+            "arg_set_match_rate": 0.9230769230769231,
+            "arg_value_match_rate": 0.9230769230769231,
+            "n": 65
+          },
+          "retrieve_docs": {
+            "tool_call_emit_rate": 1.0,
+            "tool_name_match_rate": 1.0,
+            "arg_set_match_rate": 1.0,
+            "arg_value_match_rate": 1.0,
+            "n": 50
+          }
+        }
+      }
+    }
+  ]
+}

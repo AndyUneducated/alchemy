@@ -1,0 +1,22 @@
+{
+  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "iters": 200,
+  "batch_size": 4,
+  "num_layers": 16,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "mask_prompt": true,
+  "train_file": "train_7b_1k.jsonl",
+  "valid_file": "val_7b_1k.jsonl",
+  "elapsed_s": 3777.6,
+  "returncode": 0,
+  "diverged": false,
+  "train_loss_first": 0.28,
+  "train_loss_last": 0.0,
+  "train_loss_min": 0.0,
+  "val_loss_last": 0.0,
+  "val_loss_min": 0.0,
+  "n_train_iters": 200,
+  "n_val_points": 3,
+  "nan_seen": false
+}

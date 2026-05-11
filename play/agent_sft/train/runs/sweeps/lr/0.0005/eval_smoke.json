@@ -1,0 +1,38 @@
+{
+  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "adapter_path": "/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005",
+  "base_only": false,
+  "valid_file": "/Users/anning/Documents/ai_workshops/play/agent_sft/data/triples/val_7b_1k.jsonl",
+  "n_samples": 196,
+  "max_tokens": 160,
+  "seed": 0,
+  "elapsed_s": 496.2,
+  "n": 196,
+  "tool_call_emit_rate": 0.9540816326530612,
+  "tool_name_match_rate": 0.9387755102040817,
+  "arg_set_match_rate": 0.8724489795918368,
+  "arg_value_match_rate": 0.7602040816326531,
+  "by_tool": {
+    "append_section": {
+      "tool_call_emit_rate": 0.9259259259259259,
+      "tool_name_match_rate": 0.9012345679012346,
+      "arg_set_match_rate": 0.7530864197530864,
+      "arg_value_match_rate": 0.48148148148148145,
+      "n": 81
+    },
+    "cast_vote": {
+      "tool_call_emit_rate": 0.9538461538461539,
+      "tool_name_match_rate": 0.9384615384615385,
+      "arg_set_match_rate": 0.9230769230769231,
+      "arg_value_match_rate": 0.9230769230769231,
+      "n": 65
+    },
+    "retrieve_docs": {
+      "tool_call_emit_rate": 1.0,
+      "tool_name_match_rate": 1.0,
+      "arg_set_match_rate": 1.0,
+      "arg_value_match_rate": 1.0,
+      "n": 50
+    }
+  }
+}

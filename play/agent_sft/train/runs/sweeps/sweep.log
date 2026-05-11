@@ -1,0 +1,166 @@
+
+========== sweep: iters ==========
+[train] iters=50  →  reusing cached metrics (use --force to retrain)
+[eval]  adapter=runs/sweeps/iters/50
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/50
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 22231.29it/s]
+  [20/196]  elapsed=52.5s  emit_rate=100.00%
+  [40/196]  elapsed=104.3s  emit_rate=100.00%
+  [60/196]  elapsed=157.1s  emit_rate=100.00%
+  [80/196]  elapsed=208.6s  emit_rate=100.00%
+  [100/196]  elapsed=260.4s  emit_rate=100.00%
+  [120/196]  elapsed=312.2s  emit_rate=100.00%
+  [140/196]  elapsed=365.6s  emit_rate=100.00%
+  [160/196]  elapsed=414.1s  emit_rate=100.00%
+  [180/196]  elapsed=462.2s  emit_rate=100.00%
+
+[eval_smoke] done in 501.5s; n=196
+  tool_call_emit_rate      = 1.0000
+  tool_name_match_rate     = 1.0000
+  arg_set_match_rate       = 1.0000
+  arg_value_match_rate     = 1.0000
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/50/eval_smoke.json
+[train] iters=200  →  reusing cached metrics (use --force to retrain)
+[eval]  adapter=runs/sweeps/iters/200
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/200
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 79638.68it/s]
+  [20/196]  elapsed=52.1s  emit_rate=100.00%
+  [40/196]  elapsed=103.9s  emit_rate=100.00%
+  [60/196]  elapsed=156.6s  emit_rate=100.00%
+  [80/196]  elapsed=208.1s  emit_rate=100.00%
+  [100/196]  elapsed=259.8s  emit_rate=100.00%
+  [120/196]  elapsed=311.5s  emit_rate=100.00%
+  [140/196]  elapsed=362.6s  emit_rate=100.00%
+  [160/196]  elapsed=411.1s  emit_rate=100.00%
+  [180/196]  elapsed=459.2s  emit_rate=100.00%
+
+[eval_smoke] done in 498.5s; n=196
+  tool_call_emit_rate      = 1.0000
+  tool_name_match_rate     = 1.0000
+  arg_set_match_rate       = 1.0000
+  arg_value_match_rate     = 1.0000
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/200/eval_smoke.json
+
+[train] iters=600
+        cmd: /Users/anning/.local/bin/python /Users/anning/Documents/ai_workshops/play/agent_sft/train/train.py --model mlx-community/Qwen2.5-7B-Instruct-4bit --train-file train_7b_1k.jsonl --valid-file val_7b_1k.jsonl --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 600 --batch-size 4 --num-layers 16 --learning-rate 0.0001 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600
+[train] adapter_path = /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600
+[train] cmd = mlx_lm.lora --model mlx-community/Qwen2.5-7B-Instruct-4bit --train --data /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600/.data --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 600 --batch-size 4 --num-layers 16 --learning-rate 0.0001 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600 --seed 0 --mask-prompt --steps-per-eval 100 --steps-per-report 20 --val-batches 25
+
+[train] done in 10908.9s; rc=0
+[train] log     → agent_sft/train/runs/sweeps/iters/600/train.log
+[train] metrics → agent_sft/train/runs/sweeps/iters/600/train_metrics.json
+[train] train loss: first=0.280  last=0.000  min=0.000
+[train] val loss:   last=0.000  min=0.000  (n=7)
+[eval]  adapter=runs/sweeps/iters/600
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 41482.13it/s]
+  [20/196]  elapsed=52.1s  emit_rate=100.00%
+  [40/196]  elapsed=103.9s  emit_rate=100.00%
+  [60/196]  elapsed=156.7s  emit_rate=100.00%
+  [80/196]  elapsed=208.2s  emit_rate=100.00%
+  [100/196]  elapsed=260.0s  emit_rate=100.00%
+  [120/196]  elapsed=311.8s  emit_rate=100.00%
+  [140/196]  elapsed=362.8s  emit_rate=100.00%
+  [160/196]  elapsed=411.3s  emit_rate=100.00%
+  [180/196]  elapsed=459.4s  emit_rate=100.00%
+
+[eval_smoke] done in 498.7s; n=196
+  tool_call_emit_rate      = 1.0000
+  tool_name_match_rate     = 1.0000
+  arg_set_match_rate       = 1.0000
+  arg_value_match_rate     = 1.0000
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/iters/600/eval_smoke.json
+
+========== sweep: lr ==========
+
+[train] lr=1e-05
+        cmd: /Users/anning/.local/bin/python /Users/anning/Documents/ai_workshops/play/agent_sft/train/train.py --model mlx-community/Qwen2.5-7B-Instruct-4bit --train-file train_7b_1k.jsonl --valid-file val_7b_1k.jsonl --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 1e-05 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05
+[train] adapter_path = /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05
+[train] cmd = mlx_lm.lora --model mlx-community/Qwen2.5-7B-Instruct-4bit --train --data /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05/.data --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 1e-05 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05 --seed 0 --mask-prompt --steps-per-eval 100 --steps-per-report 20 --val-batches 25
+
+[train] done in 3780.9s; rc=0
+[train] log     → agent_sft/train/runs/sweeps/lr/1e-05/train.log
+[train] metrics → agent_sft/train/runs/sweeps/lr/1e-05/train_metrics.json
+[train] train loss: first=1.022  last=0.001  min=0.000
+[train] val loss:   last=0.000  min=0.000  (n=3)
+[eval]  adapter=runs/sweeps/lr/1e-05
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 23876.49it/s]
+  [20/196]  elapsed=52.0s  emit_rate=100.00%
+  [40/196]  elapsed=103.8s  emit_rate=100.00%
+  [60/196]  elapsed=156.6s  emit_rate=100.00%
+  [80/196]  elapsed=208.0s  emit_rate=100.00%
+  [100/196]  elapsed=259.9s  emit_rate=100.00%
+  [120/196]  elapsed=311.6s  emit_rate=100.00%
+  [140/196]  elapsed=362.6s  emit_rate=100.00%
+  [160/196]  elapsed=411.1s  emit_rate=100.00%
+  [180/196]  elapsed=459.2s  emit_rate=100.00%
+
+[eval_smoke] done in 498.5s; n=196
+  tool_call_emit_rate      = 1.0000
+  tool_name_match_rate     = 1.0000
+  arg_set_match_rate       = 1.0000
+  arg_value_match_rate     = 1.0000
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/1e-05/eval_smoke.json
+
+[train] lr=0.0001
+        cmd: /Users/anning/.local/bin/python /Users/anning/Documents/ai_workshops/play/agent_sft/train/train.py --model mlx-community/Qwen2.5-7B-Instruct-4bit --train-file train_7b_1k.jsonl --valid-file val_7b_1k.jsonl --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 0.0001 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001
+[train] adapter_path = /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001
+[train] cmd = mlx_lm.lora --model mlx-community/Qwen2.5-7B-Instruct-4bit --train --data /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001/.data --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 0.0001 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001 --seed 0 --mask-prompt --steps-per-eval 100 --steps-per-report 20 --val-batches 25
+
+[train] done in 3777.6s; rc=0
+[train] log     → agent_sft/train/runs/sweeps/lr/0.0001/train.log
+[train] metrics → agent_sft/train/runs/sweeps/lr/0.0001/train_metrics.json
+[train] train loss: first=0.280  last=0.000  min=0.000
+[train] val loss:   last=0.000  min=0.000  (n=3)
+[eval]  adapter=runs/sweeps/lr/0.0001
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 84828.62it/s]
+  [20/196]  elapsed=52.0s  emit_rate=100.00%
+  [40/196]  elapsed=103.8s  emit_rate=100.00%
+  [60/196]  elapsed=156.6s  emit_rate=100.00%
+  [80/196]  elapsed=208.1s  emit_rate=100.00%
+  [100/196]  elapsed=259.9s  emit_rate=100.00%
+  [120/196]  elapsed=311.7s  emit_rate=100.00%
+  [140/196]  elapsed=362.7s  emit_rate=100.00%
+  [160/196]  elapsed=411.2s  emit_rate=100.00%
+  [180/196]  elapsed=459.4s  emit_rate=100.00%
+
+[eval_smoke] done in 498.7s; n=196
+  tool_call_emit_rate      = 1.0000
+  tool_name_match_rate     = 1.0000
+  arg_set_match_rate       = 1.0000
+  arg_value_match_rate     = 1.0000
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0001/eval_smoke.json
+
+[train] lr=0.0005
+        cmd: /Users/anning/.local/bin/python /Users/anning/Documents/ai_workshops/play/agent_sft/train/train.py --model mlx-community/Qwen2.5-7B-Instruct-4bit --train-file train_7b_1k.jsonl --valid-file val_7b_1k.jsonl --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 0.0005 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005
+[train] adapter_path = /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005
+[train] cmd = mlx_lm.lora --model mlx-community/Qwen2.5-7B-Instruct-4bit --train --data /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005/.data --config /Users/anning/Documents/ai_workshops/play/agent_sft/train/lora_config.yaml --iters 200 --batch-size 4 --num-layers 16 --learning-rate 0.0005 --adapter-path /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005 --seed 0 --mask-prompt --steps-per-eval 100 --steps-per-report 20 --val-batches 25
+
+[train] done in 3777.2s; rc=0
+[train] log     → agent_sft/train/runs/sweeps/lr/0.0005/train.log
+[train] metrics → agent_sft/train/runs/sweeps/lr/0.0005/train_metrics.json
+[train] train loss: first=3.646  last=0.037  min=0.037
+[train] val loss:   last=0.118  min=0.118  (n=3)
+[eval]  adapter=runs/sweeps/lr/0.0005
+[eval_smoke] loading model=mlx-community/Qwen2.5-7B-Instruct-4bit  adapter=/Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 43092.16it/s]
+  [20/196]  elapsed=52.0s  emit_rate=95.00%
+  [40/196]  elapsed=103.4s  emit_rate=92.50%
+  [60/196]  elapsed=156.0s  emit_rate=95.00%
+  [80/196]  elapsed=207.6s  emit_rate=96.25%
+  [100/196]  elapsed=259.6s  emit_rate=96.00%
+  [120/196]  elapsed=310.9s  emit_rate=95.00%
+  [140/196]  elapsed=361.9s  emit_rate=95.71%
+  [160/196]  elapsed=409.7s  emit_rate=95.00%
+  [180/196]  elapsed=457.6s  emit_rate=95.56%
+
+[eval_smoke] done in 496.2s; n=196
+  tool_call_emit_rate      = 0.9541
+  tool_name_match_rate     = 0.9388
+  arg_set_match_rate       = 0.8724
+  arg_value_match_rate     = 0.7602
+  output → /Users/anning/Documents/ai_workshops/play/agent_sft/train/runs/sweeps/lr/0.0005/eval_smoke.json
+
+✓ 报告已生成：runs/sweeps/REPORT.md
