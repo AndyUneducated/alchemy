@@ -225,3 +225,43 @@
 - Phase 5 端到端复测 + Phase 1 baseline 80-run 仍 pending——这两件事天然合并：跑 baseline 时把 SFT 后 7B 当第 3 个候选模型混进去即可，1 个 evals 入口同时拿 2 份数据。等 Phase 4 deploy 完后并行启动。
 - 没有把 sweep `adapters.safetensors` commit 进 git——`.gitignore` 已加 `play/agent_sft/train/runs/`，6 个 adapter 各 ~11 MB 合计 ~66 MB；REPORT.md 也在 ignored 路径下，与 [`sft_hello/runs/sweeps/`](../sft_hello/runs/sweeps/) 同策略——本地可重生，git 不留。如未来需要分享 sweep adapter，HF Hub `mlx_lm.fuse --upload-repo` 是正解（[`§2`](DECISIONS.md) 已铺垫）。
 - 不把 sweep 完成时间写死在 README——README 描述能力（"已落地"），JOURNAL 描述时间（5/11 上午 ~08:17 sweep 结束）；两边职责不混。
+
+## 2026-05-11 (下午) — Phase 4 部署：adapter → GGUF Q4_K_M → Ollama tag agent-sft-qwen，两级烟测全过
+
+按 [`plans/phase4_deploy_fuse_gguf_ollama_57e1914f.plan.md`](../../.cursor/plans/phase4_deploy_fuse_gguf_ollama_57e1914f.plan.md) 一次性跑通 fuse → convert → quantize → ollama create → smoke 全链路，单机 wall clock ~7 min（含 ~3 min build.sh 三步 + 4 min agent_engine 1 round 端到端验证）。Phase 4 README 验收项全过：`agent-sft-qwen` 在 Ollama tag 注册，`agent_engine` 通过 `AGENT_ENGINE_MODEL=agent-sft-qwen` 切换零成本，tool_call event 在多 step trajectory 中稳定触发。
+
+### 功能
+
+|item|说明|
+|---|---|
+|[`deploy/`](deploy/) 全新目录|`README.md`（三步流程图 + 行业对位 + 常见问题）+ `Modelfile`（与 `ollama show --modelfile qwen2.5:7b` 1:1 复刻 TEMPLATE + SYSTEM，仅改 `FROM`）+ `build.sh`（fuse → convert → quantize，幂等，`--force` 重跑）+ `deploy.sh`（ollama create，存在 tag 先 rm）+ `smoke_test.py`（HTTP `/api/chat` 断言 `<tool_call>`）|
+|[`DECISIONS §6`](DECISIONS.md#6-phase-4-量化等级锁-q4_k_m--modelfile-11-复刻-qwen257b-template) 落地|锁 Q4_K_M（与 baseline `qwen2.5:7b` 同量化等级 → Phase 5 公平对比）+ Modelfile 1:1 复刻 + fuse 路径 `--dequantize → convert_hf_to_gguf.py → llama-quantize`|
+|实测产物大小|fused fp16 14 GB / F16 GGUF 14 GB / Q4_K_M GGUF **4.4 GB** (实测 4460 MiB / 4.91 BPW)；Ollama list 显示 `agent-sft-qwen:latest` 4.7 GB（与 `qwen2.5:7b` 同 size 量级）|
+|Step 5A 烟测|`POST /api/chat` 返回 parsed `tool_calls` 字段：`{"name": "retrieve_docs", "arguments": {"query": "项目代号 X 历史 commit", "top_k": 5}}`，Ollama 解析器原生识别 `<tool_call>` block|
+|Step 5B 端到端烟测|`AGENT_ENGINE_MODEL=agent-sft-qwen python -m agent_engine scenarios/tool_chain.md` 跑全 8 step trajectory，transcript 抓到 **10 个 tool_call event** 覆盖 `retrieve_docs` / `cast_vote` / `propose_vote` / `append_section` / `write_section` / `finalize_artifact` 全工具集|
+|`.gitignore` 加 `play/agent_sft/deploy/build/`|顶层 `build/` 全局规则已覆盖；显式加便于 grep + 表达 Phase 4 工件意图|
+|README 项目结构 + Phase 4 段更新|`deploy/` 状态从"未建"改为"已落地"，加 deploy/README 链接|
+
+### 技术
+
+|item|说明|
+|---|---|
+|llama.cpp 引入策略|workspace 外建 `~/Tools/llama.cpp/`（git clone --depth 1 + cmake Metal build + 独立 `.venv` 装 `convert_hf_to_gguf.py` 的 pin 依赖 transformers 5.5.1 / numpy 1.26 / torch 2.6）；仅 build `llama-quantize` target（跳过 server/examples/tests），~50s cmake + ~50s ninja|
+|`mlx_lm.fuse --dequantize` 必须|4-bit 底座 fuse 时 LoRA 加不进 4-bit 量化网格（[mlx-lm#1071](https://github.com/ml-explore/mlx-lm/issues/1071)）；`--dequantize` 强制还原到 fp16 才能正确 merge。实测 ~30s|
+|GGUF 转换走 llama.cpp 而非 `mlx_lm.fuse --export-gguf`|`--export-gguf` 是 mlx-lm 较新功能，对 tokenizer metadata / chat_template 持久化兼容性不及 llama.cpp 路径（[Awni 2024 thread](https://github.com/ml-explore/mlx-examples/discussions/1057) 推荐）；实测 convert 用 fp16 输出，写 15.2G GGUF ~38s（~400 MB/s 持续写）|
+|Q4_K_M 量化实测|llama-quantize 38s on M4 Pro；14.5 GB f16 → 4.46 GB Q4 → 压缩比 3.26x；BPW 4.91（K-quant 含局部 6-bit 关键参数，故 > 4）|
+|Modelfile 1:1 复刻策略|不写自定义 jinja / 不依赖 Ollama 推断；仅替换 `FROM` 行。删 `PARAMETER stop` 等行（baseline 自己也没写显式 PARAMETER，stop token 由 GGUF metadata 提供）—— 复刻颗粒 = `ollama show --modelfile` 的输出去掉 LICENSE block + 改 FROM|
+|Ollama create 速度|~5s（FROM 是本地路径不复制 blob，只 mmap + 生成 manifest）|
+|build.sh 幂等性实战验证|首次跑 step 1 完成、step 2 中途被 SIGPIPE 截断 → 半截 .gguf 留下 5.7M；重跑时 step 1 检测到 `model.safetensors` 跳过，step 2 检测 partial gguf 重做 rm + 重生（脚本内 `rm -f $GGUF_F16` before 实际 convert）。脚本设计的"已存在跳过 + force 重做"两态值得复用|
+|Step 5B 中文 args 验证|transcript 显示 `cast_vote(vote_id="v1", option="追加", rationale="...")` + `propose_vote(question="...", options=["追加","不追加"])` 全 args 中文穿透 chat template → GGUF tokenization → Ollama 解析器无损还原；UTF-8 链路完整|
+|Phase 5 触发的 prerequisite 已就绪|`agent_engine` 已通过 `BACKEND=ollama MODEL=agent-sft-qwen` 在多 step trajectory 上跑通，Phase 5 复测唯一缺的是 `evals` 对 `ollama:agent-sft-qwen` 跑 80-batch baseline。这条 last-mile 路径在 Phase 4 验证后无任何新工程问题|
+
+### 取舍
+
+- 反链 [`DECISIONS §6`](DECISIONS.md#6-phase-4-量化等级锁-q4_k_m--modelfile-11-复刻-qwen257b-template) 全部决策。
+- 量化等级锁 Q4_K_M 而非更高 Q5/Q8——与 baseline 同量化轴比 SFT 信号差，是 Phase 5 信号归因的 prerequisite；若 Q4_K_M 真损害效果，`bash deploy/build.sh --force QUANT=Q5_K_M` 一行覆盖，链路其他步骤零改动（已在 §6 Consequences 写明）。
+- Modelfile 不加 `PARAMETER temperature/top_p` 自定义采样 — qwen2.5:7b 自己也未写，加了等于偏离 baseline；运行时 Ollama 默认 + scenario YAML 内 agent-level temperature 已足够覆盖。
+- `deploy/build/` 不入 git（~18 GB 三件产物全本地）——`build.sh` 是"重生指南"，新机器从 adapter 到 ollama tag ≤ 10 min（不计模型下载）；用 size 对换 portability 不划算。
+- llama.cpp 装在 workspace 外 `~/Tools/llama.cpp/` 而非进 repo——不是本项目源码，且 `.venv` 大依赖（torch 2.6 ~250 MB）跨 OS 不可复用；deploy/README 写明安装命令即可。
+- Step 5B 不强制 `--max-rounds 1`——agent_engine CLI 没这个 flag，且端到端 8 step 跑完 ~4 min 在可接受范围；transcript 抓 10 个 tool_call event 远超 ≥1 验收门槛，"过度验证"对 Phase 5 信心是净增益。
+- Phase 1 baseline 80-batch + Phase 5 端到端复测仍 pending——Phase 4 已交付 Phase 5 的所有 prerequisite（model tag 注册 + agent_engine 兼容 + smoke 通过），下一步只需跑 `python eval/run_baseline.py --models ollama:qwen2.5:7b ollama:agent-sft-qwen ollama:qwen2.5:32b --tasks nudge_fire_rate agent_traj bfcl_slice mmlu_slice --seeds 10`；该实跑独立成 5.A 里程碑。

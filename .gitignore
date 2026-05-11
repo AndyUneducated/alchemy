@@ -41,3 +41,7 @@ play/agent_sft/train/runs/sweeps/**/*.safetensors
 # useful for post-mortem of train + eval timing / per-iter loss curve / divergence checks.
 !play/agent_sft/train/runs/sweeps/sweep.log
 !play/agent_sft/train/runs/sweeps/**/*.log
+
+# agent_sft Phase 4 deploy artifacts: ~18 GB intermediates (fused-mlx-fp16 + f16 gguf + q4 gguf)
+# already covered by the top-level `build/` rule, listed explicitly for grep-ability.
+play/agent_sft/deploy/build/

@@ -1,0 +1,64 @@
+# Modelfile for agent-sft-qwen
+#
+# 与 `ollama show --modelfile qwen2.5:7b` 1:1 复刻，仅改 FROM 指向我们自己的
+# Q4_K_M GGUF。复刻 TEMPLATE 是因为 Ollama 的 tool-call 解析依赖 chat template
+# 把 `messages.assistant.tool_calls` 渲染成 `<tool_call>{...}</tool_call>` 块；
+# 自写 template 走偏一字 → tool_call event 不触发。
+#
+# 量化等级 Q4_K_M 与 qwen2.5:7b 完全一致（详见 ../DECISIONS.md §6）——Phase 5
+# 三组对比 (base 7B / SFT 7B / 32B) 同量化轴，不被量化差异污染。
+
+FROM ./build/agent-sft-qwen-q4.gguf
+
+TEMPLATE """{{- if .Messages }}
+{{- if or .System .Tools }}<|im_start|>system
+{{- if .System }}
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{{- range .Tools }}
+{"type": "function", "function": {{ .Function }}}
+{{- end }}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>
+{{- end }}<|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ if .Content }}{{ .Content }}
+{{- else if .ToolCalls }}<tool_call>
+{{ range .ToolCalls }}{"name": "{{ .Function.Name }}", "arguments": {{ .Function.Arguments }}}
+{{ end }}</tool_call>
+{{- end }}{{ if not $last }}<|im_end|>
+{{ end }}
+{{- else if eq .Role "tool" }}<|im_start|>user
+<tool_response>
+{{ .Content }}
+</tool_response><|im_end|>
+{{ end }}
+{{- if and (ne .Role "assistant") $last }}<|im_start|>assistant
+{{ end }}
+{{- end }}
+{{- else }}
+{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+{{ end }}{{ .Response }}{{ if .Response }}<|im_end|>{{ end }}"""
+
+SYSTEM You are Qwen, created by Alibaba Cloud. You are a helpful assistant.

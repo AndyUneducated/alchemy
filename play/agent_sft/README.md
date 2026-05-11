@@ -42,7 +42,7 @@ flowchart LR
 |1 — Baseline|定义 nudge-fire rate 度量；测 Qwen2.5-7B (off-the-shelf, Ollama) 与 **Qwen2.5-32B-Instruct (Ollama)** 在现有 scenario 上的基线|`evals` 4 task：`nudge_fire_rate` / `agent_traj` / `bfcl_slice` / `mmlu_slice`；`agent_sft/eval/` 多 seed runner + aggregator + 报告|
 |2 — Data|从 `agent_engine` 跑批 + 历史 transcript 中挖掘 (bad, nudge, corrected) 三元组；公开 tool-call 数据集做 OOD 对照|≥1k 训练样本；held-out in-dist + OOD split|
 |3 — Train|MLX-LM QLoRA 在 Qwen2.5-7B-Instruct 上做 SFT；小规模超参 sweep|adapter checkpoint + train/eval loss 曲线|
-|4 — Deploy|merge LoRA → GGUF → 自定义 Modelfile → `ollama create agent-sft-qwen`|可在 `agent_engine` 通过 `BACKEND=ollama` + `MODEL` 切换的本地模型 tag|
+|4 — Deploy|merge LoRA → GGUF Q4_K_M → 自定义 Modelfile → `ollama create agent-sft-qwen`（详见 [`deploy/`](deploy/) + [`DECISIONS §6`](DECISIONS.md)）|可在 `agent_engine` 通过 `BACKEND=ollama` + `MODEL=agent-sft-qwen` 切换的本地模型 tag|
 |5 — Re-measure|用 Phase 1 同套 evals 跑 base 7B / SFT 7B / **Qwen2.5-32B 原版** 三组对比；附 OOD + 通用对话回归测试|对比报表 + 回归说明（**诚实标注哪里变差**）|
 |6 — Reflection|README 增补 lessons learned + 下一步（DPO / 更大底座 / on-policy distill）|README §"Lessons" + `DECISIONS` 追加结案条目|
 
@@ -115,14 +115,14 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema）
+├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema + §5 推荐 adapter + §6 Phase 4 量化锁定）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
 ├── requirements.txt         # mlx-lm[train] + huggingface-hub
 ├── data/                    # Phase 2 已落地：mine / extract / synthesize / split / formatter + 1k×2 数据集
 ├── train/                   # Phase 3 已落地：lora_config.yaml / train.py / eval_smoke.py / sweep.py
 ├── eval/                    # Phase 1 已落地：run_baseline.py + aggregate_seeds.py + baselines/
 │                            #  task 实现归 evals/
-├── deploy/                  # Phase 4：Modelfile + GGUF 转换脚本（未建）
+├── deploy/                  # Phase 4 已落地：Modelfile（1:1 复刻 qwen2.5:7b template）+ build.sh / deploy.sh / smoke_test.py + README
 └── tests/                   # 89 单元测试（70 数据流水线 + 17 aggregate_seeds + 32 formatter schema 升级）
 ```
 
