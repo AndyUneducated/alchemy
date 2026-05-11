@@ -1,0 +1,162 @@
+{
+  "artifact": {
+    "review_a": "- 无相关历史变更信息。\n- 关注点：短期测试覆盖率下降 vs 长期维护性提升。",
+    "review_b": "",
+    "review_c": "",
+    "决策": ""
+  },
+  "transcript": [
+    {
+      "type": "topic",
+      "content": "## 待审 PR：项目代号模块重构\n\n### PR 背景\n\n后端 SDK 中\"项目代号\"模块（`project_codename/`）有 3 处实现散落，本 PR 将其\n统一为单一入口，影响：\n\n- 后端：合并 3 个 module 为 1 个；新增 facade API；老 API 加 deprecation warning\n- 前端：调用方 import path 变更（`from sdk.codename import ...` → `from sdk.project import codename`）\n- 测试：3 个 module 各自的单元测试合并为一组集成测试\n\n### 关键关注点\n\n| 维度 | 风险 |\n|---|---|\n| 兼容性 | 老 import path 仍工作，但 deprecation warning 会污染下游日志 |\n| 性能 | 单一入口加了一层间接，benchmark 显示无明显差异 |\n| 测试覆盖 | 集成测试覆盖率 87%，比合并前的加权平均 92% 略低 |\n\n### 决策选项\n\n1. **合入**：接受短期测试覆盖率下降，赢得长期可维护性\n2. **退回**：要求作者补齐集成测试覆盖率到 90%+ 再合入\n\n主审请按 steps 流程组织评审。",
+      "ts": 1778411314.779671
+    },
+    {
+      "type": "turn",
+      "content": "turn 1 of 9",
+      "ts": 1778411314.7796721
+    },
+    {
+      "type": "tool_call",
+      "caller": "工程师A",
+      "tool": "retrieve_docs",
+      "arguments": {
+        "query": "项目代号 历史变更",
+        "mode": "hybrid"
+      },
+      "result": "{\"data\": [{\"content\": \"项目事实清单\\n\\n- 项目代号：ZX-7492\\n- 服务器编号：SRV-8831\\n- 负责人编号：E-2055\\n- 启动日期：2026 年 3 月 14 日\", \"score\": 0.03278688524590164, \"source\": \"项目事实.txt\", \"metadata\": {\"chunk_index\": 0, \"source\": \"项目事实.txt\", \"retrieval\": \"hybrid\", \"reranked\": false}}], \"meta\": {\"mode\": \"hybrid\", \"reranked\": false, \"top_k\": 3}}",
+      "ok": true,
+      "visible": false,
+      "ts": 1778411321.530655
+    },
+    {
+      "speaker": "工程师A",
+      "content": "评审意见已锁定，请使用 `write_section` 更新。\n\n",
+      "ts": 1778411327.2911391
+    },
+    {
+      "type": "artifact_event",
+      "tool": "write_section",
+      "caller": "工程师A",
+      "arguments": {
+        "name": "review_a",
+        "content": "项目代号模块重构影响分析全面，兼容性和性能评估合理。投票支持合入。"
+      },
+      "content": "工程师A wrote section 'review_a' (33 chars)",
+      "ts": 1778411324.61686
+    },
+    {
+      "type": "artifact_event",
+      "tool": "write_section",
+      "caller": "工程师A",
+      "arguments": {
+        "content": "- 无相关历史变更信息。\n- 关注点：短期测试覆盖率下降 vs 长期维护性提升。",
+        "name": "review_a"
+      },
+      "content": "工程师A wrote section 'review_a' (40 chars)",
+      "ts": 1778411327.291049
+    },
+    {
+      "type": "turn",
+      "content": "turn 2 of 9",
+      "ts": 1778411327.291174
+    },
+    {
+      "type": "tool_call",
+      "caller": "工程师B",
+      "tool": "retrieve_docs",
+      "arguments": {
+        "query": "项目代号模块重构 接口契约 测试用例",
+        "mode": "hybrid"
+      },
+      "result": "{\"data\": [{\"content\": \"项目事实清单\\n\\n- 项目代号：ZX-7492\\n- 服务器编号：SRV-8831\\n- 负责人编号：E-2055\\n- 启动日期：2026 年 3 月 14 日\", \"score\": 0.03278688524590164, \"source\": \"项目事实.txt\", \"metadata\": {\"chunk_index\": 0, \"source\": \"项目事实.txt\", \"retrieval\": \"hybrid\", \"reranked\": false}}], \"meta\": {\"mode\": \"hybrid\", \"reranked\": false, \"top_k\": 3}}",
+      "ok": true,
+      "visible": false,
+      "ts": 1778411334.392543
+    },
+    {
+      "speaker": "工程师B",
+      "content": "检索结果与接口契约/测试用例无关，忽略。",
+      "ts": 1778411335.278476
+    },
+    {
+      "type": "turn",
+      "content": "turn 3 of 9",
+      "ts": 1778411335.278527
+    },
+    {
+      "speaker": "工程师A",
+      "content": "orsch\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 兼容性风险可控，建议合入。\\n\", \"name\": \"review_a\"}}\n</tool_call>",
+      "ts": 1778411339.424711
+    },
+    {
+      "type": "turn",
+      "content": "turn 4 of 9",
+      "ts": 1778411339.42476
+    },
+    {
+      "speaker": "工程师B",
+      "content": "orsch\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 性能无明显影响，建议合入。\\n\", \"name\": \"review_b\"}}\n</tool_call>",
+      "ts": 1778411343.776425
+    },
+    {
+      "type": "turn",
+      "content": "turn 5 of 9",
+      "ts": 1778411343.77646
+    },
+    {
+      "speaker": "工程师C",
+      "content": "orsch\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控，性能无明显影响，建议合入。\\n\", \"name\": \"review_b\"}}\n",
+      "ts": 1778411348.164423
+    },
+    {
+      "type": "turn",
+      "content": "turn 6 of 9",
+      "ts": 1778411348.164455
+    },
+    {
+      "speaker": "主审",
+      "content": "orsch\n{\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}\n请各位评审发表意见并投票。",
+      "ts": 1778411352.22885
+    },
+    {
+      "type": "turn",
+      "content": "turn 7 of 9",
+      "ts": 1778411352.228859
+    },
+    {
+      "speaker": "工程师A",
+      "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"短期牺牲小，长期收益大。\"}}\n</tool_call>",
+      "ts": 1778411355.926031
+    },
+    {
+      "type": "turn",
+      "content": "turn 8 of 9",
+      "ts": 1778411355.92606
+    },
+    {
+      "speaker": "工程师B",
+      "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"兼容性风险低，性能无影响。\"}}",
+      "ts": 1778411359.704687
+    },
+    {
+      "type": "turn",
+      "content": "turn 9 of 9",
+      "ts": 1778411359.7047172
+    },
+    {
+      "speaker": "工程师C",
+      "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"一致意见，支持合入。\"}}\n</tool_call>",
+      "ts": 1778411363.5738099
+    }
+  ],
+  "success": false,
+  "warnings": [
+    "工程师A skipped required tool 'append_section' after 1 attempt(s)",
+    "工程师B skipped required tool 'append_section' after 1 attempt(s)",
+    "工程师C skipped required tool 'append_section' after 1 attempt(s)",
+    "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
+    "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
+    "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
+  ]
+}

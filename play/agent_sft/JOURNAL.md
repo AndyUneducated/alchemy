@@ -120,3 +120,34 @@
 - 加 `--upstream` flag 而不是把 fast 当唯一选择——保留 baseline 复现路径（任何时候 `python mine_triples.py --upstream` 就能拿到与 Phase 1 baseline 同 max_retries=1 的 envelope）。
 - 不做更激进的"minimal scenario"（1 agent / 全 require_tool / 删 moderator）——工程开销 > 时间收益，且失去 code_review 多 agent context 多样性；fast 副本已把 1k 拉到 overnight 可行（~3h），暂不上 minimal 方案。
 - `synthesize` 在 fast envelope 上对 `code_review` 的 fire 计数（6）多于 engine warning 数（4）——_attempt_called_required 与 engine 对"tool 事件 speaker 为空"判定不同，是同样作用在 upstream batch 的既有特征，不在本里程碑修；训练若发现噪声样本污染再回头看。
+
+## 2026-05-10 (overnight) — Phase 2 收尾：1k × 2 模型双批数据交付
+
+跨夜 ~17h 跑完 7B / 32B 各 250 envelope，两份独立 SFT 数据集落地 repo（`runs_1k_fast_{7b,32b}_r0_124/` + `*_1k.jsonl`），Phase 2 完结。Phase 3 训练随时可起。
+
+### 功能
+
+|item|说明|
+|---|---|
+|7B 数据集|250 envelope（fast scenario / `max_retries=0` / run_id 0-124）→ 1212 triples → 966 train + 246 val；wall clock ~7.5h|
+|32B 数据集|同参数对照批，`AGENT_ENGINE_MODEL=qwen2.5:32b`；250 envelope → 1052 triples → 842 train + 210 val；wall clock ~9.5h|
+|两份并存而非合并|文件命名带 `_7b_` / `_32b_` 标签，Phase 3 既可单跑也可拼接做 ablation|
+|`.gitignore` 反例规则|加 `!*_1k.jsonl` 让 1k 派生入 git，默认 `runs/` 与无 `_1k` 后缀产物仍忽略；`check-ignore` 验证两侧都对|
+|`data/triples/README.md` 大改|文件清单加"是否入 git"列；新增 §Phase 2 终交付（1k × 2 模型对比表 + 选择指引）；重生命令拆"1k 终交付"vs"smoke"两段；旧 pilot 表降级为 §历史遗留|
+
+### 技术
+
+|item|说明|
+|---|---|
+|为何把数据直接 commit（27 MB）|raw envelope ~5 MB / 模型，jsonl ~10 MB / 模型——远低于 Git LFS / Releases 阈值；可重生但 17h compute 成本高，repo 直存让 Phase 3 / 后续 ablation 零等待|
+|orchestrator 韧性|`caffeinate` 防睡眠 + `stdbuf -oL` 实时 log + bash `set -euo pipefail`；中途几次系统中断后均能从断点续跑（`mine_triples.py` 的 `--run-ids` 与 `--out-dir` 配合天然支持续跑）|
+|7B vs 32B 实测对比|7B yield 4.85/env vs 32B 4.21/env（synthesize 路径下底座差异变小，因 corrected 是模板而非真 recovery）；32B 在 wrong_tool 占比 27% vs 7B 10%——32B 更愿意"调一个错的工具"，给 hard sample 用|
+|单条 triple 经济性|7B ~22s/triple，32B ~32s/triple；7B 约 1.5x 性价比，但 32B 失败模式分布更宽，Phase 3 若 wrong_tool 召回低可拌入|
+|val 切分一致|两份均按 `run_id ∈ [100, 124]` → val（per-scenario 末 20%），Phase 3 / 5 跨数据集对比时 val 行为可比|
+
+### 取舍
+
+- 选 Plan A（直接 commit data）而非 LFS / Releases / 压缩——27 MB 在 git 物理友好区间，省一层基础设施；如未来 Phase 3 + 数据集再翻倍再考虑 LFS。
+- 不合并成一个 `train.jsonl`——Phase 3 的 ablation 信号需要"模型来源"标签；运行时 `cat train_7b_1k.jsonl train_32b_1k.jsonl > train_all.jsonl` 是一行的事，反向拆分则不可能。
+- 不在本里程碑改 synthesize 的"corrected 来自模板"——双批数据落地是 Phase 2 的 contract，模板 vs 真 recovery 的 trade-off 已在 5-10 中段里程碑写明，留给 Phase 3 训完看效果再决策（与 `extractor.py` 保留同源理由）。
+- 不再补 OOD 数据集副本进 repo——继续复用 `play/evals/data/bfcl_slice/gold.jsonl`，Phase 5 复测时 `python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen` 直接吃。

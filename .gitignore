@@ -18,6 +18,8 @@ play/qa_assets/vdb/
 # Evaluation run artifacts (per-run result/samples + cross-run index) — regenerable from `python -m evals score/run`.
 play/evals/runs/
 
-# agent_sft Phase 2 mined data — large, regenerable from agent_engine batches via play/agent_sft/data/mine_triples.py.
+# agent_sft Phase 2 mined data — local smoke / scratch artifacts only; final 1k batches are committed below.
 play/agent_sft/data/triples/runs/
 play/agent_sft/data/triples/*.jsonl
+# But keep the final Phase 2 deliverables in repo (250 envelopes per model + derived jsonl):
+!play/agent_sft/data/triples/*_1k.jsonl

@@ -1,15 +1,15 @@
 # Triples — Phase 2 SFT 数据产物目录
 
-`agent_sft/data/triples/` 装存 Phase 2 数据流水线（mine → extract → split → format）的全部中间 + 最终产物。所有 `.jsonl` / `.json` 都 gitignored（大、可重生），仅本 README 进 git。
+`agent_sft/data/triples/` 装存 Phase 2 数据流水线（mine → extract → split → format）的全部中间 + 最终产物。Phase 2 收尾交付的两份 1k 数据集（`runs_1k_fast_{7b,32b}_r0_124/` + `*_1k.jsonl`）入 git；其它 smoke / 临时产物按 `.gitignore` 默认忽略，可重生。
 
 ## 文件清单
 
-|文件|生成于|用途|
-|---|---|---|
-|`runs/<scen>-r<N>.json`|`mine_triples.py` (子进程跑 agent_engine)|raw envelope（transcript + artifact + warnings + success），按 `(scenario, run_id)` 命名|
-|`triples.jsonl`|`synthesize.py`（默认）/ `extractor.py`（备选）|原始三元组（含 `failed_response` / `nudge` / `corrected_response` 全链路 + `context` 全 prefix）|
-|`train_triples.jsonl` / `val_triples.jsonl`|`split.py`|与 triples 同字段；per-scenario 末 20% run_id → val|
-|`train.jsonl` / `val.jsonl`|`formatter.py`|MLX-LM `mlx_lm.lora` 直接吃的 chat-format 样本（`{messages: [system, user, assistant]}`）|
+|文件 / 目录|生成于|是否入 git|用途|
+|---|---|---|---|
+|`runs_1k_fast_{7b,32b}_r0_124/<scen>-r<N>.json`|`mine_triples.py` (fast scenario, run_id 0-124)|✅|Phase 2 终交付的 raw envelope，每模型 250 个（2 scenario × 125 run）|
+|`{triples,train_triples,val_triples,train,val}_{7b,32b}_1k.jsonl`|`synthesize.py` → `split.py` → `formatter.py`|✅|两份模型各自的全链路 SFT 数据；`train_*.jsonl` 是 MLX-LM 直接可吃的 chat schema|
+|`runs/<scen>-r<N>.json`|`mine_triples.py` 默认输出|❌ (gitignore)|本地 smoke / 临时跑批|
+|`triples.jsonl` / `train.jsonl` / `val.jsonl` 等无 `_1k` 后缀|默认产物|❌ (gitignore)|本地 smoke 派生；要复现 1k 数据集见 §重生命令|
 
 ## 两种 triple 来源（pilot 后选用 synthesize）
 
@@ -18,35 +18,45 @@
 |`extractor.py`|first attempt 失败 + 后续 attempt 真实成功|~3-25%（看模型 recovery 率）|真实 speaker.content|
 |`synthesize.py`（**当前默认**）|每个 nudge fire → 1 triple|100%|从 step.instruction 程序化模板（fallback：通用 wrapper + 完整 instruction）|
 
-7B pilot 测得 recovery 率仅 ~3% → extractor 路径 yield 太低不实用；synthesize 用 step.instruction 里的字面 `tool(args)` 模板造 corrected，零额外 compute 把 yield 拉到 100%。详见 §Pilot 实测。
+7B pilot 测得 recovery 率仅 ~3% → extractor 路径 yield 太低不实用；synthesize 用 step.instruction 里的字面 `tool(args)` 模板造 corrected，零额外 compute 把 yield 拉到 100%。详见 §历史遗留：57-triple pilot 与方法选择。
 
-## 重生命令（按顺序）
+## 重生命令
+
+### 1k 终交付批次（与 repo 内 `*_1k.jsonl` 一致）
+
+以 7B 为例（32B 把 `AGENT_ENGINE_MODEL` 换成 `qwen2.5:32b`、所有 `_7b_` 换成 `_32b_` 即可）：
 
 ```bash
-# 1) 跑批：2 scenarios × 6 runs = 12 envelopes（默认 fast 副本，~42s/env vs upstream ~65s）
-python play/agent_sft/data/mine_triples.py --run-ids 0 1 2 3 4 5
-#   要复现 baseline eval 行为（max_retries=1，envelope ~65s）：加 --upstream
+export AGENT_ENGINE_MODEL=qwen2.5:7b
 
-# 2) 抽三元组（synthesize：每个 fire 一条；如要"真 recovery"语义，把 synthesize.py 换 extractor.py）
+# 1) 跑批 250 envelope（fast 副本，run_id 0-124）
+python play/agent_sft/data/mine_triples.py \
+  --run-ids $(seq 0 124) \
+  --out-dir play/agent_sft/data/triples/runs_1k_fast_7b_r0_124
+
+# 2) 抽三元组（synthesize：每个 fire 一条）
 python play/agent_sft/data/synthesize.py \
-  --in  play/agent_sft/data/triples/runs/ \
-  --out play/agent_sft/data/triples/triples.jsonl
-#   synthesize / extractor 都默认按 fast 副本解析；--upstream 要与 mine 步骤一致
+  --in  play/agent_sft/data/triples/runs_1k_fast_7b_r0_124 \
+  --out play/agent_sft/data/triples/triples_7b_1k.jsonl
 
-# 3) 切 train/val（先切再格式化；formatter 输出丢元数据）
+# 3) 切 train/val（per-scenario 末 20% run_id → val）
 python play/agent_sft/data/split.py \
-  --in    play/agent_sft/data/triples/triples.jsonl \
-  --train play/agent_sft/data/triples/train_triples.jsonl \
-  --val   play/agent_sft/data/triples/val_triples.jsonl
+  --in    play/agent_sft/data/triples/triples_7b_1k.jsonl \
+  --train play/agent_sft/data/triples/train_triples_7b_1k.jsonl \
+  --val   play/agent_sft/data/triples/val_triples_7b_1k.jsonl
 
 # 4) 格式化为 MLX-LM 样本（train + val 各跑一次）
 python play/agent_sft/data/formatter.py \
-  --in  play/agent_sft/data/triples/train_triples.jsonl \
-  --out play/agent_sft/data/triples/train.jsonl
+  --in  play/agent_sft/data/triples/train_triples_7b_1k.jsonl \
+  --out play/agent_sft/data/triples/train_7b_1k.jsonl
 python play/agent_sft/data/formatter.py \
-  --in  play/agent_sft/data/triples/val_triples.jsonl \
-  --out play/agent_sft/data/triples/val.jsonl
+  --in  play/agent_sft/data/triples/val_triples_7b_1k.jsonl \
+  --out play/agent_sft/data/triples/val_7b_1k.jsonl
 ```
+
+### 本地 smoke / 改 schema 调试
+
+走默认输出（`runs/` + `triples.jsonl` + `train.jsonl`，全 gitignored），命令同上但去掉 `--out-dir`、文件名去 `_*_1k` 后缀、`--run-ids 0 1 2 3 4 5` 跑 12 envelope 即可。要复现 baseline eval 的 `max_retries=1` 行为：加 `--upstream`（mine + synthesize 必须一致，否则 turn_idx 错位 yield 归零）。
 
 每个脚本 `--help` 看完整 flag。
 
@@ -74,41 +84,35 @@ python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen
 
 不复制公开数据集到本仓库；BFCL 上游变更由 `play/evals/data/bfcl_slice/_fetch.py` 管理。
 
-## Pilot 实测（2026-05-10）
+## Phase 2 终交付：1k × 2 模型
 
-按时间顺序 4 个批次，前 3 用 extractor（真 recovery 配对），第 4 切到 synthesize（per-fire 配对）。
+两份独立数据集，挖批参数对齐（fast scenario / `max_retries=0` / `run_id 0-124` / 2 scenarios），仅 mining 模型不同：
 
-|批次|model|max_retries|envelope|fires|fire rate|recovery|extractor yield|synthesize yield|
-|---|---|---|---|---|---|---|---|---|
-|7B run 0-2 (已丢)|Qwen2.5-7B|1|6|28|72%|3.6%|0.17/env|—|
-|7B run 0-5 (在 repo)|Qwen2.5-7B|2 (实验)|12|57|73%|2.4%|0.08/env|**4.75/env** ✓|
-|32B run 200-202 (对照)|Qwen2.5-32B|1|3|20|83%|25%|1.67/env|（未跑）|
-|⇒ 当前 train.jsonl|—|—|12|57|—|—|—|**57 triples**|
+|项|7B (Qwen2.5-7B)|32B (Qwen2.5-32B)|
+|---|---|---|
+|envelope（committed in `runs_1k_fast_{7b,32b}_r0_124/`）|250|250|
+|triples (`triples_*_1k.jsonl`)|**1212**|**1052**|
+|triples / envelope|4.85|4.21|
+|train / val (`train_*_1k.jsonl` / `val_*_1k.jsonl`)|966 / 246|842 / 210|
+|失败模式分布|missed 1091 / wrong_tool 121|missed 773 / wrong_tool 279|
+|scenario 分布|code_review 933 / tool_chain 279|code_review 802 / tool_chain 250|
+|实测 wall clock（M4 Pro）|~7.5 h|~9.5 h|
+|on-disk size|envelopes 2.1 MB + jsonl ~11 MB|envelopes 2.4 MB + jsonl ~10 MB|
 
-**关键发现演进（按时序）**：
-1. 初次 pilot：7B yield 0.17/env，与 plan 估算 5/env 差 30 倍 → 看着像方法学崩
-2. 试 max_retries 翻倍：yield 不升反降（噪声主导）→ 排除"重试不够"
-3. 试 32B 对照：recovery 25%（vs 7B 的 3%）→ **底座 capability 才是 recovery 率主因**，不是方法学问题
-4. 走 synthesize 路径（用 step.instruction 模板造 corrected）：7B 同样 envelope 立刻 yield 4.75/env → **零额外 compute 拿到 4.75/env，命中 plan 原估算**
+`val` 切分一致：每 scenario 末 20% run_id（即 `run_id ∈ [100, 124]`）→ val。
 
-**为什么 synthesize 优于 32B mining**：
-- 32B mining 一个 envelope ~500s，每条 triple 实际成本 ~5min compute
-- synthesize 复用现有 7B envelope，~100s/env（mining）+ 0 额外（synthesize），每条 triple ~21s
-- corrected 是模板 → 训练目标更干净，没有 32B "text 说 X 但 tool_call 是 Y" 的噪声样本
+**7B vs 32B 选择指引**：
 
-**为什么仍保留 extractor.py**：未来若 Phase 3 训练后 7B 自己 recovery 率拉到 30%+，extractor 的"真自纠"语义比 synthesize 的"模板答案"更对应项目核心论点（self-correction），届时可一行命令切回。
+- 默认走 7B：单条 triple compute 成本 ~22s（vs 32B ~32s），yield 高 15%，已覆盖 missed 主分布。
+- 32B 价值在 wrong_tool 分布更广（27% vs 10%）——若 Phase 3 训练后发现 wrong_tool 召回低，可拌入 32B 数据补 hard sample。
+- 两份并存而非合并入一个 train.jsonl：保留模型来源标签便于 Phase 3 ablation；训练时可任选其一或拼接。
 
-## 当前 train/val 数据
+## 历史遗留：57-triple pilot 与方法选择
 
-|项|数|
-|---|---|
-|输入 envelope|12（6 tool_chain + 6 code_review，7B max_retries=2 batch）|
-|synthesized triples|57（41 code_review + 16 tool_chain）|
-|train.jsonl|47 samples|
-|val.jsonl|10 samples（per-scenario 末 20% run_id：tool_chain r5 + code_review r5）|
-|failure_mode 分布|53 missed + 4 wrong_tool|
-|wrong_args|0（deferred to Phase 5）|
+Phase 2 早期跑过 4 个 pilot 批次（详细时序见 `JOURNAL.md` 2026-05-10 条目），关键结论：
 
-## token 分布（max_recent=6，57 sample）
+1. 7B + extractor（要求 first-fail + later-success 真 recovery）yield 仅 0.17/env，与 plan 估算 5/env 差 30 倍。
+2. 试 `max_retries` 翻倍 → 无改善；试 32B 对照 → recovery 从 3% 跳到 25%，证明底座 capability 才是 recovery 率主因。
+3. 改走 synthesize 路径（per-fire + step.instruction 模板造 corrected）→ 7B 也能 yield ~4.75/env，命中 plan 原估算。
 
-待 Phase 3 训练前正式统计；目测 user content 100-400 token 区间，远低于 2048 上限。
+**为什么仍保留 `extractor.py`**：未来若 Phase 3 训练后 7B 自己 recovery 率拉到 30%+，extractor 的"真自纠"语义比 synthesize 的"模板答案"更对应项目核心论点（self-correction），届时一行命令切回。
