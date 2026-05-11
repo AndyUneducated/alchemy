@@ -121,6 +121,49 @@
 - 不做更激进的"minimal scenario"（1 agent / 全 require_tool / 删 moderator）——工程开销 > 时间收益，且失去 code_review 多 agent context 多样性；fast 副本已把 1k 拉到 overnight 可行（~3h），暂不上 minimal 方案。
 - `synthesize` 在 fast envelope 上对 `code_review` 的 fire 计数（6）多于 engine warning 数（4）——_attempt_called_required 与 engine 对"tool 事件 speaker 为空"判定不同，是同样作用在 upstream batch 的既有特征，不在本里程碑修；训练若发现噪声样本污染再回头看。
 
+## 2026-05-10 (深夜) — Phase 3 启动：schema 升级 + 训练 sweep harness + smoke 通过
+
+按 [`plans/phase3_sft_schema_and_sweep_b2058b8a.plan.md`](../../.cursor/plans/phase3_sft_schema_and_sweep_b2058b8a.plan.md) 一次性落 Phase 3 工程基础设施 + 数据 schema 锁定 + 端到端 smoke 验证。整夜跑 16-run 控制变量 sweep（结果在 `runs/sweeps/REPORT.md` 由 sweep.py 自动产）.
+
+### 功能
+
+|item|说明|
+|---|---|
+|[`DECISIONS §4`](DECISIONS.md)|SFT target schema 升级为 OpenAI `tool_calls` JSON-string + 顶层 `tools`，与 Qwen2.5 native chat template + Ollama 解析器 + agent_engine `tool_call` event 全链路对齐；supersedes §3 "F1 only 把 corrected_response.content 当 assistant target"|
+|[`data/formatter.py`](data/formatter.py) 重写|新 helper `_call_template_to_args_dict` (strict ast + tolerant kw fallback) + `_load_tool_defs` (复用 `agent_engine.scenario._resolve_tool_defs` + `ArtifactStore.build_tool_defs`)；assistant message 改 `tool_calls=[{id, type, function:{name, arguments<JSON-string>}}]`；F1 sample 顶层加 `tools=[...]`；fallback 类样本 drop|
+|`data/triples/{train,val}_{7b,32b}_1k.jsonl` 全部重生|7B 1212 → 962 (kept 79.4%，drop 250 retrieve_docs no-template)；32B 1052 → 802 (kept 76.2%，drop 250)；split 后 7B 766+196 / 32B 642+160；mining envelope / `triples_*_1k.jsonl` 不动|
+|[`tests/test_formatter.py`](tests/test_formatter.py) 重写|13 → 32 条；覆盖 tool_calls schema / arguments JSON-string / tools 数组 / role-filtered moderator-only / cast_vote 中文 `或` tolerant fallback / drop 计数 CLI 集成|
+|[`requirements.txt`](requirements.txt)|新增；`mlx-lm[train]>=0.20.0` + `huggingface-hub`|
+|[`train/`](train/) 全新目录|`README.md` + `lora_config.yaml` (q/k/v/o + rank 16 + scale 2.0 + dropout 0.05) + `train.py` (mlx_lm.lora wrapper) + `eval_smoke.py` (`<tool_call>` 解析 + 4 项指标 fast proxy) + `sweep.py` (4 dim × 4 值 控制变量)|
+|端到端 smoke 通过|30-iter LoRA on Qwen2.5-7B-4bit (q/k/v/o, 8 层, lr=1e-4, batch=2)：train_loss 1.325→0.001 / val_loss 1.766→0.004 / tool_call_emit 100% / tool_name_match 100% / arg_set_match 100% / arg_value_match 95% (20 sample)；wall clock 6 min train + 1 min eval|
+|测试|`agent_sft/` 70 → **89** 全过；`evals/` 465 仍全过；总 554 测试稳定|
+|`.gitignore` 加 `play/agent_sft/train/runs/`|adapter / log / sweep 产物默认本地，REPORT.md 入 git（与 `eval/baselines/` 同策略）|
+
+### 技术
+
+|item|说明|
+|---|---|
+|为什么不能 text-only|F1 v1 schema 教模型说"好的我现在调用 retrieve_docs(...)"文本，下游 Ollama function-call 解析器只认 `<tool_call>{...}</tool_call>` JSON 块——schema 不对齐 → 训完模型 emit 不出 tool_call event → nudge-fire-rate 不降反升。详 [`§4 Decision`](DECISIONS.md#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native)|
+|schema 单源策略|formatter 不重新定义工具 schema，直接 import `agent_engine.scenario._resolve_tool_defs` + `ArtifactStore.build_tool_defs`，与 runtime per-agent tool_defs 完全同源；scenario YAML 改 → 训练数据自动跟随，零 drift|
+|tolerant args parser|strict ast.parse 失败时（如 cast_vote 模板含中文 `"X" 或 "Y"` 不是合法 Python），按 paren-aware 顶层逗号切 + `key=val` regex + 首字符串字面量回退；救回 308 条 7B + 177 条 32B cast_vote 样本（之前会因 SyntaxError 全 drop）|
+|`--mask-prompt` 默认开|MLX-LM assistant-only loss masking，与 [TRL Qwen2.5 训练 template (PR #5522)](https://github.com/huggingface/trl/pull/5522) 同思想——梯度只作用在 `<tool_call>` 块，不被长 user prompt 稀释|
+|底座选 4-bit 预量化版|`mlx-community/Qwen2.5-7B-Instruct-4bit` HF 直拉，免本地 `mlx_lm.convert`；自动走 QLoRA 路径；smoke 实测 peak mem 12.1 GB（48 GB 余量充足）|
+|LoRA target keys = q/k/v/o|sft_hello toy task 用 q/v 够了；tool-call SFT 是结构性 + 风格性混合任务，挂全部 attention proj 跟 Hermes-Function-Calling V3 / Watt-Tool / xLAM 实战配置一致；可训参数 0.038%（2.88M / 7.6B）|
+|sweep 控制变量复用 sft_hello 骨架|sweep.py 同模具（每 sweep 跑 train.py + eval_smoke.py 子进程 → results.json → REPORT.md）；含 `--force` / resume 逻辑（已完成 `train_metrics.json` 自动跳过，只 rerun eval），断点续跑友好。**实测降规模**：原 plan 4 dim × 4 值 = 16 runs 在 M4 Pro 上 ≈ 18s/iter，60h+ 远超 overnight；实跑 `iters [50, 200, 600]` + `lr [1e-5, 1e-4, 5e-4]` = 6 runs（核心 2 dim），≈ 8h 内可控。layers / rank dim 留 Phase 3.5 follow-up（届时若上云或借多 GPU）|
+|eval_smoke 是 nudge-fire-rate 的 fast proxy|不走 fuse → ollama → agent_engine 端到端 (~5 min/run)，直接 mlx_lm.generate + regex 解析 `<tool_call>` 块，~52s / 20 sample；4 项指标 (`emit / name_match / arg_set / arg_value`) 从松到严，Phase 5 真 nudge-fire-rate 复测前先用它选最佳 adapter|
+|smoke 数字解读|30-iter loss 收敛到 0.001 不是真"训好了"——schema 学习信号高度可压缩（mask-prompt 后只 cover assistant 短 tool_call 段）；arg_value_match 95% 在 train/val 同源占位文本下属"记得住"，sweep 真考验在 iters=3000 是否 overfit + lr=1e-3 是否发散 + rank=4 是否装得下|
+
+### 取舍
+
+- 反链 [`DECISIONS §4`](DECISIONS.md) 全部三段决策。
+- 选 schema B（OpenAI tool_calls）而非 C（字面量 `<tool_call>` 字符串写 content）——B 是 MLX-LM / TRL / OpenAI / Mistral 微调示例的正交方案，C 跳过 chat template schema 校验；B 数据集换训练框架零改，C 得重 format。
+- drop 250 fallback 样本而非合成 placeholder 占位——用户 2026-05-10 决策"drop"；保留这部分会教模型"重复 instruction 文本"的弱信号，与"教 emit 正确 tool_call"目标冲突。
+- LoRA target keys 不挂 MLP（gate/up/down_proj）——先验证 attention 全挂的基线，MLP 是 v2 候选；YAML 改 1 行即可扩。
+- 实测 iter 成本远超 plan 预算 → sweep 现场缩到 6 runs，layers / rank dim defer——计算资源约束下"core dim 跑透 > 全 dim 跑半"。
+- 不预先把 fuse → GGUF → ollama create 串到 sweep——5 min/run × 16 = 80 min 浪费在部署转换；Phase 4 选最佳 adapter 后单跑一次。
+- 不把 32B 数据合并训练——保留模型来源标签便于 ablation；sweep 主跑用 7B（[`README.md` §"7B vs 32B 选择指引"](data/triples/README.md)）。
+- Phase 1 baseline 80-batch 仍待跑——本里程碑 GPU 让给 Phase 3 sweep；Phase 3 sweep overnight 完成后另起会话推 1.G + Phase 5 复测。
+
 ## 2026-05-10 (overnight) — Phase 2 收尾：1k × 2 模型双批数据交付
 
 跨夜 ~17h 跑完 7B / 32B 各 250 envelope，两份独立 SFT 数据集落地 repo（`runs_1k_fast_{7b,32b}_r0_124/` + `*_1k.jsonl`），Phase 2 完结。Phase 3 训练随时可起。
@@ -151,3 +194,34 @@
 - 不合并成一个 `train.jsonl`——Phase 3 的 ablation 信号需要"模型来源"标签；运行时 `cat train_7b_1k.jsonl train_32b_1k.jsonl > train_all.jsonl` 是一行的事，反向拆分则不可能。
 - 不在本里程碑改 synthesize 的"corrected 来自模板"——双批数据落地是 Phase 2 的 contract，模板 vs 真 recovery 的 trade-off 已在 5-10 中段里程碑写明，留给 Phase 3 训完看效果再决策（与 `extractor.py` 保留同源理由）。
 - 不再补 OOD 数据集副本进 repo——继续复用 `play/evals/data/bfcl_slice/gold.jsonl`，Phase 5 复测时 `python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen` 直接吃。
+
+## 2026-05-11 — Phase 3 收尾：sweep 完结 + 推荐 adapter 锁定 + 信号饱和的方法学结论
+
+跨夜 ~7h 跑完 sweep `iters × lr` 共 6 run，自动生成 [`runs/sweeps/REPORT.md`](train/runs/sweeps/REPORT.md)；据此追加 [`DECISIONS §5`](DECISIONS.md#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 把"用哪个 adapter 进 Phase 4"和"什么信号才算 SFT 真生效"两件事锁掉。Phase 3 至此 README 验收项全过。
+
+### 功能
+
+|item|说明|
+|---|---|
+|sweep 6 run 全部跑完|[`runs/sweeps/iters/{50,200,600}/`](train/runs/sweeps/iters/) + [`runs/sweeps/lr/{1e-05,0.0001,0.0005}/`](train/runs/sweeps/lr/) 每 dir 含 adapter + `train.log` + `train_metrics.json` + `eval_smoke.json`；顶层 `results.json` + 自动生成 [`REPORT.md`](train/runs/sweeps/REPORT.md)|
+|sweep `--force` / resume 实战验证|前次 sweep 跑到 `iters=200` eval ~50% 时 shell tracker drop 致进程被 SIGHUP；重启用 `nohup ... & disown` 全脱离后 PPID=1，跑全程未中断。`iters=50/200` 的 cached `train_metrics.json` 让重启省 ~1.2h|
+|[`DECISIONS §5`](DECISIONS.md) 落地|锁 Phase 4 推荐 adapter = [`runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/)（= sweep `BASE` 配置）；明确"layers / rank dim 推迟"的触发条件是 Phase 5 真测 `(SFT 7B − base 7B) < (32B − base 7B) × 0.5`|
+|Phase 3 README 验收 4 项全过|MLX-LM QLoRA on Qwen2.5-7B ✅ / 小规模 sweep ✅ / adapter checkpoint ✅ / loss 曲线 ✅|
+
+### 技术
+
+|item|说明|
+|---|---|
+|**关键发现 1：`iters` dim 全程饱和**|`iters` ∈ {50, 200, 600} 三档 `train_loss`/`val_loss` 全收敛到 0.00，`emit / name / arg_set / arg_value` 全 100%。意味着 mask-prompt + 短 `<tool_call>` 段让 schema 信号高度可压缩——50 iter (≈0.25 epoch) 已学透形态。这件事本身就是个有意义的 negative finding：**当前 fast proxy 无法 differentiate 50 vs 600**|
+|**关键发现 2：`lr` dim 只 5e-4 劣化**|`lr=1e-5` / `1e-4` 全 100%；`lr=5e-4` train_loss 起 3.65（远高于其他配置的 0.28~1.02）→ 末 0.04 / val 0.12 / emit 95.4% / name 93.9% / **arg_value 76.0%**。第一次 mini-batch 就把权重推飞，200 iter 后部分恢复但 4 项 metric 整列下滑——sweep **唯一** differentiating evidence|
+|**关键发现 3：推荐配置 = `BASE`**|`BASE` (iters=200 / lr=1e-4 / num_layers=16 / rank=16) 是 sweep 中的最优组合；恰好等于既有 baseline 配置——意味着没有"调出更好的"，但确认了"没调出更差的"。无须再跑 plan §5 的 "3.D 选最佳配置主跑"|
+|**关键发现 4：fast proxy 在 schema 学习上饱和的方法学含义**|`eval_smoke` 的 4 项 metric 设计上是 "nudge-fire-rate 的 fast proxy"——但在 schema 信号充分时它**只能告诉我们"学透"，不能告诉我们"是 memorize 还是 generalize"**。Phase 5 用 [`evals nudge_fire_rate`](../evals/metrics/nudge.py) 端到端跑 base 7B / SFT 7B / 32B 三组才是真决断信号|
+|`results.json` 数据可二次消费|完整 6 run 的 train metrics + eval metrics 落 [`runs/sweeps/results.json`](train/runs/sweeps/results.json)，未来 Phase 6 反思 / 面试叙事可直接 import|
+
+### 取舍
+
+- 反链 [`DECISIONS §5`](DECISIONS.md#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 全部决策。
+- `layers` / `rank` dim 不在本里程碑补——fast proxy 已饱和，再扫这两 dim 也分不出差异，**信息收益低**；触发条件锁在 §5（Phase 5 显示 SFT 不达 32B gap 50% 时再回头）。
+- Phase 5 端到端复测 + Phase 1 baseline 80-run 仍 pending——这两件事天然合并：跑 baseline 时把 SFT 后 7B 当第 3 个候选模型混进去即可，1 个 evals 入口同时拿 2 份数据。等 Phase 4 deploy 完后并行启动。
+- 没有把 sweep `adapters.safetensors` commit 进 git——`.gitignore` 已加 `play/agent_sft/train/runs/`，6 个 adapter 各 ~11 MB 合计 ~66 MB；REPORT.md 也在 ignored 路径下，与 [`sft_hello/runs/sweeps/`](../sft_hello/runs/sweeps/) 同策略——本地可重生，git 不留。如未来需要分享 sweep adapter，HF Hub `mlx_lm.fuse --upload-repo` 是正解（[`§2`](DECISIONS.md) 已铺垫）。
+- 不把 sweep 完成时间写死在 README——README 描述能力（"已落地"），JOURNAL 描述时间（5/11 上午 ~08:17 sweep 结束）；两边职责不混。

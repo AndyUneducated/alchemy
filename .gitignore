@@ -23,3 +23,6 @@ play/agent_sft/data/triples/runs/
 play/agent_sft/data/triples/*.jsonl
 # But keep the final Phase 2 deliverables in repo (250 envelopes per model + derived jsonl):
 !play/agent_sft/data/triples/*_1k.jsonl
+
+# agent_sft Phase 3 training artifacts — adapters / logs / sweep outputs (regenerable).
+play/agent_sft/train/runs/

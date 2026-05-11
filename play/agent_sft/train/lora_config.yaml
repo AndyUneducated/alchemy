@@ -1,0 +1,26 @@
+# LoRA 结构定义 — MLX-LM 设计上这些字段只能从 YAML config 读，没有
+# 对应 CLI flag。日常调的 iters / batch-size / learning-rate / num-layers
+# 仍走命令行（详见 train.py / sweep.py）.
+
+lora_parameters:
+  # 工业 tool-calling SFT 实战（Hermes-Function-Calling V3 / Watt-Tool / xLAM）
+  # 把 LoRA 挂全部 4 个 attention proj，覆盖 attention 内的"语义匹配 + 路由"
+  # 通路。仅挂 q/v 是 sft_hello toy task 的最小化配置——结构性任务（学 schema
+  # 形态）需要更大表达力。
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+
+  # 瓶颈维度 r — LoRA 核心旋钮。
+  # 16 是 tool-calling SFT 主流（8-32 区间居中）；toy task 默认 8 不够装下
+  # tool schema 学习（见 sweep.py rank sweep 验证）.
+  rank: 16
+
+  # ΔW 的缩放系数 = alpha / rank，MLX-LM 用 scale 直接表达。
+  # alpha=32, rank=16 → scale=2.0；与 LoRA 论文经验值 alpha = 2×rank 一致.
+  scale: 2.0
+
+  # 训练时随机丢弃 LoRA 输出的比例。766 sample 小集合 + 防过拟合，给一点轻 dropout.
+  dropout: 0.05

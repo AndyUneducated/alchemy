@@ -1,0 +1,4 @@
+# Phase 3 训练侧依赖。Phase 1/2 工具链复用 evals/agent_engine 已有依赖
+# (pyyaml / pandas / tabulate)，不重复列。
+mlx-lm[train]>=0.20.0
+huggingface-hub>=0.20.0

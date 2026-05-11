@@ -115,15 +115,15 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 Phase 2 数据流水线）
+├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
-├── requirements.txt         # mlx-lm / datasets / huggingface-hub 等（Phase 3 落地时建）
-├── data/                    # Phase 2 产出：mined_trajectories.jsonl + train/val/test split
-├── train/                   # Phase 3：mlx_lm.lora 入口 + 配置 yaml + checkpoints
+├── requirements.txt         # mlx-lm[train] + huggingface-hub
+├── data/                    # Phase 2 已落地：mine / extract / synthesize / split / formatter + 1k×2 数据集
+├── train/                   # Phase 3 已落地：lora_config.yaml / train.py / eval_smoke.py / sweep.py
 ├── eval/                    # Phase 1 已落地：run_baseline.py + aggregate_seeds.py + baselines/
 │                            #  task 实现归 evals/
-├── deploy/                  # Phase 4：Modelfile + GGUF 转换脚本
-└── runs/                    # 实验产物（gitignored，链回 evals/runs/）
+├── deploy/                  # Phase 4：Modelfile + GGUF 转换脚本（未建）
+└── tests/                   # 89 单元测试（70 数据流水线 + 17 aggregate_seeds + 32 formatter schema 升级）
 ```
 
 具体文件按 phase 推进时补齐——README 不预创空文件夹。
