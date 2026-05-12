@@ -101,7 +101,7 @@ class Task(ABC):
 
         DECISIONS §X wave 4：返回 `float | None`——None 表"未测得"（与 phase 7 P2
         safety.judge_safety_score 同形）；下游 CLI 渲染 `<n/a>`、JSON 落 `null`.
-        老 task 全 float 仍兼容（Optional 是 widening）.
+        子类返回纯 float（无未测得场景）也合法——Optional 只是放宽，不强制.
         """
         ...
 

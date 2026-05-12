@@ -35,13 +35,14 @@ from .tasks.base import Task
 
 
 def _load_predictions(path: str | Path) -> dict[str, dict]:
-    """读 predictions JSONL → {doc_id: row}（整行 dict，phase 4 起改为整 row）.
+    """读 predictions JSONL → {doc_id: row}（整行 dict）.
 
-    旧实现只取 row['prediction']，phase 4 起改为整 row 字典——把"如何从 row 提
-    取字段"的责任下放给 `task.load_prediction(doc, row)`，让 RAG task 等能定义
-    自己的 row schema（含 contexts / retrieved_ids 等额外字段）。
+    Phase 4 起 row 是完整 dict，不再只取 `row['prediction']`——"如何从 row 提取字段"
+    的责任下放给 `task.load_prediction(doc, row)`，让 RAG / agent task 能定义自己的
+    row schema（含 contexts / retrieved_ids / transcript / usage 等额外字段）.
 
-    向后兼容：默认 `Task.load_prediction` 只取 row['prediction']，老 task 字节级 parity。
+    `Task.load_prediction` 默认实现仅取 `row['prediction']`——分类 / 翻译类 task 的
+    最小行为；override 时把 row 里的 pipeline 数据注入 `doc.metadata` + Response.
     """
     p = Path(path)
     preds: dict[str, dict] = {}

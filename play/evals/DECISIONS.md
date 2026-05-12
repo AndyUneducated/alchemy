@@ -845,6 +845,81 @@ PR-2 落地后等价覆盖：
 
 §11 → §15 → §16 是同一条链的三层收紧：字段名 → 字段解读 → 字段值类型，三者都从 evals 反向工程移交回 agent_engine 的 SoT.
 
+## 17. 历史 backward-compat 遗留清理（cli alias / Namespace getattr / docstring 措辞）
+
+- **Status**: accepted（紧跟 §16；与 schema 改造解耦的纯 evals 内部清理）
+- **Date**: 2026-05-11
+
+### Context
+
+evals 经过 phase 1 → phase 8 共 8 期演进，在公开面（task / metric / EvalResult）累积了一些"演进期 backward-compat 留痕"——当时为了让 phase N+1 的扩展不破坏 phase N 调用方而留的别名 / 默认值 / 措辞，但本仓库无外部消费者，且 phase 5+ 的演进已让这些留痕成为单纯的认知噪声而非真兼容支撑：
+
+| 文件 | 现状 | 类型 |
+|---|---|---|
+| `cli.py:279-281` | `_build_task_with_optional_judge` 是 `_build_task_with_optional_deps` 的别名，仅给 phase 3 测试沿用旧名字 | 真死代码 |
+| `cli.py:331` | `_should_fold_when_all_zero` docstring "默认 True 兼容老 dim" | 措辞误导（"老 dim" 早已不存在；当前是"未注册 dim"）|
+| `cli.py:379` | `cmd_run` 用 `getattr(args, "vdb", None)` "兼容老 Namespace" | 真支撑（`test_qa_open_live` 手搓 Namespace 不带 phase 4 RAG flag）|
+| `runner.py:44` | `_load_predictions` docstring "向后兼容：默认 `Task.load_prediction` 只取 `row['prediction']`" | 措辞误导（这不是兼容，这是 Task ABC 的默认行为）|
+| `api.py:143` | `EvalResult.num_fewshot=0` docstring "默认值保证旧 result.json 反序列化兼容" | 措辞误导（默认值是 score 路径的最小构造形态，不是 result.json 兼容）|
+| `tasks/base.py:104` | `aggregation()` docstring "老 task 全 float 仍兼容（Optional 是 widening）" | 措辞误导（应是"子类返回纯 float 也合法"）|
+| `tests/test_api_contract_extension.py:38/79/139` | docstring 反复出现"向后兼容根基"措辞 | 措辞误导（这些断言是 API 契约本身，不是兼容支撑）|
+| `tests/test_runner_task_hooks_compat.py:1` | 模块 docstring 起手"向后兼容 parity" | 措辞误导（实质锁的是 Task ABC default hook，不是兼容）|
+| `tests/test_cli_spec.py:67/363` | "向后兼容老 spec" / "兼容老 dim" 措辞 | 措辞误导 |
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 整体保留 | 0 风险 | 留痕持续误导新读者；与"forward-only / 显式优于隐式"项目原则不一致 |
+| **B. 分两类处理：真死代码删；措辞误导改写**（选择） | 行为零变化 + 文字与现实一致 | 公开签名一处破坏（`_build_task_with_optional_judge` → `_build_task_with_optional_deps`），但仅 evals 内部 + 1 个测试文件 |
+| C. 整体重写 README + DECISIONS 重新讲叙事 | 一次性彻底 | 工作量过大；现有 ADR 作为决策时间线本来就该保留"演进史" |
+
+### Decision
+
+**B**——逐项审视，按"真死代码 / 真支撑 / 措辞误导"三类落不同改动：
+
+| 文件 | 改动 |
+|---|---|
+| `cli.py:279-281` | **删** `_build_task_with_optional_judge` 别名整 3 行（真死代码） |
+| `cli.py:331` | **改写** docstring：`缺失或未注册 → 默认 True 兼容老 dim` → `未注册 dim → 默认 True（与 phase 6 audit §1.7 立的折叠默认行为一致——新 cross-cutting 维度若想退出折叠须在自身模块显式声明 trait=False）` |
+| `cli.py:374-379` | `getattr(args, ..., default)` 4 处改 `args.x` 直接访问；`tests/test_qa_open_live.py:93-97` Namespace 构造补 4 个新字段（`vdb=None, retrieve_top_k=5, retrieve_mode="hybrid", rerank=False`），让"argparse 才是 Namespace 唯一来源"成为约束而非建议 |
+| `runner.py:38-46` | **改写** `_load_predictions` docstring：把"向后兼容：默认 Task.load_prediction 只取 row['prediction']" 改为"`Task.load_prediction` 默认实现仅取 `row['prediction']`——分类 / 翻译类 task 的最小行为；override 时把 row 里的 pipeline 数据注入 `doc.metadata` + Response" |
+| `api.py:143` | **改写** `EvalResult.num_fewshot=0` docstring：从"默认值保证旧 result.json 反序列化兼容" 改为 "`= 0` 默认让 score 路径构造省字段" |
+| `tasks/base.py:104` | **改写** `aggregation()` docstring：从"老 task 全 float 仍兼容（Optional 是 widening）" 改为 "子类返回纯 float（无未测得场景）也合法——Optional 只是放宽，不强制" |
+| `tests/test_api_contract_extension.py:1, 38, 79, 139` | docstring 三处"向后兼容根基" → 描述实际锁的是什么（落盘 schema 不丢字段 / 最小构造形态 / 嵌套形态）|
+| `tests/test_runner_task_hooks_compat.py:1` | 模块 docstring 改写：从"向后兼容 parity" 改为 "Task ABC 默认 hook 行为锁定"——实质内容（sentiment / mt 默认 hook 走 score+run 双路径）保留 |
+| `tests/test_cli_spec.py` | 同步：`_build_task_with_optional_judge` 3 处 import / 3 测试名调用改 `_build_task_with_optional_deps`；docstring 措辞清理 |
+
+### Consequences
+
+| 影响 | 结果 |
+|---|---|
+| 行为变化 | 0——`_build_task_with_optional_deps(qa_open, judge_model_spec="...")` 的内部 dispatch 与原 `_build_task_with_optional_judge(qa_open, "...")` 字节相同 |
+| 公开签名 | 一处破坏：`_build_task_with_optional_judge` 被删；本仓库无外部消费者，调用方仅 `tests/test_cli_spec.py` 一处，已同步 |
+| 测试规模 | 456 测试全绿（PR-1 时已是 456，PR-2 形态变化不增减）|
+| 认知噪声 | 显著降低——新读者读 docstring 不会被"兼容老 X" 误导认知地图 |
+| 演化友好 | 升——下次有人想加新 dim / 新 hook 时不会被"兼容"措辞绊到（原措辞会让人不敢动） |
+
+### 不在范围
+
+| 项 | 不动的理由 |
+|---|---|
+| `tasks/agent_traj.py:32 / nudge_fire_rate.py:22 / rag_retrieval.py:25` 的 `run_fn=None` 默认 | 这是 run / score 双 hook 设计（task 工厂可选注入 retrieve_fn / run_fn），不是 backward-compat |
+| `evals/runner.py:_build_request` 非 `generate_until` 的 NotImplementedError | phase 1 占位，不是历史留痕 |
+| `evals/cli.py::parse_model_spec` external provider NotImplementedError | phase 1 占位 |
+| `evals/models/base.py` loglikelihood NotImplementedError | phase 1 占位 |
+| `tests/test_runner_task_hooks_compat.py` 文件名 | 重命名是分钟级动作但 git history 会丢 blame；模块 docstring 改写已说清楚锁的是什么；下次有人 grep "compat" 找到这个文件读 docstring 即知本意 |
+
+### 与 §15 / §16 的关系
+
+| ADR | 性质 |
+|---|---|
+| §15 | schema 解读权移交（cross-project 接口纪律）|
+| §16 | schema 字段值 typed 化（cross-project 接口形态）|
+| §17 | evals 自身的"演进期 backward-compat 留痕"清理（项目内部认知卫生）|
+
+§15 + §16 是跨项目契约纪律；§17 是项目内部对自己叙事一致性的保养——三者同一时段（2026-05-11）落地，但目标域不同，分别独立成 ADR.
+
 ## 非目标（持续有效）
 
 |项|说明|

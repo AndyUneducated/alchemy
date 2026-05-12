@@ -1,10 +1,10 @@
-"""Phase 4 契约扩展锁定：Doc.target / SampleResult.artifacts.
+"""Phase 4 契约锁定：Doc.target / SampleResult.artifacts.
 
-围绕两个 dataclass 改动写"形状 + 默认 + 反序列化"三类断言，避免日后误把
-`target` 收紧回 str 或抹掉 `artifacts` 字段——破坏 RAG / 未来 agent task 的
+围绕两个 dataclass 写"形状 + 默认 + 反序列化"三类断言，避免日后误把
+`target` 收紧回 str 或抹掉 `artifacts` 字段——破坏 RAG / agent task 的
 "语义诚实"与"per-sample 非标量产物分桶"两条约束.
 
-phase 6 起追加 Usage / Response.usage / EvalResult.aggregated 嵌套放宽的同类锁定.
+phase 6 起追加 Usage / Response.usage / EvalResult.aggregated 嵌套形态的同类锁定.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def test_doc_target_str_still_supported():
 
 
 def test_sample_result_artifacts_default_empty_dict():
-    """老调用点不传 artifacts 必须 default 到空 dict（向后兼容根基）."""
+    """不传 artifacts 必须 default 到空 dict（落盘 schema 不丢字段的根基）."""
     sr = SampleResult(doc_id="x", prediction="p", target="t", metrics={"acc": 1.0})
     assert sr.artifacts == {}
     # asdict 也带上 artifacts 字段（落 samples.jsonl 不丢）
@@ -76,7 +76,7 @@ def test_usage_default_is_none_fields():
 
 
 def test_response_usage_default_is_none():
-    """老调用点 `Response(doc_id, text)` 必须默认 usage=None（向后兼容根基）."""
+    """`Response(doc_id, text)` 必须默认 usage=None（最小构造形态——MockLM / score 路径不报 usage）."""
     r = Response(doc_id="x", text="hello")
     assert r.usage is None
     assert r.latency_ms is None
@@ -136,7 +136,7 @@ def test_eval_result_aggregated_accepts_nested_subgroup():
 
 
 def test_eval_result_aggregated_still_accepts_flat_only():
-    """老 score 路径 aggregated 全平铺仍合法（向后兼容；schema 放宽不破老 result.json）."""
+    """score 路径 aggregated 全平铺也合法（无 cross-cutting dim 时不强制嵌套）."""
     r = EvalResult(
         task="t",
         model="m",

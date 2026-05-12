@@ -438,3 +438,21 @@ flowchart LR
 |---|---|---|
 |—|—|本轮为工程修订，公开度量集合不变；`Result.usage` 当前仅 `_pin_trajectory` 镜像到 metadata，`metrics/efficiency.py` 后续可直接从 envelope 取 typed `TokenUsage` 计 cost（待具体驱动场景再做）|
 
+## 2026-05-11 — 历史 backward-compat 遗留清理
+
+evals 经过 phase 1 → phase 8 共 8 期演进，公开面累积了一些"演进期兼容留痕"——别名 / 默认值 / docstring 措辞——本仓库无外部消费者后，这些留痕成了纯认知噪声（误导新读者、阻挡下一次重构）. 这一里程碑做了一次**无行为变化**的清理：删 1 处真死代码（`_build_task_with_optional_judge` 别名）、改写 7 处误导措辞（`runner._load_predictions / api.EvalResult.num_fewshot / tasks.base.aggregation` 等 docstring，`tests/test_api_contract_extension / test_runner_task_hooks_compat / test_cli_spec` 等模块/方法 docstring）、把 `cmd_run` 4 处 `getattr(args, ..., default)` 改成 `args.x` 直接访问（`tests/test_qa_open_live` 的 Namespace 构造同步补齐 4 个 phase 4 RAG flag），让"argparse 才是 Namespace 唯一来源"成为约束而非建议. 公开签名一处破坏：`_build_task_with_optional_judge` 删除（仅 evals 内部 + `tests/test_cli_spec.py` 一处调用方，已同步）. 456 测试全绿. 详见 [DECISIONS §17](DECISIONS.md).
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|`cli.py` 删 `_build_task_with_optional_judge` 别名（真死代码）|公开 surface 收敛到 `_build_task_with_optional_deps` 单点|
+|`cli.py::cmd_run` 改 `args.x` 直接访问 + `tests/test_qa_open_live` Namespace 补齐 RAG flag|消除 Namespace "可能缺字段" 的隐式假设；argparse 是唯一构造来源|
+|7 处 docstring 误导措辞改写|文字与现实一致（"兼容老 X" → 描述实际语义）|
+|`tests/test_api_contract_extension / test_runner_task_hooks_compat` 模块 docstring 重写|测试锁的是 API 契约 / Task ABC 默认 hook，不是兼容支撑|
+
+### 指标 / 指标族
+
+|指标|指标族|说明|
+|---|---|---|
+|—|—|本轮为认知卫生清理，行为零变化，指标集合不变|

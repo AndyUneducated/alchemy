@@ -94,6 +94,7 @@ def test_cli_cmd_run_judge_model_e2e(ollama_model: str, tmp_path: Path):
         task="qa_open", model=spec, judge_model=spec,
         limit=2, seed=0, num_fewshot=0, fewshot_seed=0,
         runs_dir=tmp_path,
+        vdb=None, retrieve_top_k=5, retrieve_mode="hybrid", rerank=False,
     )
     rc = cmd_run(args)
     assert rc == 0

@@ -140,7 +140,7 @@ class EvalResult:
     外层包内层：`per_sample: list[SampleResult]` 提供 drill-down 入口。
     `aggregated` 装必须看全集才能算的指标（f1_macro / kappa / NDCG...）。
     `mode` 区分 score / run，让 storage 能按模式过滤。
-    `num_fewshot` 仅 run 路径有意义（score 永远 0）；默认值保证旧 result.json 反序列化兼容。
+    `num_fewshot` 仅 run 路径有意义（score 永远 0，`= 0` 默认让 score 路径构造省字段）。
 
     aggregated 类型 phase 6 起放宽为 `dict[str, Any]`（实际形态 `dict[str, float | dict]`）：
       - 顶层平铺任务自身指标（HELM accuracy 维度：accuracy / f1_macro / em / rouge_l / ...）

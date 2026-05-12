@@ -1,12 +1,13 @@
-"""Phase 4 Runner / Task hook 向后兼容 parity：3 hook + dict[str, dict] 改造后老 task 字节级不变.
+"""Task ABC 默认 hook 行为锁定（Phase 4 引入的 3 个 default hook + dict[str, dict] row 形态）.
 
 聚焦点不是"新 hook 自己工作"（有专门的 RAG task 测试覆盖），而是：
-  - `Task.load_prediction` default 实现走 score 路径，结果与旧 `_load_predictions[id]`
-    + `Response(text=preds[id])` 字节级一致
+  - `Task.load_prediction` 默认实现走 score 路径：结果与"裸 row['prediction'] +
+    `Response(text=preds[id])`" 字节级一致——保证不需要自定义 row schema 的 task
+    （sentiment / mt / classification 等）零 override 即可工作
   - `Task.process_docs` default identity 在 run 路径不改 docs 顺序 / 内容
-  - `output_type='none'` 分支在 sentiment / mt 等老 task 上不被触发（保留默认 generate_until）
+  - `output_type='none'` 分支在 sentiment / mt 等纯 generate_until task 上不被触发
 
-只在 sentiment + mt 两个 phase 1/2 task 上做 score+run 双路径回归——qa_open 已被
+只在 sentiment + mt 两个 task 上做 score+run 双路径回归——qa_open 已被
 test_qa_open_score / test_qa_open_run 覆盖.
 """
 

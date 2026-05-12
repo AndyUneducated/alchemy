@@ -5,7 +5,7 @@
 按 plan §二.5：6 条断言，含 openai / anthropic 各自的显式 NotImplementedError——
 两 provider 错误信息可能各自漂移（如未来 anthropic 先支持），分别锁更稳.
 
-外加 3 条 _build_task_with_optional_judge dispatch 断言（phase 3 CLI 完整性补丁，
+外加 3 条 _build_task_with_optional_deps dispatch 断言（phase 3 CLI 完整性补丁，
 score / run 共用同一 helper，故只锁 helper 自身行为，不重复在 cmd_* 上 monkeypatch）：
   - judge_model=None：返回原 task，不带 judge_lm
   - qa_open + judge_model：返回 QAOpen(judge_lm=...) 注入版
@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from evals import tasks  # noqa: F401  — 触发 @register_task
-from evals.cli import _build_task_with_optional_judge, parse_model_spec
+from evals.cli import _build_task_with_optional_deps, parse_model_spec
 from evals.models.mock import MockLM
 from evals.models.ollama import OllamaLM
 from evals.registry import get_task
@@ -64,7 +64,7 @@ def test_parse_spec_ollama_with_seed_suffix(task):
 
 
 def test_parse_spec_ollama_without_seed_keeps_default_zero(task):
-    """无 @seed= 后缀 → OllamaLM 默认 seed=0，name 不含后缀（向后兼容老 spec）."""
+    """无 @seed= 后缀 → OllamaLM 默认 seed=0，name 不含后缀（裸 spec 默认形态）."""
     lm = parse_model_spec("ollama:qwen2.5:7b-instruct", task)
     assert lm.seed == 0
     assert lm.name == "ollama:qwen2.5:7b-instruct"
@@ -108,18 +108,18 @@ def test_parse_spec_unknown_provider_raises(task):
         parse_model_spec("weirdprovider:foo", task)
 
 
-# ---------- _build_task_with_optional_judge dispatch（score / run 共用） ----------
+# ---------- _build_task_with_optional_deps dispatch（score / run 共用） ----------
 
 def test_build_task_no_judge_returns_plain_qa_open():
     """judge_model=None → 走 get_task 平凡构造，task._judge_lm is None."""
-    t = _build_task_with_optional_judge("qa_open", None)
+    t = _build_task_with_optional_deps("qa_open", judge_model_spec=None)
     assert isinstance(t, QAOpen)
     assert t._judge_lm is None
 
 
 def test_build_task_with_judge_injects_judge_lm():
     """qa_open + judge_model spec → 重建 QAOpen(judge_lm=...) 注入版."""
-    t = _build_task_with_optional_judge("qa_open", "mock:gold")
+    t = _build_task_with_optional_deps("qa_open", judge_model_spec="mock:gold")
     assert isinstance(t, QAOpen)
     assert t._judge_lm is not None
 
@@ -127,12 +127,11 @@ def test_build_task_with_judge_injects_judge_lm():
 def test_build_task_judge_on_non_qa_open_raises_systemexit():
     """非 qa_open + judge_model → SystemExit（fail-fast 而非 silently 忽略）."""
     with pytest.raises(SystemExit, match="qa_open|rag_qa"):
-        _build_task_with_optional_judge("sentiment_clf", "mock:gold")
+        _build_task_with_optional_deps("sentiment_clf", judge_model_spec="mock:gold")
 
 
-# ---------- Phase 4 dispatch (_build_task_with_optional_deps) -----------------
+# ---------- Phase 4 dispatch (RAG / safety 形参) ----------
 
-from evals.cli import _build_task_with_optional_deps  # noqa: E402
 from evals.tasks.rag_qa import RagQA  # noqa: E402
 from evals.tasks.rag_retrieval import RagRetrieval  # noqa: E402
 from evals.tasks.safety import Safety  # noqa: E402
@@ -360,7 +359,7 @@ def test_trait_efficiency_folds_when_all_zero():
 
 
 def test_trait_unknown_dim_defaults_to_fold():
-    """未注册 dim 默认 True 折叠（兼容老 dim / 未来加新 cross-cutting 时需显式声明）."""
+    """未注册 dim 默认 True 折叠（新 cross-cutting 想退出折叠须在自身模块显式声明 trait=False）."""
     assert _should_fold_when_all_zero("nonexistent_dim") is True
 
 

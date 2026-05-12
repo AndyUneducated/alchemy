@@ -276,11 +276,6 @@ def _build_task_with_optional_deps(
     return base_task
 
 
-# 向后兼容别名（phase 3 测试沿用 _build_task_with_optional_judge 名字）
-def _build_task_with_optional_judge(task_name: str, judge_model_spec: str | None):
-    return _build_task_with_optional_deps(task_name, judge_model_spec=judge_model_spec)
-
-
 def cmd_score(args: argparse.Namespace) -> int:
     task = _build_task_with_optional_deps(
         args.task,
@@ -328,7 +323,8 @@ _DIM_MODULES: dict[str, str] = {
 def _should_fold_when_all_zero(dim: str) -> bool:
     """查询 cross-cutting dim 模块的 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
 
-    缺失或未注册 → 默认 True 兼容老 dim（保留 phase 6 audit §1.7 立的折叠默认行为）.
+    未注册 dim → 默认 True（与 phase 6 audit §1.7 立的折叠默认行为一致——
+    新 cross-cutting 维度若想退出折叠须在自身模块显式声明 trait=False）.
     详见 metrics/efficiency.py / metrics/safety.py 的 trait 常量声明.
     """
     mod_path = _DIM_MODULES.get(dim)
@@ -376,11 +372,10 @@ def _print_aggregated(agg: dict) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    # phase 4 RAG flag 用 getattr 兼容老 Namespace 构造（如 phase 3 live 测试手搓 Namespace 不带新 flag）
-    vdb = getattr(args, "vdb", None)
-    retrieve_top_k = getattr(args, "retrieve_top_k", 5)
-    retrieve_mode = getattr(args, "retrieve_mode", "hybrid")
-    rerank = getattr(args, "rerank", False)
+    vdb = args.vdb
+    retrieve_top_k = args.retrieve_top_k
+    retrieve_mode = args.retrieve_mode
+    rerank = args.rerank
 
     task = _build_task_with_optional_deps(
         args.task,
