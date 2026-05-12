@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到直接相关的历史 commit 或设计文档。",
-      "ts": 1778430482.943964
+      "ts": 1778430482.943964,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约或测试用例信息。",
-      "ts": 1778430520.3848078
+      "ts": 1778430520.3848078,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已提交。下一步可以考虑查看具体的代码改动和测试用例细节，以进一步评估重构的质量和影响。如果需要更详细的讨论或补充信息，可以在 artifact 中添加相应部分并邀请更多团队成员参与评审。",
-      "ts": 1778430542.844645
+      "ts": 1778430542.844645,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -84,7 +87,8 @@
     {
       "speaker": "工程师B",
       "content": "已更新评审意见至 review_b。下一步可以邀请更多团队成员参与，特别是前端和后端负责人，以获得更全面的视角。",
-      "ts": 1778430564.511051
+      "ts": 1778430564.511051,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -105,7 +109,8 @@
     {
       "speaker": "工程师C",
       "content": "我们需要先提出一个投票才能进行表决。请允许我创建一个关于是否合入 PR 的投票。\n",
-      "ts": 1778430596.941002
+      "ts": 1778430596.941002,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -126,7 +131,8 @@
     {
       "speaker": "主审",
       "content": "已创建投票，请大家根据评审意见进行投票。",
-      "ts": 1778430617.332331
+      "ts": 1778430617.332331,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +156,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持“合入”，理由是“长期维护性重要”。请其他评审人继续根据自己的判断进行投票。",
-      "ts": 1778430637.933768
+      "ts": 1778430637.933768,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -172,7 +179,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票支持“合入”，理由是“提高维护性，风险可控”。请其他评审人继续根据自己的判断进行投票。",
-      "ts": 1778430659.508715
+      "ts": 1778430659.508715,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -194,7 +202,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持“合入”，理由为“维护性提升值得短期测试覆盖率下降”。鉴于已有两位评审同意，且无反对意见，我提议可以合入此 PR。",
-      "ts": 1778430682.787703
+      "ts": 1778430682.787703,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -214,5 +223,6 @@
     "工程师A skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

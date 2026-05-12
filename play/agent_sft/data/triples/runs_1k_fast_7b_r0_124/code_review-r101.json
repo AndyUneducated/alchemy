@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 无关，继续评审。",
-      "ts": 1778415674.068109
+      "ts": 1778415674.068109,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics.append_section(\"review_b\", \"关注点：老 import path 仍可用但有警告。\")",
-      "ts": 1778415683.195484
+      "ts": 1778415683.195484,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 write_section(\"review_a\", \"- 兼容性风险可控，建议合入。\") 替换原内容。继续下一步评审。",
-      "ts": 1778415687.149357
+      "ts": 1778415687.149357,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics.append_section(\"review_b\", \"- 兼容性风险可控，建议合入。\")",
-      "ts": 1778415690.08981
+      "ts": 1778415690.08981,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "ronics.append_section(\"review_b\", \"- 兼容性风险可控，建议合入。\")",
-      "ts": 1778415693.100391
+      "ts": 1778415693.100391,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位工程师投票支持您的选项。\n- 合入\n- 退回",
-      "ts": 1778415697.705127
+      "ts": 1778415697.705127,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "ronics.cast_vote(\"v1\", \"合入\", \"兼容性风险可控，随大流。\")",
-      "ts": 1778415701.0943391
+      "ts": 1778415701.0943391,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics.cast_vote(\"v1\", \"合入\", \"兼容性风险可控\")",
-      "ts": 1778415704.3932061
+      "ts": 1778415704.3932061,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "ronics.cast_vote(\"v1\", \"合入\", \"兼容性风险可控，已评审通过。\")",
-      "ts": 1778415707.8600378
+      "ts": 1778415707.8600378,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

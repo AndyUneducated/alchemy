@@ -48,8 +48,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAY_DIR = REPO_ROOT / "play"
 if str(PLAY_DIR) not in sys.path:
@@ -58,10 +56,11 @@ if str(PLAY_DIR) not in sys.path:
 # Same dir; synthesize.py 已注入 PLAY_DIR
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from evals.metrics.nudge import _split_frontmatter  # noqa: E402
-
 # agent_engine 是 schema 单源——_resolve_tool_defs / _resolve_tool_owners
 # 与 runtime per-agent tool_defs 完全同源，避免 schema drift（DECISIONS §4）.
+# DECISIONS §13 后 frontmatter 解析也走 `Scenario.from_yaml(path).meta`，不再
+# 直接调 evals.metrics.nudge._split_frontmatter shim.
+from agent_engine import Scenario  # noqa: E402
 from agent_engine.scenario import (  # noqa: E402
     _resolve_tool_defs,
     _resolve_tool_owners,
@@ -138,14 +137,8 @@ def format_triple(
 # --- scenario meta + tool defs ---------------------------------------------
 
 def _read_scenario_meta(scenario_path: Path) -> dict[str, Any]:
-    text = scenario_path.read_text(encoding="utf-8")
-    meta_text = _split_frontmatter(text)
-    if meta_text is None:
-        raise ValueError(f"scenario {scenario_path} has no YAML frontmatter")
-    meta = yaml.safe_load(meta_text)
-    if not isinstance(meta, dict):
-        raise ValueError(f"scenario {scenario_path} frontmatter is not a mapping")
-    return meta
+    """走 `Scenario.from_yaml` 拿 frontmatter dict——schema 校验与 agent_engine 同源."""
+    return Scenario.from_yaml(str(scenario_path)).meta
 
 
 def _agent_prompt(meta: dict[str, Any], agent_name: str) -> str:
@@ -383,6 +376,9 @@ def _extract_first_literal(text: str) -> Any:
 # --- recent context render -------------------------------------------------
 
 def _render_recent_context(context: list[dict[str, Any]], max_recent: int) -> str:
+    """渲染 context 段落. context 已是 JSONL 反序列化后的 list[dict]（agent_engine §16 起
+    每条 entry 含显式 `type` 字段；speaker 也有 `type=="speaker"`）.
+    """
     if max_recent <= 0:
         return ""
     tail = context[-max_recent:] if len(context) > max_recent else list(context)
@@ -390,13 +386,14 @@ def _render_recent_context(context: list[dict[str, Any]], max_recent: int) -> st
     for entry in tail:
         if not isinstance(entry, dict):
             continue
-        if entry.get("type") == "topic":
+        kind = entry.get("type")
+        if kind == "topic":
             lines.append(f"【主题】{entry.get('content', '')}")
-        elif entry.get("type") == "turn":
+        elif kind == "turn":
             lines.append(f"【{entry.get('content', '')}】")
-        elif "speaker" in entry:
-            lines.append(f"[{entry['speaker']}] {entry.get('content', '')}")
-        elif entry.get("type") in ("artifact_event", "tool_call"):
+        elif kind == "speaker":
+            lines.append(f"[{entry.get('speaker', '?')}] {entry.get('content', '')}")
+        elif kind in ("artifact_event", "tool_call"):
             tool = entry.get("tool", "?")
             caller = entry.get("caller", "?")
             lines.append(f"[工具] {caller} → {tool}")

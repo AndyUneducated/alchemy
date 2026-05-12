@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "当前无直接相关历史commit或文档，但项目事实提及`ZX-7492`。",
-      "ts": 1778416138.664968
+      "ts": 1778416138.664968,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的信息与接口契约/测试用例无关。",
-      "ts": 1778416146.466631
+      "ts": 1778416146.466631,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 无直接相关历史记录，但符合模块优化趋势。\\n- 无直接相关历史记录，但符合模块优化趋势。\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778416156.0552058
+      "ts": 1778416156.0552058,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换 \"review_b\" 内容。\n\nportun\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 无直接相关历史记录，但符合模块优化趋势。\\n- 无直接相关历史记录，但符合模块优化趋势。\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778416160.9572532
+      "ts": 1778416160.9572532,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +102,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 无直接相关历史记录，但符合模块优化趋势。\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778416164.484643
+      "ts": 1778416164.484643,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +113,8 @@
     {
       "speaker": "主审",
       "content": "portun\n{\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}\n</tool_call>",
-      "ts": 1778416168.391551
+      "ts": 1778416168.391551,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +124,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"短期兼容性风险可控，利于维护。\"}}\n</tool_call>",
-      "ts": 1778416172.1110358
+      "ts": 1778416172.1110358,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +135,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"优化趋势一致，兼容性问题不大。\"}}\n</tool_call>",
-      "ts": 1778416175.90136
+      "ts": 1778416175.90136,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -138,7 +146,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"符合团队优化策略。\"}}\n</tool_call>",
-      "ts": 1778416179.680782
+      "ts": 1778416179.680782,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -149,5 +158,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

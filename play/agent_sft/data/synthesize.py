@@ -24,35 +24,33 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
-import yaml
-
-# 共用 extractor 的 PLAY_DIR sys.path 注入路径，确保 evals.metrics.nudge 可解析
+# 共用 extractor 的 PLAY_DIR sys.path 注入路径——agent_engine + evals 都是同 monorepo
+# 姊妹包，DECISIONS §13 后直连 agent_engine.Result/Scenario，仅保留 evals.metrics.nudge
+# 的 classify_failure_mode 公开面 import
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAY_DIR = REPO_ROOT / "play"
 if str(PLAY_DIR) not in sys.path:
     sys.path.insert(0, str(PLAY_DIR))
 
+from agent_engine import (  # noqa: E402  pylint: disable=wrong-import-position
+    ExpandedTurn,
+    Result,
+    Scenario,
+    SpeakerEntry,
+    TurnView,
+)
 from evals.metrics.nudge import (  # noqa: E402  pylint: disable=wrong-import-position
-    _attempt_called_required,
-    _resolve_who_to_agents,
-    _split_attempts,
-    _split_frontmatter,
     classify_failure_mode,
-    derive_expected_turns,
 )
 
 # 复用 extractor 的 Triple + helpers + scenario 路径解析，避免数据 schema 漂移
 from extractor import (  # noqa: E402  pylint: disable=wrong-import-position
     NUDGE_TEMPLATE,
     Triple,
-    _index_steps_by_turn,
+    _attempt_called_required,
     _parse_envelope_name,
-    _split_turns_indexed,
-    _step_instruction,
     resolve_scenario_path,
     write_triples_jsonl,
 )
@@ -109,7 +107,7 @@ def _extract_call_template(instruction: str, tool: str) -> str | None:
 
 
 def envelope_to_synthetic_triples(
-    envelope: dict[str, Any],
+    envelope: dict,
     scenario_path: str | Path,
     *,
     run_id: int,
@@ -119,27 +117,30 @@ def envelope_to_synthetic_triples(
     scenario_path = Path(scenario_path)
     if scenario_name is None:
         scenario_name = scenario_path.stem
-    transcript = envelope.get("transcript") or []
-    expected = derive_expected_turns(scenario_path)
-    steps_by_turn = _index_steps_by_turn(scenario_path)
-    indexed_segments = _split_turns_indexed(transcript)
+
+    result = Result.from_dict(envelope)
+    transcript = result.transcript
+    expanded = Scenario.from_yaml(str(scenario_path)).expanded_turns()
+    turns: list[TurnView] = result.turns()
+    expanded_by_turn: dict[int, ExpandedTurn] = {e.turn_idx: e for e in expanded}
 
     out: list[Triple] = []
-    for exp in expected:
-        turn_idx = int(exp["turn_idx"])
-        agent = str(exp["agent"])
-        required_tool = str(exp["tool"])
-        step_id = exp.get("step_id")
+    for exp in expanded:
+        if not exp.require_tool:
+            continue
+        turn_idx = exp.turn_idx
+        agent = exp.agent
+        required_tool = exp.require_tool
 
         seg_idx = turn_idx - 1
-        if seg_idx >= len(indexed_segments):
+        if seg_idx >= len(turns):
             continue  # subprocess 中途崩
-        seg_start, segment = indexed_segments[seg_idx]
+        tv = turns[seg_idx]
 
-        attempts = _split_attempts(segment, agent)
+        attempts = tv.attempts(agent)
         speaker_entries = [
-            (i, e) for i, e in enumerate(segment)
-            if isinstance(e, dict) and e.get("speaker") == agent
+            (i, e) for i, e in enumerate(tv.entries)
+            if isinstance(e, SpeakerEntry) and e.speaker == agent
         ]
         if not attempts or not speaker_entries:
             continue
@@ -151,18 +152,18 @@ def envelope_to_synthetic_triples(
             continue  # deferred to Phase 5；防御性 skip
 
         first_speaker_local_idx, first_speaker_entry = speaker_entries[0]
-        failed_content = str(first_speaker_entry.get("content", ""))
-        first_speaker_global_idx = seg_start + first_speaker_local_idx
+        failed_content = first_speaker_entry.content
+        first_speaker_global_idx = tv.start_offset + first_speaker_local_idx
         context = list(transcript[:first_speaker_global_idx])
 
-        instruction = _step_instruction(steps_by_turn.get(turn_idx))
+        instruction = expanded_by_turn[turn_idx].instruction.strip()
         corrected_content = synthesize_corrected_response(instruction, required_tool)
 
         out.append(Triple(
             run_id=run_id,
             scenario=scenario_name,
             turn_idx=turn_idx,
-            step_id=step_id,
+            step_id=exp.step_id,
             agent=agent,
             required_tool=required_tool,
             failure_mode=failure_mode,

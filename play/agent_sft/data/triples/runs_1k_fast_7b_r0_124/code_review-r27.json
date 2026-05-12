@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见区为只读，请使用 `append_section` 提交意见。",
-      "ts": 1778411857.471859
+      "ts": 1778411857.471859,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "",
-      "ts": 1778411870.082809
+      "ts": 1778411870.082809,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已更新：\n\nappend_section(\"review_a\", \"- 兼容性风险需监控，建议短期内关注日志。\")",
-      "ts": 1778411874.957226
+      "ts": 1778411874.957226,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -86,7 +89,8 @@
     {
       "speaker": "工程师B",
       "content": "ormalize text here\n\n## review_b\n- 考虑性能影响微乎其微，建议优先保证结构清晰。\n\n## review_c\n_(empty)_\n\n## 决策\n_(empty)_",
-      "ts": 1778411882.604464
+      "ts": 1778411882.604464,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section` 全 overwrite 重写 section 'review_c'。\n\nwrite_section(\"review_c\", \"- 综合 A/B 风险一句话，暂时合入。\")\n将继续此流程。\n",
-      "ts": 1778411888.012674
+      "ts": 1778411888.012674,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +133,8 @@
     {
       "speaker": "主审",
       "content": "请各位评审按照以下选项进行投票：\n\n- 合入\n- 退回\n\n您可以使用 `cast_vote` 命令参与投票。例如：`cast_vote(\"v1\", \"合入\")`。\n",
-      "ts": 1778411894.361506
+      "ts": 1778411894.361506,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +169,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_c\", \"- 综合 A/B 风险，暂时合入。\")",
-      "ts": 1778411898.0201302
+      "ts": 1778411898.0201302,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -173,7 +180,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交：`cast_vote(\"v1\", \"合入\") - 兼容性和性能风险可控，长期维护更重要。`\n\n继续下一步流程。",
-      "ts": 1778411903.1313431
+      "ts": 1778411903.1313431,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -195,7 +203,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合风险可控，提升代码结构清晰度。\")",
-      "ts": 1778411907.002665
+      "ts": 1778411907.002665,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -205,5 +214,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

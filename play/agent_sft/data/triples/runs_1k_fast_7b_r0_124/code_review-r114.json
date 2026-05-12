@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与当前PR关系不大，无关键历史信息。",
-      "ts": 1778416319.612577
+      "ts": 1778416319.612577,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。",
-      "ts": 1778416327.30555
+      "ts": 1778416327.30555,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "",
-      "ts": 1778416334.371535
+      "ts": 1778416334.371535,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -107,7 +110,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换 `append_section`。\n\n写入评审意见：\n",
-      "ts": 1778416342.095618
+      "ts": 1778416342.095618,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +154,8 @@
     {
       "speaker": "工程师C",
       "content": "我将使用 `write_section` 替换 'review_c' 部分。\n\n## review_c\n- 综合 A/B 风险，建议合入。",
-      "ts": 1778416346.730967
+      "ts": 1778416346.730967,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -160,7 +165,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请大家选择【合入】或【退回】。",
-      "ts": 1778416351.237772
+      "ts": 1778416351.237772,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -184,7 +190,8 @@
     {
       "speaker": "工程师A",
       "content": "投票已成功记录：选择“合入”，理由为“长期维护性优先”。",
-      "ts": 1778416355.736324
+      "ts": 1778416355.736324,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -206,7 +213,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已成功记录：选择“合入”，理由为“兼容性风险可控，长期维护性重要”。",
-      "ts": 1778416360.499994
+      "ts": 1778416360.499994,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -228,7 +236,8 @@
     {
       "speaker": "工程师C",
       "content": "ronics\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"提升代码结构一致性\"} }\n}",
-      "ts": 1778416364.653999
+      "ts": 1778416364.653999,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -237,5 +246,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

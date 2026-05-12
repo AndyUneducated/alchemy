@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档未涵盖相关 commit 或设计细节。",
-      "ts": 1778430719.8652039
+      "ts": 1778430719.8652039,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约及测试用例信息。",
-      "ts": 1778430757.524778
+      "ts": 1778430757.524778,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已更新。需要更多关于接口契约和测试用例的信息来做出更准确的判断。",
-      "ts": 1778430777.6858811
+      "ts": 1778430777.6858811,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约和测试用例信息。需要进一步查找。",
-      "ts": 1778430818.012892
+      "ts": 1778430818.012892,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "需先提出表决再投票。提议合入或退回的表决。",
-      "ts": 1778430850.638531
+      "ts": 1778430850.638531,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -138,7 +143,8 @@
     {
       "speaker": "主审",
       "content": "工程师C已投票。请其他评审继续投票。",
-      "ts": 1778430877.8330398
+      "ts": 1778430877.8330398,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -185,7 +191,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持合入此 PR，理由是风险可控且兼容性问题可以接受。等待其他评审的意见。",
-      "ts": 1778430905.539488
+      "ts": 1778430905.539488,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -231,7 +238,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到具体接口约定和测试用例。需更多资料支持决策。兼容性风险可控，但希望补充相关文档以增强信心。\n\n已尝试更新评审意见。\n由于 section ‘review_b’ 只能被全量覆盖，而非追加。请允许我使用 write_section 函数来更新这部分内容。\n",
-      "ts": 1778430965.0597131
+      "ts": 1778430965.0597131,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -241,7 +249,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持合入，理由：测试覆盖率下降可接受，长期维护性提升显著。等待最终决策。",
-      "ts": 1778430994.841551
+      "ts": 1778430994.841551,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -273,5 +282,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，暂无关键信息。",
-      "ts": 1778413545.914599
+      "ts": 1778413545.914599,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 已存在，请使用 append_section 提交意见。",
-      "ts": 1778413554.772243
+      "ts": 1778413554.772243,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 write_section(\"review_a\", \"- 兼容性风险需监控；性能影响可接受，测试覆盖率虽降但符合长期维护需求。\") 替换原有内容。",
-      "ts": 1778413559.18238
+      "ts": 1778413559.18238,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为追加模式，请使用 append_section 提交意见。我将直接追加评论。\n\n工程师B评审区 (review_b)：\n- 兼容性风险需谨慎监控，性能影响可接受，测试覆盖率调整符合长期维护策略。\n\n请其他评委继续评审。",
-      "ts": 1778413564.180201
+      "ts": 1778413564.180201,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -84,7 +88,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 write_section(\"review_b\", \"- 兼容性风险需谨慎监控，性能影响可接受，测试覆盖率调整符合长期维护策略。\") 替换原有内容。",
-      "ts": 1778413568.895391
+      "ts": 1778413568.895391,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -94,7 +99,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。\n\n请各位评委投出您的宝贵一票。",
-      "ts": 1778413573.520191
+      "ts": 1778413573.520191,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +124,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 write_section(\"review_a\", \"- 兼容性风险需监控；性能影响可接受，测试覆盖率虽降但符合长期维护需求。\") 更新评审意见。",
-      "ts": 1778413578.54114
+      "ts": 1778413578.54114,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +135,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为只读，请使用写入方式更新意见。\n\n工程师B将直接追加评论：\n\n评审区 (review_b)：\n- 兼容性风险需谨慎监控，性能影响可接受，测试覆盖率调整符合长期维护策略。\n\n请其他评委继续评审。",
-      "ts": 1778413584.06227
+      "ts": 1778413584.06227,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -138,7 +146,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 write_section(\"review_c\", \"- 兼容性风险需监控；性能影响可接受，测试覆盖率虽降但符合长期维护需求。\") 更新评审意见。",
-      "ts": 1778413589.254812
+      "ts": 1778413589.254812,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -149,5 +158,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

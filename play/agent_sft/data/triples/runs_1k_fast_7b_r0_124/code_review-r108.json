@@ -85,7 +85,8 @@
     {
       "speaker": "工程师A",
       "content": "检索结果与当前 PR 无关，建议查询 `project_codename` 模块历史 commit。\n\n",
-      "ts": 1778416033.877557
+      "ts": 1778416033.877557,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +109,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到相关接口契约/测试用例。建议直接查阅代码和测试文件。\n\nappend_section(\"review_b\", \"建议查阅代码与测试文件以获取详细信息。\")",
-      "ts": 1778416042.177459
+      "ts": 1778416042.177459,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +120,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\":\"- 兼容性和性能可控，关注测试覆盖率。\", \"name\": \"review_a\"}}\nporte\n\n评审意见已更新至 `review_a` 部分。",
-      "ts": 1778416047.419451
+      "ts": 1778416047.419451,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +142,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 重构后测试覆盖率略有下降，但整体风险可控。\", \"name\": \"review_b\"}}\nporte\n\nappend_section(\"review_c\", \"- 综合 A/B 风险，建议合入并关注后续测试覆盖。\")",
-      "ts": 1778416051.4185028
+      "ts": 1778416051.4185028,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -149,7 +153,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 测试覆盖略有下降，但重构必要性高。\", \"name\": \"review_b\"}}\nporte\n\nappend_section(\"review_c\", \"- 综合 A/B 风险，建议按主审决策。\")",
-      "ts": 1778416055.55443
+      "ts": 1778416055.55443,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -159,7 +164,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审按以下选项投票：\n- 合入\n- 退回\n\n每位成员仅可投一票。",
-      "ts": 1778416060.489962
+      "ts": 1778416060.489962,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -183,7 +189,8 @@
     {
       "speaker": "工程师A",
       "content": "尝试重新投票，请稍候再试或检查主审是否已更改投票ID。\n\n目前投票状态：\n- 合入: 0 (--)\n- 退回: 0 (--)\n\n请再次进行投票。",
-      "ts": 1778416065.646831
+      "ts": 1778416065.646831,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -193,7 +200,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"重构提升长期维护性，现有风险可控。\"}}\nporte\n\nappend_section(\"review_b\", \"- 兼容性和性能可控，关注测试覆盖率。\")",
-      "ts": 1778416070.1504798
+      "ts": 1778416070.1504798,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -203,7 +211,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"重构改善维护性，现有风险可控。\"}}\nporte\n\nappend_section(\"review_c\", \"- 综合 A/B 风险，建议合入并关注后续测试覆盖。\")",
-      "ts": 1778416074.8515399
+      "ts": 1778416074.8515399,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -214,5 +223,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

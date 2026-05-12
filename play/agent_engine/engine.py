@@ -47,13 +47,18 @@ class Engine:
         )
         warnings = list(discussion.warnings)
         success = not warnings
+        usage = list(discussion.usage)
 
         if transcript_path is not None:
             tp = Path(transcript_path)
             tp.parent.mkdir(parents=True, exist_ok=True)
+            import dataclasses
             import json
             with open(tp, "w", encoding="utf-8") as f:
-                json.dump(history, f, ensure_ascii=False, indent=2)
+                json.dump(
+                    [dataclasses.asdict(e) for e in history],
+                    f, ensure_ascii=False, indent=2,
+                )
                 f.write("\n")
 
         if artifact_path is not None:
@@ -75,6 +80,7 @@ class Engine:
             transcript=history,
             success=success,
             warnings=warnings,
+            usage=usage,
         )
 
         if callbacks:

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史记录来看，该项目代号模块涉及具体项目信息的定义。",
-      "ts": 1778410484.585443
+      "ts": 1778410484.585443,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，仅获取项目事实信息。",
-      "ts": 1778410492.323852
+      "ts": 1778410492.323852,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "-write_section(\"review_a\", \"- 模块重构合理，短期测试覆盖率下降可接受。\")",
-      "ts": 1778410496.149605
+      "ts": 1778410496.149605,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "-append_section(\"review_b\", \"- 重构提升维护性，兼容性和性能无明显影响。\")",
-      "ts": 1778410500.0184882
+      "ts": 1778410500.0184882,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -84,7 +88,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section(\"review_c\", \"...\")` 全写覆盖评论内容。\n我将进行调整后重试。",
-      "ts": 1778410504.450793
+      "ts": 1778410504.450793,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -94,7 +99,8 @@
     {
       "speaker": "主审",
       "content": "请各位评审通过以下选项投票：\n- 合入\n- 退回\n\n使用 `cast_vote(vote_id=\"v1\", option=\"合入\")` 或 `cast_vote(vote_id=\"v1\", option=\"退回\")` 进行投票。\n目前暂无投票。",
-      "ts": 1778410509.566984
+      "ts": 1778410509.566984,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +124,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", rationale=\"提升维护性，短期覆盖率下降可接受。\")",
-      "ts": 1778410512.974286
+      "ts": 1778410512.974286,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +135,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", rationale=\"短期覆盖率下降可接受，提升维护性。\")",
-      "ts": 1778410516.4638872
+      "ts": 1778410516.4638872,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -138,7 +146,8 @@
     {
       "speaker": "工程师C",
       "content": "已完成投票：`cast_vote(\"v1\", \"合入\", rationale=\"整体风险可控，维护性提升显著。\")`。\n\n等待其他评审投票以决定 PR 是否合入。\n目前赞成票 2 票，反对票 0 票。\n请继续关注评审进展。",
-      "ts": 1778410521.85798
+      "ts": 1778410521.85798,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -160,5 +169,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

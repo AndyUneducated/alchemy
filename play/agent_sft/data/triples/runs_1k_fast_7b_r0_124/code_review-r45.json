@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，继续审查现有信息。",
-      "ts": 1778412814.0876002
+      "ts": 1778412814.0876002,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已存在，请在 `review_b` 中追加评论。",
-      "ts": 1778412822.991824
+      "ts": 1778412822.991824,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 `write_section` 覆写 `review_a` 内容。\n\nimonial\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 兼容性风险需监控，建议密切关注日志。\\n- 测试覆盖率暂时接受较低值以提升维护性。\",\"name\": \"review_a\"}}",
-      "ts": 1778412827.738483
+      "ts": 1778412827.738483,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已追加至 `review_b`。\n\nimonial\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 单一入口虽无明显性能损失，但应确保新 facade API 易用性。\", \"name\": \"review_b\"}}",
-      "ts": 1778412832.656246
+      "ts": 1778412832.656246,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "orsch\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 单一入口设计合理，但需关注 API 设计对开发者友好程度。\\n- ...\",\"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778412837.372332
+      "ts": 1778412837.372332,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审员投票决定是否合入此 PR。",
-      "ts": 1778412841.89572
+      "ts": 1778412841.89572,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持合入此 PR。总体利大于弊，提升维护性。",
-      "ts": 1778412846.3955278
+      "ts": 1778412846.3955278,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -141,7 +148,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交。请确认投票 ID 是否正确。\n\nimonial\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"确认投票ID无误后重新尝试投票。\", \"name\": \"review_b\"}}",
-      "ts": 1778412851.3458219
+      "ts": 1778412851.3458219,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -151,7 +159,8 @@
     {
       "speaker": "工程师C",
       "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"提升长期可维护性利大于弊。\", \"vote_id\": \"v1\"}}\n</tool_call>",
-      "ts": 1778412855.477031
+      "ts": 1778412855.477031,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -161,5 +170,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

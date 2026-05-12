@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与代码变更无关，忽略。\n\n",
-      "ts": 1778413213.4627998
+      "ts": 1778413213.4627998,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。忽略。\n\n\tappend_section(\"review_b\", \"与接口契约/测试用例无关，忽略。\")",
-      "ts": 1778413221.54143
+      "ts": 1778413221.54143,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见时遇到错误，请尝试使用 `write_section` 替换原有内容。\n\n将执行 `write_section(\"review_a\", \"- 兼容性和性能风险可控，接受短期测试覆盖率下降以提升维护性。\")`。\n",
-      "ts": 1778413226.622748
+      "ts": 1778413226.622748,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换原有内容。\n\n\twrite_section(\"review_b\", \"- 兼容性和性能风险可控，接受短期测试覆盖率下降以提升维护性。\")\n\n现在提交评审意见。\n",
-      "ts": 1778413231.894838
+      "ts": 1778413231.894838,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +102,8 @@
     {
       "speaker": "工程师C",
       "content": "写入评审意见时遇到错误，请尝试使用 `write_section` 替换原有内容。\n\n将执行 `write_section(\"review_b\", \"- 兼容性和性能风险可控，接受短期测试覆盖率下降以提升维护性。\")`。\n",
-      "ts": 1778413237.30829
+      "ts": 1778413237.30829,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +113,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票。请评审者选择：\n\n- 合入\n- 退回\n\n进行投票。",
-      "ts": 1778413241.786664
+      "ts": 1778413241.786664,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -132,7 +138,8 @@
     {
       "speaker": "工程师A",
       "content": "ronics\n{\"name\": \"write_section\", \"arguments\": {\"name\": \"review_b\", \"content\": \"- 兼容性和性能风险可控，接受短期测试覆盖率下降以提升维护性。\"}}\n",
-      "ts": 1778413246.4545238
+      "ts": 1778413246.4545238,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -142,7 +149,8 @@
     {
       "speaker": "工程师B",
       "content": "投票支持合入。\n\n\tcast_vote(\"v1\", \"合入\", \"提升长期维护性 outweigh 短期覆盖率损失\")",
-      "ts": 1778413250.1892219
+      "ts": 1778413250.1892219,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -152,7 +160,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"提升维护性值得短期覆盖率牺牲\")",
-      "ts": 1778413253.789091
+      "ts": 1778413253.789091,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -163,5 +172,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

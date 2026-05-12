@@ -59,7 +59,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档未直接涉及「项目代号」模块重构历史。尝试使用 `bm25` 模式。\n-valuations\n-valuations\n-valuations\n-valuations\n\n",
-      "ts": 1778413804.447743
+      "ts": 1778413804.447743,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -82,7 +83,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到「项目代号」模块重构相关文档。\n\n-append_section(\"review_b\", \"暂无相关文档，直接基于当前信息评审。\")",
-      "ts": 1778413812.253518
+      "ts": 1778413812.253518,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -92,7 +94,8 @@
     {
       "speaker": "工程师A",
       "content": "已完成替换，评审意见如下：\n\n## review_a\n- 关注兼容性和长期维护性，建议合入。\n\n## review_b\n暂无相关文档，直接基于当前信息评审。\n\n## 决策\n_(empty)_",
-      "ts": 1778413819.311608
+      "ts": 1778413819.311608,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -124,7 +127,8 @@
     {
       "speaker": "工程师B",
       "content": "ponge_section(\"review_b\", \"- 关注新旧导入兼容，短期警告不影响长期。\") \n\n已尝试追加意见至 `review_b` 但发现该部分为只替换模式。",
-      "ts": 1778413823.84429
+      "ts": 1778413823.84429,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -134,7 +138,8 @@
     {
       "speaker": "工程师C",
       "content": "看来 \"review_c\" 模式被设为只替换。我将使用 `write_section` 覆写该部分。\n\nwrite_section(\"review_c\", \"- 综合 A/B 风险，建议合入。\")\n",
-      "ts": 1778413829.313676
+      "ts": 1778413829.313676,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -144,7 +149,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审按以下格式投票：\n- 投赞成票：`cast_vote(vote_id=\"v1\", option=\"合入\")`\n- 投反对票：`cast_vote(vote_id=\"v1\", option=\"退回\")`\n\n邀请大家发表意见并投票。",
-      "ts": 1778413834.9166331
+      "ts": 1778413834.9166331,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -168,7 +174,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"长期维护性优先\")",
-      "ts": 1778413838.7064698
+      "ts": 1778413838.7064698,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -178,7 +185,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"提升维护性\")",
-      "ts": 1778413842.4116611
+      "ts": 1778413842.4116611,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -188,7 +196,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"符合长期规划\")",
-      "ts": 1778413846.116862
+      "ts": 1778413846.116862,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -199,5 +208,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

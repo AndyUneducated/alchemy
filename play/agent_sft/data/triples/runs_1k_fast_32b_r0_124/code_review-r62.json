@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息未涵盖模块历史 commit 或设计文档。需进一步查询。",
-      "ts": 1778449131.348657
+      "ts": 1778449131.348657,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的信息未涵盖所需接口契约与测试用例细节。需更精确查询。",
-      "ts": 1778449168.853117
+      "ts": 1778449168.853117,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -77,7 +79,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见失败，尝试使用正确方法重新操作。\n",
-      "ts": 1778449226.3086321
+      "ts": 1778449226.3086321,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -87,7 +90,8 @@
     {
       "speaker": "工程师B",
       "content": "已更新评审意见至 review_b。将继续检索接口约定详情。",
-      "ts": 1778449246.661078
+      "ts": 1778449246.661078,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +112,8 @@
     {
       "speaker": "工程师C",
       "content": "已完成风险评估，准备投票。",
-      "ts": 1778449274.2891562
+      "ts": 1778449274.2891562,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +145,8 @@
     {
       "speaker": "主审",
       "content": "请各位根据评审意见进行投票。",
-      "ts": 1778449298.055511
+      "ts": 1778449298.055511,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -176,7 +182,8 @@
     {
       "speaker": "工程师A",
       "content": "已成功提交评审意见至 review_a。\n根据现有信息和风险评估，倾向支持合入此 PR，理由是整合工作提升了长期的可维护性。尽管测试覆盖率略有下降，但考虑到兼容性和性能影响都在可控范围内，并且老 API 仍然可用只是增加了弃用警告提示。\n\n接下来进行投票。\n",
-      "ts": 1778449328.8028128
+      "ts": 1778449328.8028128,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -208,7 +215,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票支持“合入”，理由为提升项目的长期可维护性。",
-      "ts": 1778449349.3202078
+      "ts": 1778449349.3202078,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -230,7 +238,8 @@
     {
       "speaker": "工程师C",
       "content": "投票支持“合入”，理由为提升项目的长期可维护性。",
-      "ts": 1778449370.12535
+      "ts": 1778449370.12535,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -251,5 +260,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

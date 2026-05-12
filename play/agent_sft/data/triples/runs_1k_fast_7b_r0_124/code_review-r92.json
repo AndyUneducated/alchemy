@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR无关，继续评审。 \n\nONGL\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"暂无相关历史信息。\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778415222.530316
+      "ts": 1778415222.530316,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "当前无直接相关接口契约/测试用例文档。\n\nONGL\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"当前无直接相关接口契约/测试用例文档。\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778415231.117666
+      "ts": 1778415231.117666,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "ONGL\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险较低，性能无明显下降，建议合入。\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778415234.482193
+      "ts": 1778415234.482193,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "ONLG\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控，建议合入。\", \"name\": \"review_b\"}}",
-      "ts": 1778415237.8811898
+      "ts": 1778415237.8811898,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "ONGL\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控，建议合入。\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778415241.408365
+      "ts": 1778415241.408365,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审工程师投票。",
-      "ts": 1778415246.000726
+      "ts": 1778415246.000726,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "请先确认投票 ID 是否正确。\n\n目前尚未创建投票，请等待主审发起投票后参与决策。\n\n如果有其他建议或需要讨论的内容，可以继续提出。",
-      "ts": 1778415250.755723
+      "ts": 1778415250.755723,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "ONGL\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控，建议合入。\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778415254.6211042
+      "ts": 1778415254.6211042,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "看起来投票ID未正确初始化，请等待主审发起正式投票后参与决策。\n\n如果有其他建议或需要讨论的内容，可以继续提出。\n请关注后续通知。",
-      "ts": 1778415259.398719
+      "ts": 1778415259.398719,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

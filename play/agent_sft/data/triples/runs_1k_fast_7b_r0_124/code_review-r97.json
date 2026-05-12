@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索结果与当前PR无关，继续评审。\n\nappend_section(\"review_a\", \"本次重构无直接相关历史记录。\")",
-      "ts": 1778415484.286759
+      "ts": 1778415484.286759,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到直接相关的接口契约或测试用例。\n\nappend_section(\"review_b\", \"未找到直接相关接口契约或测试用例。\")",
-      "ts": 1778415492.310528
+      "ts": 1778415492.310528,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 兼容性和性能风险可控，短期内接受略低测试覆盖。\")",
-      "ts": 1778415495.19441
+      "ts": 1778415495.19441,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "写入评审意见完成。\n\n## review_a\n- 兼容性和性能风险可控，短期内接受略低测试覆盖。\n\n## review_b\n- 重构简化逻辑结构，短期内测试覆盖率略有下降可接受。\n- 兼容性和性能风险可控，短期内接受略低测试覆盖。\n\n## review_c\n- 重构与A/B意见一致，短期内测试覆盖率略低可",
-      "ts": 1778415503.706727
+      "ts": 1778415503.706727,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "写入评审意见完成。\n\n## review_c\n- 综合 A/B 风险评估，短期内接受略低测试覆盖率。\n\n## 决策\n_(empty)_\n",
-      "ts": 1778415508.52045
+      "ts": 1778415508.52045,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "请各位 senior 工程师投票。\n\n## 决策\n_(empty)_\n",
-      "ts": 1778415514.3949928
+      "ts": 1778415514.3949928,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +157,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_section(\"review_a\", \"同意B/C意见，短期内接受略低测试覆盖率。\")",
-      "ts": 1778415518.097034
+      "ts": 1778415518.097034,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -161,7 +168,8 @@
     {
       "speaker": "工程师B",
       "content": "投票完成。\n\n## review_a\n同意B/C意见，短期内接受略低测试覆盖率。\n\n## review_b\n- 重构简化逻辑结构，短期内测试覆盖率略有下降可接受。\n- 兼容性和性能风险可控，短期内接受略低测试覆盖。\n\n## review_c\n- 重构与A/B意见一致，短期内测试覆盖率略低可接受。\n\n## 决策\n",
-      "ts": 1778415523.997046
+      "ts": 1778415523.997046,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -183,7 +191,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合意见一致，短期内接受略低测试覆盖率。\")",
-      "ts": 1778415527.965087
+      "ts": 1778415527.965087,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -193,5 +202,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

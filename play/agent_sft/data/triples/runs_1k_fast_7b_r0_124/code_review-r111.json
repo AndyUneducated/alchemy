@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史记录看，此模块曾于2026年3月14日启动，无直接影响当前变更。",
-      "ts": 1778416187.730367
+      "ts": 1778416187.730367,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。继续评审。\n\nappend_section(\"review_b\", \"暂无相关接口契约或测试用例信息。\")",
-      "ts": 1778416195.894251
+      "ts": 1778416195.894251,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险可控，性能无显著影响。建议合入。\")",
-      "ts": 1778416199.883646
+      "ts": 1778416199.883646,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "ponge_section(\"review_b\", \"- 兼容性风险低，性能稳定。同意合入。\")\n\n请工程师C继续评审意见。\nappend_section(\"review_c\", \"- 兼A/B：建议合入以提高模块可维护性。\")",
-      "ts": 1778416204.463548
+      "ts": 1778416204.463548,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合A/B：建议合入以提升模块可维护性。\")",
-      "ts": 1778416208.7111309
+      "ts": 1778416208.7111309,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1` - 请评审们选择【合入】或【退回】。",
-      "ts": 1778416213.181108
+      "ts": 1778416213.181108,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"提高模块可维护性\")",
-      "ts": 1778416216.532777
+      "ts": 1778416216.532777,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_section(\"review_b\", {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"保持团队一致，提升模块可维护性。\"})",
-      "ts": 1778416220.2944121
+      "ts": 1778416220.2944121,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"支持提高模块可维护性\")",
-      "ts": 1778416223.743646
+      "ts": 1778416223.743646,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

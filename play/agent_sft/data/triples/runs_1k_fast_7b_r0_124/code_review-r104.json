@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR无关，建议关注模块重构相关commit。",
-      "ts": 1778415816.1709151
+      "ts": 1778415816.1709151,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，建议关注模块重构具体变更。\n\n-append_section(\"review_b\", \"建议聚焦模块重构细节。\")-",
-      "ts": 1778415824.164053
+      "ts": 1778415824.164053,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "ORMALIZE THE TEXT TO FIT THE 30-CHARACTER LIMIT.\n\nappend_section(\"review_a\", \"- 关注兼容性和测试覆盖。\")",
-      "ts": 1778415829.090098
+      "ts": 1778415829.090098,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -85,7 +88,8 @@
     {
       "speaker": "工程师B",
       "content": "建议使用 `write_section` 重写 `review_b` 部分。\n\n-write_section(\"review_b\", \"- 关注长期维护性与兼容性。\")-",
-      "ts": 1778415833.3223438
+      "ts": 1778415833.3223438,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +99,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_b\", \"- 关注长期维护性与兼容性。\")",
-      "ts": 1778415837.291021
+      "ts": 1778415837.291021,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +110,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审投票支持。",
-      "ts": 1778415841.7831092
+      "ts": 1778415841.7831092,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +135,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"长期维护性提升值得短期妥协。\")",
-      "ts": 1778415846.31096
+      "ts": 1778415846.31096,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +158,8 @@
     {
       "speaker": "工程师B",
       "content": "- cast_section(\"review_b\", \"- 关注长期维护性与兼容性。\") -\n\nomalize and submit vote.\n\n-cast_vote(\"v1\", \"合入\", \"维护性提升符合需求。\")-",
-      "ts": 1778415850.3133912
+      "ts": 1778415850.3133912,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -161,7 +169,8 @@
     {
       "speaker": "工程师C",
       "content": "omalize and submit vote.\n\n-cast_vote(\"v1\", \"合入\", \"提升维护性是优先级。\")-",
-      "ts": 1778415854.0146198
+      "ts": 1778415854.0146198,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -171,5 +180,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

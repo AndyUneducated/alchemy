@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，继续基于现有信息评审。",
-      "ts": 1778410895.978815
+      "ts": 1778410895.978815,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与当前 PR 关键信息关联性不高。继续基于现有评审。\n\nappend_section(\"review_b\", \"继续基于现有评审。\")",
-      "ts": 1778410903.984465
+      "ts": 1778410903.984465,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见时遇到限制，尝试更新 `review_a`。\n\n",
-      "ts": 1778410912.0437388
+      "ts": 1778410912.0437388,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "ponge_section(\"review_b\", \"- 兼容性风险低，性能影响不大。\")",
-      "ts": 1778410915.9925492
+      "ts": 1778410915.9925492,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section` 替换 `append_section`。\n\nponge_section(\"review_b\", \"- 兼容性和性能风险可控，赞同合入。\")\nwrite_section(\"review_c\", \"- 综合 A/B 风险低，建议合入。\")\ncast_vote(\"e345-9876-abcd-1234\", \"合入",
-      "ts": 1778410921.285119
+      "ts": 1778410921.285119,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审工程师投票决定是否合入此 PR。\n\n- 合入\n- 退回\n\n大家好，现在请各位投票决定是否合入此 PR。\n期待您的宝贵意见！",
-      "ts": 1778410926.401238
+      "ts": 1778410926.401238,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +146,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"风险可控，提升长期可维护性。\")",
-      "ts": 1778410930.037455
+      "ts": 1778410930.037455,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -150,7 +157,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", \"提升可维护性，兼容性无大碍。\")",
-      "ts": 1778410933.7199318
+      "ts": 1778410933.7199318,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -160,7 +168,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"风险可控，利于维护。\")",
-      "ts": 1778410937.3091981
+      "ts": 1778410937.3091981,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -171,5 +180,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

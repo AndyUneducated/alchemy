@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，无直接帮助。\n\n附评审意见：需关注兼容性和长期维护性。方案如何处理遗留 warning？\n\nappend_section(\"review_a\", \"需关注兼容性和长期维护性。\")\nappend_section(\"review_b\", \"遗留 warning 如何处理？\")\n",
-      "ts": 1778414633.4983912
+      "ts": 1778414633.4983912,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。\n\nappend_section(\"review_b\", \"检索结果无直接帮助。\")",
-      "ts": 1778414641.575576
+      "ts": 1778414641.575576,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"短期内合入，注意监控兼容性问题。\")",
-      "ts": 1778414644.424163
+      "ts": 1778414644.424163,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 write_section 全写覆蓋評審B內容。\n\nwrite_section(\"review_b\", \"- 关注兼容性，短期监控 warning。\")\nappend_section(\"review_c\", \"- 综合 A/B 风险一句话\")",
-      "ts": 1778414648.8784928
+      "ts": 1778414648.8784928,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +102,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section` 全写覆蓋評審B內容。\n\nwrite_section(\"review_b\", \"- 关注兼容性，短期监控 warning。\")",
-      "ts": 1778414653.165979
+      "ts": 1778414653.165979,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +113,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。\n\n请各位评审员投票。\n- 投票 ID: v1\n\n## review_a\n需关注兼容性和长期维护性。\n短期内合入，注意监控兼容性问题。\n\n## review_b\n关注兼容性，短期监控 warning。\n\n## review_c\n综合 A/B 风险：短期内",
-      "ts": 1778414658.89034
+      "ts": 1778414658.89034,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -132,7 +138,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"短期内接受，关注兼容性。\")",
-      "ts": 1778414662.495409
+      "ts": 1778414662.495409,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -142,7 +149,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票：合入，理由：短期内接受风险。",
-      "ts": 1778414666.858009
+      "ts": 1778414666.858009,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -164,7 +172,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期内接受风险，提升维护性。\")",
-      "ts": 1778414670.417823
+      "ts": 1778414670.417823,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -174,5 +183,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

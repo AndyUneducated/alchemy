@@ -87,7 +87,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档仍无直接相关性，尝试再试一次更具体查询。\n\n",
-      "ts": 1778413292.989366
+      "ts": 1778413292.989366,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -110,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果无直接相关接口契约或测试用例信息。",
-      "ts": 1778413301.1209621
+      "ts": 1778413301.1209621,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -120,7 +122,8 @@
     {
       "speaker": "工程师A",
       "content": "ursal\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 关注兼容性和测试覆盖率，短期牺牲以求长期可维护性。\\n\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778413305.410293
+      "ts": 1778413305.410293,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -130,7 +133,8 @@
     {
       "speaker": "工程师B",
       "content": "",
-      "ts": 1778413313.0951731
+      "ts": 1778413313.0951731,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -162,7 +166,8 @@
     {
       "speaker": "工程师C",
       "content": "prar\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 综合 A/B 风险，建议暂时接受以维持进度。\\n\", \"name\": \"review_c\"}}\n</tool_call>",
-      "ts": 1778413317.757291
+      "ts": 1778413317.757291,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -172,7 +177,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1` - 请各位评审选择“合入”或“退回”。",
-      "ts": 1778413322.278452
+      "ts": 1778413322.278452,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -196,7 +202,8 @@
     {
       "speaker": "工程师A",
       "content": " Appears there was an issue with the vote ID. Let's proceed by directly appending my review to the section.\n\nappend_section(\"review_c\", \"- 确认投票选项，倾向合入以保持项目进度。\")\nportun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 确认投票选项，倾向合入以保持项目进度。\\n\", \"name",
-      "ts": 1778413327.944664
+      "ts": 1778413327.944664,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -206,7 +213,8 @@
     {
       "speaker": "工程师B",
       "content": "看来投票机制出现了一些问题。我会直接提交我的评审意见，以保持项目进度优先。\n\nappend_section(\"review_c\", \"- 直接合入以维持项目进度。\\n\")",
-      "ts": 1778413333.775178
+      "ts": 1778413333.775178,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -216,7 +224,8 @@
     {
       "speaker": "工程师C",
       "content": "看来投票 ID 生成出现了问题，请直接记录你的投票选项。\n\n请投票：`cast_vote(vote_id=\"v1\", option=\"合入\")` 或 `cast_vote(vote_id=\"v1\", option=\"退回\")`。我将重新尝试一次。\n",
-      "ts": 1778413339.548158
+      "ts": 1778413339.548158,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -227,5 +236,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

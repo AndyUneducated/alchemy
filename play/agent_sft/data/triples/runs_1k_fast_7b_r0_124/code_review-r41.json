@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史变更与当前PR关联性不高，继续评审。",
-      "ts": 1778412595.2689269
+      "ts": 1778412595.2689269,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见区为只读，请在相应讨论区发表意见。提交完毕后我会整理汇总。继续评审。",
-      "ts": 1778412604.447646
+      "ts": 1778412604.447646,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见时发现 section 'review_a' 是只允许追加的内容，请使用 `append_section` 而非覆盖。继续评审并追加我的意见。\n\nappend_section(\"review_a\", \"- 兼容性风险需监控，性能影响可忽略，测试覆盖率虽降但换取维护性提升是值得的。\")",
-      "ts": 1778412609.576085
+      "ts": 1778412609.576085,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见区 'review_b' 只允许追加内容，请使用 `append_section` 而非覆盖。\n\n提交意见如下：\n\n-append_section(\"review_b\", \"- 兼容性风险需谨慎，但新增facade提升模块间解耦是正面改进。\")",
-      "ts": 1778412614.5375822
+      "ts": 1778412614.5375822,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "section 'review_b' 只允许追加内容，请使用 `append_section` 而非覆盖。\n\n工程师B → append_section(\"review_b\", \"- 兼容性风险需谨慎，但新增facade提升模块间解耦是正面改进。\")\n\n请继续其他评审意见。",
-      "ts": 1778412619.7674901
+      "ts": 1778412619.7674901,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审工程师选择“合入”或“退回”。",
-      "ts": 1778412624.351597
+      "ts": 1778412624.351597,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险需监控，性能影响可忽略，测试覆盖率虽降但换取维护性提升是值得的。\")",
-      "ts": 1778412629.505056
+      "ts": 1778412629.505056,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见区 'review_b' 只允许追加内容，请使用 `append_section` 而非覆盖。\n\n提交意见如下：\n\n-append_section(\"review_b\", \"- 兼容性风险需谨慎，但新增facade提升模块间解耦是正面改进。\")",
-      "ts": 1778412635.092469
+      "ts": 1778412635.092469,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"提升维护性值得兼容风险\")",
-      "ts": 1778412638.823095
+      "ts": 1778412638.823095,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

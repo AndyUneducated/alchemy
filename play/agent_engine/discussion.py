@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import sys
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
+
+from .result import (
+    ArtifactEventEntry,
+    SpeakerEntry,
+    TokenUsage,
+    TopicEntry,
+    ToolCallEntry,
+    TranscriptEntry,
+    TurnEntry,
+)
+from .scenario import _resolve_who_names
 
 if TYPE_CHECKING:
     from .agent import Agent
@@ -16,11 +27,12 @@ def _print_speaker(name: str, step_id: str | None = None) -> None:
     sys.stdout.flush()
 
 
-def _called_tool(events: list[dict], caller: str, tool: str) -> bool:
-    return any(
-        e.get("tool") == tool and e.get("caller") == caller
-        for e in events
-    )
+def _called_tool(
+    events: Sequence[ToolCallEntry | ArtifactEventEntry],
+    caller: str,
+    tool: str,
+) -> bool:
+    return any(e.tool == tool and e.caller == caller for e in events)
 
 
 class Discussion:
@@ -42,23 +54,20 @@ class Discussion:
         self.stream = stream
         self.artifact = artifact
         self.tracer = tracer
-        self.history: list[dict] = []
+        self.history: list[TranscriptEntry] = []
         self.warnings: list[str] = []
+        self.usage: list[TokenUsage] = []
         self._by_name: dict[str, "Agent"] = {a.name: a for a in agents}
         self._expanded: list[tuple["Agent", dict]] = self._expand_steps()
 
-    def run(self) -> list[dict]:
+    def run(self) -> list[TranscriptEntry]:
         total = len(self._expanded)
         self._print_header(total)
-        self.history.append({
-            "type": "topic", "content": self.topic, "ts": time.time(),
-        })
+        self.history.append(TopicEntry(content=self.topic, ts=time.time()))
 
         for idx, (agent, step) in enumerate(self._expanded, 1):
             marker = f"turn {idx} of {total}"
-            self.history.append({
-                "type": "turn", "content": marker, "ts": time.time(),
-            })
+            self.history.append(TurnEntry(content=marker, ts=time.time()))
             instruction = step.get("instruction")
             require_tool = step.get("require_tool")
             max_retries = int(step.get("max_retries", 1 if require_tool else 0))
@@ -76,13 +85,9 @@ class Discussion:
         return out
 
     def _resolve_who(self, who) -> list["Agent"]:
-        if isinstance(who, str):
-            if who == "all":
-                return list(self.agents)
-            return [a for a in self.agents if self.agent_roles.get(a.name) == who]
-        if isinstance(who, list):
-            return [self._by_name[n] for n in who]
-        raise TypeError(f"Unsupported who form: {who!r}")
+        declared_order = [a.name for a in self.agents]
+        names = _resolve_who_names(who, declared_order, self.agent_roles)
+        return [self._by_name[n] for n in names]
 
     def _run_turn(
         self,
@@ -96,22 +101,23 @@ class Discussion:
         for attempt in range(max_retries + 1):
             _print_speaker(agent.name, step_id)
             view = self.artifact.render() if self.artifact else None
-            reply = agent.respond(
+            reply, usage_batch = agent.respond(
                 self.history,
                 instruction=current_instruction,
                 stream=self.stream,
                 artifact_view=view,
             )
-            tracer_events: list[dict] = []
+            self.usage.extend(usage_batch)
+            tracer_events: list[ToolCallEntry] = []
             if self.tracer:
                 tracer_events = self.tracer.drain()
                 self.history.extend(tracer_events)
-            self.history.append({
-                "speaker": agent.name,
-                "content": reply,
-                "ts": time.time(),
-            })
-            artifact_events: list[dict] = []
+            self.history.append(SpeakerEntry(
+                speaker=agent.name,
+                content=reply,
+                ts=time.time(),
+            ))
+            artifact_events: list[ArtifactEventEntry] = []
             if self.artifact:
                 artifact_events = self.artifact.drain_events()
                 self.history.extend(artifact_events)
@@ -120,7 +126,9 @@ class Discussion:
             # 与 artifact 事件——前者过去被遗漏，导致 require_tool 只对 artifact 工
             # 具有效；本期补全（DECISIONS §11 / agent_sft phase 1.B 引入两个新
             # require_tool: retrieve_docs 场景的前置依赖）.
-            events = tracer_events + artifact_events
+            events: list[ToolCallEntry | ArtifactEventEntry] = (
+                list(tracer_events) + list(artifact_events)
+            )
             if not require_tool or _called_tool(events, agent.name, require_tool):
                 return
 

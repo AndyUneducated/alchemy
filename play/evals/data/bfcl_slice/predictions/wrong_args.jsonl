@@ -1,50 +1,50 @@
-{"id": "simple_python_0", "prediction": "calculate_triangle_area(base=11, height=6)"}
-{"id": "simple_python_1", "prediction": "math.factorial(number=6)"}
-{"id": "simple_python_2", "prediction": "math.hypot(x=5, y=6)"}
-{"id": "simple_python_3", "prediction": "algebra.quadratic_roots(a=2, b=-2, c=3)"}
-{"id": "simple_python_4", "prediction": "solve_quadratic_equation(a=3, b=7, c=6)"}
-{"id": "simple_python_5", "prediction": "solve_quadratic(a=4, b=-10, c=-3, root_type='allX')"}
-{"id": "simple_python_6", "prediction": "solve_quadratic(a=3, b=6, c=4)"}
-{"id": "simple_python_7", "prediction": "calculate_circumference(radius=5, unit='inchesX')"}
-{"id": "simple_python_8", "prediction": "geometry.area_circle(radius=11)"}
-{"id": "simple_python_9", "prediction": "geometry.calculate_area_circle(radius=6)"}
-{"id": "simple_python_10", "prediction": "calculate_area(base=7, height=11)"}
-{"id": "simple_python_11", "prediction": "calculate_triangle_area(base=11, height=6)"}
-{"id": "simple_python_12", "prediction": "geometry.circumference(radius=4)"}
-{"id": "simple_python_13", "prediction": "calculate_area_under_curve(function='x**2X', interval=[1.0, 3.0, '__perturb__'])"}
-{"id": "simple_python_14", "prediction": "calculate_derivative(function='3x**2 + 2x - 1X')"}
-{"id": "simple_python_15", "prediction": "integrate(function='x**3X', start_x=-1, end_x=4, method='simpsonX')"}
-{"id": "simple_python_16", "prediction": "calculus.derivative(function='2x**2X', value=2)"}
-{"id": "simple_python_17", "prediction": "get_prime_factors(number=451)"}
-{"id": "simple_python_18", "prediction": "number_analysis.prime_factors(number=123457)"}
-{"id": "simple_python_19", "prediction": "math.gcd(num1=41, num2=51)"}
-{"id": "simple_python_20", "prediction": "math.hcf(number1=37, number2=25)"}
-{"id": "simple_python_21", "prediction": "number_theory.gcd(number1=37, number2=49)"}
-{"id": "simple_python_22", "prediction": "math.gcd(num1=13, num2=16)"}
-{"id": "simple_python_23", "prediction": "prime_factorize(number=61, return_type='dictionaryX')"}
-{"id": "simple_python_24", "prediction": "math.gcd(num1=13, num2=19)"}
-{"id": "simple_python_25", "prediction": "calculate_final_velocity(height=151)"}
-{"id": "simple_python_26", "prediction": "calculate_velocity(distance=51, duration=3)"}
-{"id": "simple_python_27", "prediction": "final_velocity(initial_velocity=11, acceleration=3, time=6)"}
-{"id": "simple_python_28", "prediction": "calculate_displacement(initial_velocity=11, time=6, acceleration=10.8)"}
-{"id": "simple_python_29", "prediction": "calculate_final_speed(time=6)"}
-{"id": "simple_python_30", "prediction": "kinematics.final_velocity_from_distance(acceleration=5, distance=301)"}
-{"id": "simple_python_31", "prediction": "calculate_final_velocity(initial_velocity=1, acceleration=10.8, time=6)"}
-{"id": "simple_python_32", "prediction": "calculate_final_speed(initial_velocity=1, height=101)"}
-{"id": "simple_python_33", "prediction": "get_directions(start_location='SydneyX', end_location='MelbourneX')"}
-{"id": "simple_python_34", "prediction": "travel_itinerary_generator(destination='TokyoX', days=8, daily_budget=101, exploration_type='natureX')"}
-{"id": "simple_python_35", "prediction": "vegan_restaurant.find_nearby(location='New York, NYX', operating_hours=24)"}
-{"id": "simple_python_36", "prediction": "get_shortest_driving_distance(origin='New York CityX', destination='Washington D.C.X')"}
-{"id": "simple_python_37", "prediction": "route.estimate_time(start_location='San FranciscoX', end_location='Los AngelesX', stops=['Santa Barbara', 'Monterey', '__perturb__'])"}
-{"id": "simple_python_38", "prediction": "calculate_electrostatic_potential(charge1=1.000000001, charge2=1.000000002, distance=1.05)"}
-{"id": "simple_python_39", "prediction": "calculate_electric_field(charge=3, distance=4)"}
-{"id": "simple_python_40", "prediction": "calculate_magnetic_field(current=6, radius=5)"}
-{"id": "simple_python_41", "prediction": "electromagnetic_force(charge1=6, charge2=8, distance=4)"}
-{"id": "simple_python_42", "prediction": "calculate_resonant_frequency(inductance=1.05, capacitance=1.0001)"}
-{"id": "simple_python_43", "prediction": "calculate_magnetic_field_strength(current=21, distance=11)"}
-{"id": "simple_python_44", "prediction": "calculate_electric_field_strength(charge=1.01, distance=5)"}
-{"id": "simple_python_45", "prediction": "thermo.calculate_energy(mass=101, phase_transition='vaporizationX')"}
-{"id": "simple_python_46", "prediction": "calculate_final_temperature(mass1=21, temperature1=31, mass2=16, temperature2=61)"}
-{"id": "simple_python_47", "prediction": "get_boiling_melting_points(substance='waterX', sea_level=5001)"}
-{"id": "simple_python_48", "prediction": "calculate_density(mass=46, volume=16)"}
-{"id": "simple_python_49", "prediction": "calc_absolute_pressure(atm_pressure=2, gauge_pressure=3)"}
+{"id":"simple_python_0","prediction":"calculate_triangle_area(base=11, height=6)","usage":[]}
+{"id":"simple_python_1","prediction":"math.factorial(number=6)","usage":[]}
+{"id":"simple_python_2","prediction":"math.hypot(x=5, y=6)","usage":[]}
+{"id":"simple_python_3","prediction":"algebra.quadratic_roots(a=2, b=-2, c=3)","usage":[]}
+{"id":"simple_python_4","prediction":"solve_quadratic_equation(a=3, b=7, c=6)","usage":[]}
+{"id":"simple_python_5","prediction":"solve_quadratic(a=4, b=-10, c=-3, root_type='allX')","usage":[]}
+{"id":"simple_python_6","prediction":"solve_quadratic(a=3, b=6, c=4)","usage":[]}
+{"id":"simple_python_7","prediction":"calculate_circumference(radius=5, unit='inchesX')","usage":[]}
+{"id":"simple_python_8","prediction":"geometry.area_circle(radius=11)","usage":[]}
+{"id":"simple_python_9","prediction":"geometry.calculate_area_circle(radius=6)","usage":[]}
+{"id":"simple_python_10","prediction":"calculate_area(base=7, height=11)","usage":[]}
+{"id":"simple_python_11","prediction":"calculate_triangle_area(base=11, height=6)","usage":[]}
+{"id":"simple_python_12","prediction":"geometry.circumference(radius=4)","usage":[]}
+{"id":"simple_python_13","prediction":"calculate_area_under_curve(function='x**2X', interval=[1.0, 3.0, '__perturb__'])","usage":[]}
+{"id":"simple_python_14","prediction":"calculate_derivative(function='3x**2 + 2x - 1X')","usage":[]}
+{"id":"simple_python_15","prediction":"integrate(function='x**3X', start_x=-1, end_x=4, method='simpsonX')","usage":[]}
+{"id":"simple_python_16","prediction":"calculus.derivative(function='2x**2X', value=2)","usage":[]}
+{"id":"simple_python_17","prediction":"get_prime_factors(number=451)","usage":[]}
+{"id":"simple_python_18","prediction":"number_analysis.prime_factors(number=123457)","usage":[]}
+{"id":"simple_python_19","prediction":"math.gcd(num1=41, num2=51)","usage":[]}
+{"id":"simple_python_20","prediction":"math.hcf(number1=37, number2=25)","usage":[]}
+{"id":"simple_python_21","prediction":"number_theory.gcd(number1=37, number2=49)","usage":[]}
+{"id":"simple_python_22","prediction":"math.gcd(num1=13, num2=16)","usage":[]}
+{"id":"simple_python_23","prediction":"prime_factorize(number=61, return_type='dictionaryX')","usage":[]}
+{"id":"simple_python_24","prediction":"math.gcd(num1=13, num2=19)","usage":[]}
+{"id":"simple_python_25","prediction":"calculate_final_velocity(height=151)","usage":[]}
+{"id":"simple_python_26","prediction":"calculate_velocity(distance=51, duration=3)","usage":[]}
+{"id":"simple_python_27","prediction":"final_velocity(initial_velocity=11, acceleration=3, time=6)","usage":[]}
+{"id":"simple_python_28","prediction":"calculate_displacement(initial_velocity=11, time=6, acceleration=10.8)","usage":[]}
+{"id":"simple_python_29","prediction":"calculate_final_speed(time=6)","usage":[]}
+{"id":"simple_python_30","prediction":"kinematics.final_velocity_from_distance(acceleration=5, distance=301)","usage":[]}
+{"id":"simple_python_31","prediction":"calculate_final_velocity(initial_velocity=1, acceleration=10.8, time=6)","usage":[]}
+{"id":"simple_python_32","prediction":"calculate_final_speed(initial_velocity=1, height=101)","usage":[]}
+{"id":"simple_python_33","prediction":"get_directions(start_location='SydneyX', end_location='MelbourneX')","usage":[]}
+{"id":"simple_python_34","prediction":"travel_itinerary_generator(destination='TokyoX', days=8, daily_budget=101, exploration_type='natureX')","usage":[]}
+{"id":"simple_python_35","prediction":"vegan_restaurant.find_nearby(location='New York, NYX', operating_hours=24)","usage":[]}
+{"id":"simple_python_36","prediction":"get_shortest_driving_distance(origin='New York CityX', destination='Washington D.C.X')","usage":[]}
+{"id":"simple_python_37","prediction":"route.estimate_time(start_location='San FranciscoX', end_location='Los AngelesX', stops=['Santa Barbara', 'Monterey', '__perturb__'])","usage":[]}
+{"id":"simple_python_38","prediction":"calculate_electrostatic_potential(charge1=1.000000001, charge2=1.000000002, distance=1.05)","usage":[]}
+{"id":"simple_python_39","prediction":"calculate_electric_field(charge=3, distance=4)","usage":[]}
+{"id":"simple_python_40","prediction":"calculate_magnetic_field(current=6, radius=5)","usage":[]}
+{"id":"simple_python_41","prediction":"electromagnetic_force(charge1=6, charge2=8, distance=4)","usage":[]}
+{"id":"simple_python_42","prediction":"calculate_resonant_frequency(inductance=1.05, capacitance=1.0001)","usage":[]}
+{"id":"simple_python_43","prediction":"calculate_magnetic_field_strength(current=21, distance=11)","usage":[]}
+{"id":"simple_python_44","prediction":"calculate_electric_field_strength(charge=1.01, distance=5)","usage":[]}
+{"id":"simple_python_45","prediction":"thermo.calculate_energy(mass=101, phase_transition='vaporizationX')","usage":[]}
+{"id":"simple_python_46","prediction":"calculate_final_temperature(mass1=21, temperature1=31, mass2=16, temperature2=61)","usage":[]}
+{"id":"simple_python_47","prediction":"get_boiling_melting_points(substance='waterX', sea_level=5001)","usage":[]}
+{"id":"simple_python_48","prediction":"calculate_density(mass=46, volume=16)","usage":[]}
+{"id":"simple_python_49","prediction":"calc_absolute_pressure(atm_pressure=2, gauge_pressure=3)","usage":[]}

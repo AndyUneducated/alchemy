@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史文档得知，项目代号为ZX-7492。",
-      "ts": 1778415178.637048
+      "ts": 1778415178.637048,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到直接相关接口契约或测试用例。",
-      "ts": 1778415186.3884978
+      "ts": 1778415186.3884978,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 关注兼容性风险，建议合入前确认日志污染问题。\")",
-      "ts": 1778415190.310369
+      "ts": 1778415190.310369,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "write_section(\"review_b\", \"- 考虑性能无显著影响，建议合入并优化日志。\")",
-      "ts": 1778415194.35728
+      "ts": 1778415194.35728,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section` 替换 \"review_c\" 内容。我现在替你执行。\n\nwrite_section(\"review_c\", \"- 综合 A/B 风险，建议合入并优化日志。\")\n",
-      "ts": 1778415199.6406012
+      "ts": 1778415199.6406012,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票：`v1`。请各位评审员选择【合入】或【退回】。",
-      "ts": 1778415204.028459
+      "ts": 1778415204.028459,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"综合考虑，短期日志污染可接受。\")",
-      "ts": 1778415207.413111
+      "ts": 1778415207.413111,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_section(\"review_b\", \"- 性能影响小，支持合入。\")",
-      "ts": 1778415210.721173
+      "ts": 1778415210.721173,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期日志污染可接受，提升维护性。\")",
-      "ts": 1778415214.1966982
+      "ts": 1778415214.1966982,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

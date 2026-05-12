@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史信息与当前 PR 关联性不强。",
-      "ts": 1778415918.832565
+      "ts": 1778415918.832565,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。",
-      "ts": 1778415926.551085
+      "ts": 1778415926.551085,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 write_section(\"review_a\", \"- 兼容性风险存在，但短期内可接受；建议尽快补齐测试。\") 更新评审意见。",
-      "ts": 1778415930.541867
+      "ts": 1778415930.541867,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已更新。\n\n- **工程师B**: - 性能影响不大，维持现状。\n- **工程师C**: - 综合A/B风险，建议合入但尽快补齐测试。",
-      "ts": 1778415937.682226
+      "ts": 1778415937.682226,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 write_section(\"review_c\", \"- 综合 A/B 风险，建议尽快补齐测试。\") 更新评审意见。",
-      "ts": 1778415941.950003
+      "ts": 1778415941.950003,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -117,7 +122,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票。请各位评审员通过以下选项进行选择：\n\n- 合入\n- 退回\n\n请开始投票吧！",
-      "ts": 1778415946.5936708
+      "ts": 1778415946.5936708,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -141,7 +147,8 @@
     {
       "speaker": "工程师A",
       "content": "投票已成功提交：合入。理由：综合风险较低，提升代码结构合理性。",
-      "ts": 1778415951.123629
+      "ts": 1778415951.123629,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +170,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已成功提交：合入。理由：风险可控，利于长期维护。\n\n- **工程师B**: - 性能影响不大，维持现状。\n- **工程师C**: - 综合A/B风险，建议尽快补齐测试。\n- **主审**: 合入。风险可控，利于长期维护。",
-      "ts": 1778415956.6391091
+      "ts": 1778415956.6391091,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -185,7 +193,8 @@
     {
       "speaker": "工程师C",
       "content": "投票已成功提交：合入。理由：综合风险，提升维护性。",
-      "ts": 1778415961.390059
+      "ts": 1778415961.390059,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -205,5 +214,6 @@
     "工程师A skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

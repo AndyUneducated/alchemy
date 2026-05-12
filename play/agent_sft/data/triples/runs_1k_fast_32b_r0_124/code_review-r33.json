@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与模块无关，未发现关键信息。需扩大查询范围或调整关键词。",
-      "ts": 1778439723.118515
+      "ts": 1778439723.118515,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约或测试用例信息。需进一步查询。",
-      "ts": 1778439763.3087301
+      "ts": 1778439763.3087301,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -76,7 +78,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到与 PR 直接相关的文档信息。需更多具体细节。",
-      "ts": 1778439804.406354
+      "ts": 1778439804.406354,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +101,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到具体接口约定与测试用例信息。需继续查找。",
-      "ts": 1778439846.151674
+      "ts": 1778439846.151674,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +112,8 @@
     {
       "speaker": "工程师C",
       "content": "风险评估完成，准备投票。",
-      "ts": 1778439877.9482381
+      "ts": 1778439877.9482381,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +145,8 @@
     {
       "speaker": "主审",
       "content": "我已投“合入”。请大家尽快投票。",
-      "ts": 1778439907.9573388
+      "ts": 1778439907.9573388,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -187,7 +193,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持合入此 PR。理由是模块整合有助于长期维护且兼容性风险在可控范围内。等待其他评审人的意见。",
-      "ts": 1778439945.4740422
+      "ts": 1778439945.4740422,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -244,7 +251,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口约定和测试用例信息。需进一步查找。",
-      "ts": 1778439994.8356748
+      "ts": 1778439994.8356748,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -254,7 +262,8 @@
     {
       "speaker": "工程师C",
       "content": "投票完成，支持合入。等待最终决策。",
-      "ts": 1778440017.8116841
+      "ts": 1778440017.8116841,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -275,5 +284,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

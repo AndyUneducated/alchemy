@@ -29,7 +29,8 @@
     {
       "speaker": "执行者",
       "content": "ZX-7492 是项目代号，启动于 2026 年。\n",
-      "ts": 1778418935.9413261
+      "ts": 1778418935.9413261,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -39,7 +40,8 @@
     {
       "speaker": "执行者",
       "content": "记录完成。下一步按 instruction 指定工具行动。",
-      "ts": 1778418943.531204
+      "ts": 1778418943.531204,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -60,7 +62,8 @@
     {
       "speaker": "协调者",
       "content": "请投票：是否需要追加二次调研? 选项: 追加, 不追加。使用 `cast_vote(vote_id=\"v1\", option=\"<你的选择>\")` 投票。",
-      "ts": 1778418963.477317
+      "ts": 1778418963.477317,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -84,7 +87,8 @@
     {
       "speaker": "执行者",
       "content": "投票成功。下一步按 checklist 指定工具行动。",
-      "ts": 1778418978.931233
+      "ts": 1778418978.931233,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +122,8 @@
     {
       "speaker": "执行者",
       "content": "二次调研完成。下一步按 checklist 指定工具行动。",
-      "ts": 1778419008.183276
+      "ts": 1778419008.183276,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +133,8 @@
     {
       "speaker": "执行者",
       "content": "二次调研结果已记入。任务完成。",
-      "ts": 1778419014.240958
+      "ts": 1778419014.240958,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -143,5 +149,6 @@
     }
   ],
   "success": true,
-  "warnings": []
+  "warnings": [],
+  "usage": []
 }

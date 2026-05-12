@@ -186,12 +186,15 @@ def test_trajectory_coverage_callers_partial():
 
 
 def test_trajectory_coverage_speakers_kind():
-    """kind='speakers'：从 transcript 抽 speakers 与 expected_speakers 比对."""
+    """kind='speakers'：从 transcript 抽 speakers 与 expected_speakers 比对.
+
+    §16 起 transcript 内 speaker entry 必含显式 `type=="speaker"` 标签.
+    """
     d = _doc({
         "expected_speakers": ["前端", "后端", "PM"],
         "trajectory": {"transcript": [
-            {"speaker": "前端", "content": "..."},
-            {"speaker": "PM", "content": "..."},
+            {"type": "speaker", "speaker": "前端", "content": "..."},
+            {"type": "speaker", "speaker": "PM", "content": "..."},
         ]},
     })
     assert abs(trajectory_coverage(kind="speakers")(d, _RESP) - 2 / 3) < 1e-9
@@ -231,9 +234,9 @@ def test_predicate_speakers_covered_perfect():
         "trajectory": {
             "success": True,
             "transcript": [
-                {"speaker": "前端", "content": "..."},
-                {"speaker": "后端", "content": "..."},
-                {"speaker": "PM", "content": "..."},
+                {"type": "speaker", "speaker": "前端", "content": "..."},
+                {"type": "speaker", "speaker": "后端", "content": "..."},
+                {"type": "speaker", "speaker": "PM", "content": "..."},
             ],
         },
     })
@@ -247,8 +250,8 @@ def test_predicate_speakers_covered_warnings_kill_success():
         "trajectory": {
             "success": False,
             "transcript": [
-                {"speaker": "A", "content": "..."},
-                {"speaker": "B", "content": "..."},
+                {"type": "speaker", "speaker": "A", "content": "..."},
+                {"type": "speaker", "speaker": "B", "content": "..."},
             ],
         },
     })

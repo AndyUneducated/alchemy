@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "",
-      "ts": 1778413350.843169
+      "ts": 1778413350.843169,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -66,7 +67,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，继续评审。\n\n## review_b\n建议关注新旧接口过渡方案。",
-      "ts": 1778413358.88273
+      "ts": 1778413358.88273,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -76,7 +78,8 @@
     {
       "speaker": "工程师A",
       "content": "",
-      "ts": 1778413366.11785
+      "ts": 1778413366.11785,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "## review_b\n- 兼容性风险可控，建议短期观察deprecation warning影响。\n\n## review_c\n- 综合 A/B 风险一句话：兼容性风险总体可控，关注新旧接口过渡。",
-      "ts": 1778413370.767004
+      "ts": 1778413370.767004,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "根据提示，应使用 `write_section` 而非 `append_section` 来更新 `review_c` 部分。我将使用 `write_section` 更新内容。\n\n",
-      "ts": 1778413376.401906
+      "ts": 1778413376.401906,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +133,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n邀请大家根据评审意见进行投票。",
-      "ts": 1778413380.853463
+      "ts": 1778413380.853463,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -152,7 +158,8 @@
     {
       "speaker": "工程师A",
       "content": "似乎投票ID生成出现了问题，请稍后再试或直接表达你的投票选项。\n\n我将直接记录我的投票意见：\n\n## review_a\n- 兼容性风险可控，建议短期观察deprecation warning影响。\n- 新旧接口过渡方案需注意。\n\n## review_b\n- 新旧接口过渡方案需注意。\n- 兼容性风险可控，建议短期观察deprecation",
-      "ts": 1778413387.965791
+      "ts": 1778413387.965791,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -173,7 +180,8 @@
     {
       "speaker": "工程师B",
       "content": "## review_b\n建议合入此 PR，兼容性风险可控且短期内可观察。\n\n## 决策\n合入此 PR。\n\n## Votes\n\n### v1: 是否合入此 PR?\n\n- 合入: 0 (—)\n- 退回: 0 (—)\n\n我投票：**合入**。",
-      "ts": 1778413394.2670321
+      "ts": 1778413394.2670321,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -194,7 +202,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票：**合入**。\n\n理由：整体风险可控，提升长期维护性。",
-      "ts": 1778413399.364919
+      "ts": 1778413399.364919,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -216,5 +225,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

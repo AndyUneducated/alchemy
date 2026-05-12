@@ -30,7 +30,8 @@
     {
       "speaker": "执行者",
       "content": "核心要点：项目代号ZX-7492，服务器SRV-8831，负责人E-2055，启动日期2026年3月14日。",
-      "ts": 1778408653.374155
+      "ts": 1778408653.374155,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -40,7 +41,8 @@
     {
       "speaker": "执行者",
       "content": "portun\n{\"name\": \"retrieve_docs\", \"arguments\": {\"query\": \"项目代号ZX-7492，服务器SRV-8831，负责人E-2055，启动日期2026年3月14日。\", \"mode\": \"hybrid\"}}\n</tool_call>",
-      "ts": 1778408656.75324
+      "ts": 1778408656.75324,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -61,7 +63,8 @@
     {
       "speaker": "协调者",
       "content": "portun\n{\"name\": \"propose_vote\", \"arguments\": {\"question\": \"是否需要追加二次调研?\", \"options\": [\"追加\", \"不追加\"]}}\n</tool_call>",
-      "ts": 1778408660.0048409
+      "ts": 1778408660.0048409,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -71,7 +74,8 @@
     {
       "speaker": "执行者",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"追加\", \"rationale\": \"一句话\"}}\n</tool_call>",
-      "ts": 1778408663.056556
+      "ts": 1778408663.056556,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -81,7 +85,8 @@
     {
       "speaker": "执行者",
       "content": "portun\n{\"name\": \"retrieve_docs\", \"arguments\": {\"query\": \"项目代号 历史\", \"mode\": \"hybrid\"}}\n</tool_call>",
-      "ts": 1778408664.155832
+      "ts": 1778408664.155832,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -91,7 +96,8 @@
     {
       "speaker": "执行者",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"name\": \"调研笔记\", \"entry\": \"- 第2轮: 核心要点：项目代号ZX-7492，服务器SRV-8831，负责人E-2055，启动日期2026年3月14日。\"}}\n</tool_call>",
-      "ts": 1778408666.1056519
+      "ts": 1778408666.1056519,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -99,5 +105,6 @@
     "执行者 skipped required tool 'cast_vote' after 1 attempt(s)",
     "执行者 skipped required tool 'retrieve_docs' after 1 attempt(s)",
     "执行者 skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

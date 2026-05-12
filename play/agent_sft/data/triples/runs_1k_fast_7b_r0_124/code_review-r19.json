@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR无关，继续评审。\n\nimonial_a, 请开始您的评论。",
-      "ts": 1778411435.984141
+      "ts": 1778411435.984141,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与当前PR无关，继续评审。\n\nimonial_b, 暂无相关文档建议，请审阅现有描述。",
-      "ts": 1778411443.954619
+      "ts": 1778411443.954619,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "ponge\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 兼容性风险需监控，性能影响可忽略，建议合入。\\n\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778411448.272993
+      "ts": 1778411448.272993,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交。\n\nimonial_b: - 兼容性风险可控，性能无显著影响，建议合入以提高代码可维护性。\nimonial_c: - 综合 A/B 风险，建议合入以提升长期可维护性。",
-      "ts": 1778411456.576462
+      "ts": 1778411456.576462,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "看来当前没有待决的投票，请确认是否已完成所有评审意见的记录。若已准备好做出决策，请提供正确的 `vote_id` 以进行最终投票。\n\n我们来整理一下目前的情况：\n\n- **工程师A**：建议合入，理由为兼容性风险需监控，性能影响可忽略。\n- **工程师B**：建议合入，理由为兼容性风险",
-      "ts": 1778411465.2441971
+      "ts": 1778411465.2441971,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -128,7 +133,8 @@
     {
       "speaker": "主审",
       "content": "投票已成功发起，请各位评审工程师投票。\n\nvote_id: v1\n\n- 投票选项：合入、退回\n\n请开始大家的投票吧！\n",
-      "ts": 1778411473.262269
+      "ts": 1778411473.262269,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -174,7 +180,8 @@
     {
       "speaker": "工程师A",
       "content": "ponge\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 兼容性风险可控，性能无显著影响，建议合入以提高代码可维护性。\\n\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778411478.9481971
+      "ts": 1778411478.9481971,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -184,7 +191,8 @@
     {
       "speaker": "工程师B",
       "content": "请确认投票 ID 是否正确。我将再次尝试使用 `v1` 进行投票。\n\nimonial_b, 请确认投票 ID 是否为 `v1`。若确认无误，我将继续尝试。\n",
-      "ts": 1778411484.998118
+      "ts": 1778411484.998118,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -194,7 +202,8 @@
     {
       "speaker": "工程师C",
       "content": "看来投票 ID 未被正确识别。请尝试再次发起投票并确保使用正确的 `vote_id`。\n\n我将重新提议投票，请检查当前投票情况：\n\n### v1: 是否合入此 PR?\n\n- 合入: 2 (主审, 工程师A)\n- 退回: 0\n\n请确认投票 ID 正确后再次尝试投票。",
-      "ts": 1778411491.076573
+      "ts": 1778411491.076573,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -205,5 +214,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

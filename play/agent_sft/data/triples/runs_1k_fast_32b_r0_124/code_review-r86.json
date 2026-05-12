@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到与「项目代号」模块相关的具体 commit 或设计文档信息。可能需要进一步澄清或扩展搜索关键词以获取更详细的信息。\n\n请确认是否需要继续检索或者提供更具体的关键词来帮助定位相关信息？如果没有更多线索，我们也可以基于现有 PR 详情进行评审。",
-      "ts": 1778456644.344508
+      "ts": 1778456644.344508,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约及测试用例信息。",
-      "ts": 1778456682.735318
+      "ts": 1778456682.735318,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "已提交评审意见。当前缺乏足够的技术细节支持做出明确决策，建议补充相关接口契约及测试用例信息后再做进一步评审。",
-      "ts": 1778456734.6756449
+      "ts": 1778456734.6756449,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口约定及测试用例信息。建议进一步确认或补充相关信息后再做评审决定。",
-      "ts": 1778456777.7377632
+      "ts": 1778456777.7377632,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "",
-      "ts": 1778456814.364197
+      "ts": 1778456814.364197,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +155,8 @@
     {
       "speaker": "主审",
       "content": "工程师A已投票：退回。请其他评审继续投票。",
-      "ts": 1778456844.2168489
+      "ts": 1778456844.2168489,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -198,7 +204,8 @@
     {
       "speaker": "工程师A",
       "content": "由于无法直接追加内容到 `review_a` 部分，我将更新整个部分以反映最新的评审意见。\n\n请稍等。",
-      "ts": 1778456865.882327
+      "ts": 1778456865.882327,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -220,7 +227,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口约定及测试用例信息。建议进一步确认相关信息后再做评审决定。",
-      "ts": 1778456913.437401
+      "ts": 1778456913.437401,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -230,7 +238,8 @@
     {
       "speaker": "工程师C",
       "content": "已完成风险评估与投票。主张合入以提升长期维护性。",
-      "ts": 1778456945.579828
+      "ts": 1778456945.579828,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -275,5 +284,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

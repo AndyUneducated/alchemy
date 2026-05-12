@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息未涉及具体代码或设计变更细节。主要为项目代号ZX-7492等基本信息。需进一步查找相关 commit 和设计文档以评估此次 PR 的影响和必要性。\n\n",
-      "ts": 1778433912.29073
+      "ts": 1778433912.29073,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的信息主要为项目基本信息，未包含接口契约和测试用例详情。需进一步查找。",
-      "ts": 1778433953.593724
+      "ts": 1778433953.593724,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "仍然缺少具体的代码变更、设计文档和测试用例细节，无法直接评估 PR 影响。\n\n",
-      "ts": 1778433999.9477508
+      "ts": 1778433999.9477508,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "接口约定文档暂未找到，需继续查找具体实现细节。",
-      "ts": 1778434041.385228
+      "ts": 1778434041.385228,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "当前无法直接投票，可能 vote_id 有误或未正确识别。请确认投票流程和 ID 正确性。",
-      "ts": 1778434085.671617
+      "ts": 1778434085.671617,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "我已投“合入”。请其他评审尽快投票。",
-      "ts": 1778434116.356894
+      "ts": 1778434116.356894,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -198,7 +204,8 @@
     {
       "speaker": "工程师A",
       "content": "继续寻找具体实现细节和测试用例以评估 PR 的影响。\n\n尽管目前信息不全，但从已知的风险可控性和长期维护性的角度来看，倾向于支持合入。\n",
-      "ts": 1778434182.3007228
+      "ts": 1778434182.3007228,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -232,7 +239,8 @@
     {
       "speaker": "工程师B",
       "content": "仍未找到接口约定详情，继续查找。",
-      "ts": 1778434230.900259
+      "ts": 1778434230.900259,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -242,7 +250,8 @@
     {
       "speaker": "工程师C",
       "content": "投票成功。鉴于风险可控且有利于长远维护，决定支持合入此 PR。",
-      "ts": 1778434254.7792
+      "ts": 1778434254.7792,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -264,5 +273,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

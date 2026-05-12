@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与 PR 关联性较低。需扩大搜索范围。",
-      "ts": 1778444829.614945
+      "ts": 1778444829.614945,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约和测试用例信息。需扩大搜索范围或调整关键词。",
-      "ts": 1778444867.687079
+      "ts": 1778444867.687079,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "已提交评审意见至 artifact。将继续搜集更多信息支持评审。",
-      "ts": 1778444917.051308
+      "ts": 1778444917.051308,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的信息与当前查询关联性较低，需进一步调整关键词或扩大搜索范围。",
-      "ts": 1778444957.842509
+      "ts": 1778444957.842509,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "当前没有有效的投票 ID。需要先创建一个投票才能进行投票操作。由于我是 QA senior 工程师，并且根据现有信息，我倾向于支持合入 PR 以提升长期可维护性，尽管存在短期测试覆盖率下降的风险。请确认是否可以直接决定或需发起投票流程。",
-      "ts": 1778444997.342936
+      "ts": 1778444997.342936,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +155,8 @@
     {
       "speaker": "主审",
       "content": "已创建投票，请各位根据评审意见进行投票。使用 `cast_vote(\"v1\", \"选项\")` 投票。",
-      "ts": 1778445019.430948
+      "ts": 1778445019.430948,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -174,7 +180,8 @@
     {
       "speaker": "工程师A",
       "content": "已更新评审意见至 artifact。\n\n现根据现有信息，我倾向于支持合入此 PR 以提升长期的可维护性。虽然测试覆盖率略有下降，但单一入口带来的代码清晰度和未来的维护便利性将超过这一短期风险。使用 `cast_vote(\"v1\", \"选项\")` 投票表达您的立场。",
-      "ts": 1778445048.010978
+      "ts": 1778445048.010978,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -207,7 +214,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口约定和测试用例无关。需进一步调整关键词。",
-      "ts": 1778445096.230447
+      "ts": 1778445096.230447,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -217,7 +225,8 @@
     {
       "speaker": "工程师C",
       "content": "投票完成，支持合入此 PR。理由：提升维护性，短期风险可控制。",
-      "ts": 1778445127.6760519
+      "ts": 1778445127.6760519,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -262,5 +271,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

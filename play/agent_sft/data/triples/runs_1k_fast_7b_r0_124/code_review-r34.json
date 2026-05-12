@@ -58,7 +58,8 @@
     {
       "speaker": "工程师A",
       "content": "从检索结果看，直接与「项目代号」模块重构相关的历史 commit 数量有限，需要进一步细化查询。\n\nappend_section(\"review_a\", \"暂无直接相关历史commit\")",
-      "ts": 1778412232.0413382
+      "ts": 1778412232.0413382,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -81,7 +82,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到直接相关的接口契约或测试用例。\n\nappend_section(\"review_b\", \"未找到直接相关接口契约或测试用例\")",
-      "ts": 1778412240.168308
+      "ts": 1778412240.168308,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -91,7 +93,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 重构合理，短期测试覆盖率下降可接受\")",
-      "ts": 1778412243.013626
+      "ts": 1778412243.013626,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -101,7 +104,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 进行覆盖写入。\n\n",
-      "ts": 1778412250.9971552
+      "ts": 1778412250.9971552,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -144,7 +148,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section` 进行覆盖写入。\n\nwrite_section(\"review_c\", \"- 综合 A/B 风险，建议合入以提升长期可维护性\")",
-      "ts": 1778412255.762908
+      "ts": 1778412255.762908,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -154,7 +159,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审员投下您的一票。\n\n- 合入\n- 退回",
-      "ts": 1778412260.525406
+      "ts": 1778412260.525406,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -178,7 +184,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"长期维护性更重要\")",
-      "ts": 1778412264.062214
+      "ts": 1778412264.062214,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -188,7 +195,8 @@
     {
       "speaker": "工程师B",
       "content": "",
-      "ts": 1778412267.994997
+      "ts": 1778412267.994997,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -198,7 +206,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"支持长期维护性提升\")",
-      "ts": 1778412271.484568
+      "ts": 1778412271.484568,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -209,5 +218,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

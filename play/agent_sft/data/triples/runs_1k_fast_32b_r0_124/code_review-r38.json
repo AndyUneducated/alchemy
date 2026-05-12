@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档未涵盖相关 commit 或设计细节。",
-      "ts": 1778441366.145653
+      "ts": 1778441366.145653,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约或测试用例信息。",
-      "ts": 1778441405.607127
+      "ts": 1778441405.607127,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "已经提交评审意见：建议作者补充相关 commit 或设计文档后再进行审查。",
-      "ts": 1778441428.360366
+      "ts": 1778441428.360366,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到具体接口约定信息。需进一步确认。",
-      "ts": 1778441471.0836759
+      "ts": 1778441471.0836759,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "无法找到投票ID，请确认投票是否已正确创建。若未创建，需先提出投票再进行表决。",
-      "ts": 1778441512.210428
+      "ts": 1778441512.210428,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "我已投票“退回”，请大家尽快完成投票。",
-      "ts": 1778441546.6073081
+      "ts": 1778441546.6073081,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -186,7 +192,8 @@
     {
       "speaker": "工程师A",
       "content": "已更新评审意见为：未找到详细commit或设计文档，建议补充后再审。建议补充详细文档后重新审。\n\n我的最终立场是支持“退回”，理由是在没有详细文档和接口约定的情况下进行合并不利于项目的长期维护。将进行投票。\n",
-      "ts": 1778441578.863362
+      "ts": 1778441578.863362,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -219,7 +226,8 @@
     {
       "speaker": "工程师B",
       "content": "已更新评审意见为：建议补充文档及测试后重新审。将进行投票支持“退回”。\n\n",
-      "ts": 1778441643.3176162
+      "ts": 1778441643.3176162,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -240,7 +248,8 @@
     {
       "speaker": "工程师C",
       "content": "投票成功，当前立场为“退回”，等待其他评审人完成投票。",
-      "ts": 1778441667.488746
+      "ts": 1778441667.488746,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -262,5 +271,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

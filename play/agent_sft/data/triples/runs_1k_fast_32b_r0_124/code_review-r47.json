@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与 PR 关联性较低。需更多具体 commit/doc 检索。",
-      "ts": 1778444468.163187
+      "ts": 1778444468.163187,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "已更新评审意见。将继续查找更具体的文档和提交记录以获取更多信息。",
-      "ts": 1778444519.69983
+      "ts": 1778444519.69983,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -86,7 +88,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到直接相关 commit 文档。需进一步检索。",
-      "ts": 1778444559.935158
+      "ts": 1778444559.935158,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -110,7 +113,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关 commit 文档。将继续尝试获取更多详细信息。\n",
-      "ts": 1778444612.947999
+      "ts": 1778444612.947999,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -131,7 +135,8 @@
     {
       "speaker": "工程师C",
       "content": "",
-      "ts": 1778444649.874752
+      "ts": 1778444649.874752,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +168,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请各位根据评审意见进行投票。",
-      "ts": 1778444670.145789
+      "ts": 1778444670.145789,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -199,7 +205,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到相关 commit 文档。继续尝试其他检索方式。",
-      "ts": 1778444714.752684
+      "ts": 1778444714.752684,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -223,7 +230,8 @@
     {
       "speaker": "工程师B",
       "content": "经过进一步检索，仍未发现具体的 commit 文档和代码变更细节。\n\n在现有信息基础上：\n\n- 兼容性方面，老 import path 仍工作但有 deprecation warning；\n- 性能影响微乎其微；\n- 测试覆盖率略下降至87%，但仍相对较高；\n\n权衡长期维护性和短期测试覆盖的妥协，倾向于支持合入此",
-      "ts": 1778444771.2176561
+      "ts": 1778444771.2176561,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -245,7 +253,8 @@
     {
       "speaker": "工程师C",
       "content": "立场已表达：支持合入，理由是维护性提升且风险可控。",
-      "ts": 1778444792.316003
+      "ts": 1778444792.316003,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -266,5 +275,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

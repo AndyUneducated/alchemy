@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR关联性不高，继续评估现有信息。",
-      "ts": 1778414472.6337652
+      "ts": 1778414472.6337652,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已存在，请在 review_b 段落追加评论。",
-      "ts": 1778414481.3964858
+      "ts": 1778414481.3964858,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "由于 `review_b` 为只写模式，请使用 `write_section` 全 overwrite 更新评审意见。\n\n我将进行全overwrite 操作。\nrewrite_section(\"review_b\", \"- 兼容性风险可控，性能无显著影响。建议合入。\\n\")",
-      "ts": 1778414489.5323808
+      "ts": 1778414489.5323808,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已追加至 `review_b`。\n\nappend_section(\"review_b\", \"- 兼容性风险可控，建议尽快合入以提升代码质量。\")",
-      "ts": 1778414493.948073
+      "ts": 1778414493.948073,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "看来 `review_b` 已经被标记为只追加模式，请使用 `write_section` 进行全overwrite 操作。\n\nwrite_section(\"review_b\", \"- 兼容性风险可控，建议尽快合入以提升代码质量。\\n\")\n",
-      "ts": 1778414499.371198
+      "ts": 1778414499.371198,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审选择【合入】或【退回】进行投票。",
-      "ts": 1778414504.0618129
+      "ts": 1778414504.0618129,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +146,8 @@
     {
       "speaker": "工程师A",
       "content": "已投赞成票：【合入】，理由是提高代码质量。",
-      "ts": 1778414509.566923
+      "ts": 1778414509.566923,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -173,7 +180,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics.append_section(\"review_b\", \"- 兼容性风险可控，建议尽快合入以提升代码质量。\")",
-      "ts": 1778414513.373483
+      "ts": 1778414513.373483,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -183,7 +191,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"提高代码质量和可维护性\")",
-      "ts": 1778414517.121172
+      "ts": 1778414517.121172,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -193,5 +202,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

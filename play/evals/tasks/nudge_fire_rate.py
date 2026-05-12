@@ -105,22 +105,25 @@ class NudgeFireRate(Task):
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
         """score 路径：predictions JSONL row 内的 envelope → metadata['trajectory']
         + 派生 expected_turns；Response 占位.
+
+        Predictions JSONL 由 run 路径写出，含 §16 envelope 全 5 字段（含 typed
+        transcript entry + usage list）.
         """
         envelope = {
-            "transcript": row.get("transcript", []),
-            "artifact": row.get("artifact", {}),
-            "warnings": row.get("warnings", []),
-            "success": row.get("success", False),
+            "transcript": row["transcript"],
+            "artifact": row["artifact"],
+            "warnings": row["warnings"],
+            "success": row["success"],
+            "usage": row["usage"],
         }
         enriched = _pin_envelope(doc, envelope)
         return enriched, Response(doc_id=doc.id)
 
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
         traj = doc.metadata.get("trajectory", {}) or {}
-        transcript = traj.get("transcript") or []
         expected = doc.metadata.get("expected_require_tool_turns") or []
 
-        result = compute_nudge_fire_rate(transcript, expected)
+        result = compute_nudge_fire_rate(traj, expected)
 
         # SampleResult.metrics 仅放标量（一级嵌套约束 + 直观聚合）；breakdown 详情
         # 进 artifacts 供 aggregation drill-down.
@@ -171,15 +174,16 @@ class NudgeFireRate(Task):
 def _pin_envelope(doc: Doc, envelope: dict[str, Any]) -> Doc:
     """envelope + scenario_path → metadata['trajectory'] + ['expected_require_tool_turns'].
 
-    envelope schema 与 agent_engine.result.Result 同形：
-      {transcript, artifact, warnings, success}
+    envelope schema 与 agent_engine.result.Result 同形（§16，5 字段）：
+      {transcript, artifact, warnings, success, usage}
+    严格透传——缺字段直接 KeyError，与 `Result.from_dict` 对齐.
     """
-    transcript = envelope.get("transcript") or []
     trajectory = {
-        "transcript": list(transcript),
-        "artifact": dict(envelope.get("artifact") or {}),
-        "warnings": list(envelope.get("warnings") or []),
-        "success": bool(envelope.get("success", False)),
+        "transcript": list(envelope["transcript"]),
+        "artifact": dict(envelope["artifact"]),
+        "warnings": list(envelope["warnings"]),
+        "success": bool(envelope["success"]),
+        "usage": list(envelope["usage"]),
     }
     scenario_path = doc.metadata.get("scenario_path")
     expected: list[dict[str, Any]] = []

@@ -46,7 +46,8 @@
     {
       "speaker": "工程师A",
       "content": "",
-      "ts": 1778415082.5276859
+      "ts": 1778415082.5276859,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -80,7 +81,8 @@
     {
       "speaker": "工程师B",
       "content": "获取的文档与接口契约无关，继续评审。\n\nappend_section(\"review_b\", \"建议合入，短期牺牲测试覆盖换取长期维护性。\")",
-      "ts": 1778415090.692951
+      "ts": 1778415090.692951,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -90,7 +92,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性无大碍，性能持平，测试覆盖可接受\")",
-      "ts": 1778415094.7234318
+      "ts": 1778415094.7234318,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -100,7 +103,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换 `append_section` 以更新评审意见。\n\nwrite_section(\"review_b\", \"- 兼容性已考虑警告，性能稳定，覆盖在可接受范围内。\")",
-      "ts": 1778415099.253336
+      "ts": 1778415099.253336,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -110,7 +114,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 兼顾A/B评审意见，兼容性与性能无显著风险，短期牺牲少量测试覆盖换得长期维护性。\")",
-      "ts": 1778415104.026081
+      "ts": 1778415104.026081,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -120,7 +125,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票：`v1`\n\n请各位评审员投下您的一票。",
-      "ts": 1778415108.4617689
+      "ts": 1778415108.4617689,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -144,7 +150,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"短期牺牲测试覆盖，长期提升维护性\")",
-      "ts": 1778415111.963823
+      "ts": 1778415111.963823,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -154,7 +161,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_section(\"review_b\", \"建议合入，短期牺牲测试覆盖换取长期维护性。\")",
-      "ts": 1778415115.533772
+      "ts": 1778415115.533772,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -164,7 +172,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期牺牲测试覆盖，提升长期可维护性\")",
-      "ts": 1778415119.126743
+      "ts": 1778415119.126743,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -175,5 +184,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

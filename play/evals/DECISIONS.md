@@ -711,6 +711,140 @@ phase 4 立的 monorepo 解耦原则是“Python import 边界”：evals 不 `f
 |这算不算“文档性工作”？|它是可复现性的基础工程，不是纯文档|
 |为什么放进 ADR？|依赖边界是长期工程决策，不是临时修补|
 
+## 15. transcript / scenario 解读权移交 agent_engine（agent_engine §13 的 evals 对应面）
+
+- **Date**: 2026-05-11
+
+### Context
+
+phase 5 落地后 evals 端有一组私有 helper 在反向工程 agent_engine 的 transcript / scenario schema：
+
+| 模块 | 私有 helper | 做的事 |
+|---|---|---|
+| `metrics/nudge.py` | `_FRONTMATTER_RE` / `_split_frontmatter` / `_resolve_who_to_agents` / `derive_expected_turns` / `split_turns` / `_split_attempts` / `_attempt_called_required` / `_attempt_called_any_tool` | scenario YAML → `[{turn_idx, agent, step_id, tool}, ...]`；transcript → segments → attempts |
+| `tasks/agent_traj.py` | `_extract_tool_calls` / `_extract_decision` | transcript → `[{tool, caller, arguments}, ...]`；finalize args → decision str |
+
+这些函数是 `agent_engine.scenario._expand_steps` / `Discussion._resolve_who` / artifact_event / tool_call / finalize_artifact 的镜像——schema 改一处需要 evals 也改。同时 [`play/agent_sft/data/extractor.py`] 干脆 `sys.path.insert + from evals.metrics.nudge import _4_私有_函数`，把私有面变成事实上的跨项目接口。
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 现状 | 各项目各自反向工程 schema | schema 改动 → 三处改 + agent_sft 反模式持续 |
+| **B. 把解读权收回 agent_engine，evals 直连**（选择） | `agent_engine.Result` / `Scenario` 暴露 typed 视图（agent_engine §13）；evals 通过新的 [`_ae_bridge.py`] in-process import | 一处 schema = 一处解读；evals 公开签名（`compute_nudge_fire_rate / classify_failure_mode / FAILURE_MODES / nudge_fire_rate_metric / derive_expected_turns / _pin_trajectory / load_prediction`）零破坏 |
+| C. 让 agent_engine 提供 plain function helper module | 函数式更轻 | 每加新视图都新模块；已被 agent_engine §13 选项 B vs C 论证否决 |
+
+### Decision
+
+**B**——在 [`agent_engine §13`](../agent_engine/DECISIONS.md) 落地后，evals 端做配套清理：
+
+| 动点 | 做法 |
+|---|---|
+| `_ae_bridge.py` | 集中 `sys.path.insert(play_dir)` + `from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn`；各 metric / task 模块直接 import 此处的别名 |
+| `metrics/nudge.py` | 删除 `_FRONTMATTER_RE / _split_frontmatter / _resolve_who_to_agents / split_turns / _split_attempts / _attempt_called_required / _attempt_called_any_tool`；`derive_expected_turns` 内部走 `Scenario.expanded_turns()`；`compute_nudge_fire_rate` 内部走 `Result.turns()` + `TurnView.attempts()`；`classify_failure_mode` 把"是否调过任意工具"内联进 5 行 |
+| `tasks/agent_traj.py` | 删除 `_extract_tool_calls / _extract_decision`；`_pin_trajectory` 内联 `Result.from_dict + .tool_calls() + .find_finalize_decision()` |
+| `tests/test_nudge_metric.py` | 删除 `test_split_turns_*`（2 条）；其它 11 条不动（compute_nudge_fire_rate 公开面不变）；`split_turns` 从 import 列表去掉 |
+| `tests/test_agent_traj_envelope.py` | 删除 `test_extract_tool_calls_*`（4 条）+ `test_extract_decision_*`（3 条）；保留 envelope schema 同源 + `_pin_trajectory` + `load_prediction` 测试；旧 `sys.path.insert` try/finally 黑魔法换成 `from evals._ae_bridge import Result` |
+| 跨项目 import 卫生 | `play/agent_sft` 同期把 `sys.path.insert + from evals.metrics.nudge import _4_私有` 反模式删掉，改直连 `from agent_engine import Result, Scenario, TurnView`；仅保留 `from evals.metrics.nudge import classify_failure_mode`（合法公开面） |
+
+PR-2 落地后等价覆盖：
+
+| 旧 evals 测试 → 新归属 |
+|---|
+| `test_split_turns_*` (2) → `agent_engine/tests/test_result_views.py::test_turns_*` |
+| `test_extract_tool_calls_*` (4) → `agent_engine/tests/test_result_views.py::test_tool_calls_*` |
+| `test_extract_decision_*` (3) → `agent_engine/tests/test_result_views.py::test_find_finalize_decision_*` |
+
+### Consequences
+
+| 影响 | 结果 |
+|---|---|
+| schema 单源 | agent_engine 改 transcript / scenario schema → 评测改一处即可，不再三处 chase |
+| 公开面纪律 | evals 仍是 `compute_nudge_fire_rate / derive_expected_turns / nudge_fire_rate_metric / classify_failure_mode / FAILURE_MODES / AgentTraj` 公开面；下游 agent_sft 仅依赖 `classify_failure_mode`（vs 历史 4 个私有面）|
+| 测试规模 | evals 465 → 456（-9 等价覆盖迁移到 agent_engine 36 测试），agent_sft 89 持平，agent_engine 0 → 36（PR-1 新建）|
+| 演化友好 | `agent_engine.Result` 加新字段 / 新视图自动同步；evals 度量层只关心 `turns()` / `tool_calls()` / `find_finalize_decision()` 三个 typed 接口 |
+| 跨项目契约监控 | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` 仍是单一断言点——agent_engine 改字段在 CI 第一时间显形 |
+
+### 示例
+
+| 场景 | 在该决策下如何处理 |
+|---|---|
+| agent_engine 给 transcript 加新 entry 类型（如 `system_event`）| 加到 `agent_engine.Result.tool_calls()` 规约；evals 度量自动接到 |
+| 想新增 `Result.tool_call_count_by_caller()` 视图 | 加在 `agent_engine.result.Result`；evals / agent_sft 直接调用，不复刻 |
+| 想新增 evals 度量 | `metrics/<name>.py` 通过 `_ae_bridge` import `Result` / `Scenario`，不再 sys.path 黑魔法 |
+
+### 面试官可能问
+
+| 问题 | 回答要点 |
+|---|---|
+| 为什么不在 agent_engine 提供 plain function `agent_engine.transcript.tool_calls(transcript)` 之类？ | OO 风格与 OpenAI Agents SDK / Anthropic / inspect_ai 对齐；视图方法挂在 dataclass 上扩展性更好；详见 agent_engine §13 选项对比 |
+| schema 收回 agent_engine 后 evals 度量是否变重？ | 不变。`Result` 视图方法是 O(transcript) 一遍扫描，与 evals 自己 split_turns 同等开销；in-process import 0 subprocess 开销 |
+| 既然评测度量是 evals 写的，为什么 schema 解读权要在 agent_engine？ | 解读 = "transcript 内 entry 怎么映射成 ToolCall"，是 schema 定义的一部分；评测 = "ToolCall 序列怎么算 F1"，才是评测。两者职责正交；本 ADR 把第一类彻底交还 agent_engine |
+
+## 16. transcript schema typed 升级 + envelope `usage` 消费（agent_engine §14 的 evals 对应面）
+
+- **Status**: accepted（紧跟 [`agent_engine §14`](../agent_engine/DECISIONS.md)）
+- **Date**: 2026-05-11
+
+### Context
+
+[`agent_engine §14`](../agent_engine/DECISIONS.md) 把 `Result.transcript` 从 `list[dict]` 升级到 `list[TranscriptEntry]`（6 个 frozen dataclass typed union），`SpeakerEntry` 强制带 `type="speaker"`，`Result` 加 `usage: list[TokenUsage]`，`Result.from_dict` 严格化（缺字段直接 `KeyError`）. evals 端要消费同一 envelope，作为 `agent_traj` / `nudge_fire_rate` 两 task 的输入：
+
+| 旧实现 | 问题 |
+|---|---|
+| `metrics/nudge.py::compute_nudge_fire_rate(transcript)` 拿 `list[dict]` | `entry["type"]` / `entry.get("speaker")` 字符串嗅探，schema 改一处 evals 即跟改 |
+| `metrics/trajectory.py` 同上 | 同 |
+| `tasks/agent_traj.py::_pin_trajectory(envelope)` 重新拼 dict 字段 | envelope 字段集合断言只锁字段名，不锁值类型；`usage` 字段缺也察觉不到 |
+| `tasks/nudge_fire_rate.py::_pin_envelope(envelope)` 同上 | 同 |
+| `evals/data/<task>/predictions/*.jsonl` 测试 fixture 没 `type:"speaker"` / `usage: []` | `Result.from_dict` 严格化后立刻 `KeyError` |
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. evals 端继续吃 `list[dict]`，在 `_pin_trajectory` / `_pin_envelope` 内部解 dataclass 后 `dataclasses.asdict` 退回 dict | 跟 PR-1 §15 路线一致 | dict 嗅探仍存在；schema 改动两处都要追 |
+| **B. 直接吃 typed entry**（选择） | `metrics/nudge.py` / `metrics/trajectory.py` 内部 `isinstance(e, SpeakerEntry/...)` 派发；envelope 消费方先 `Result.from_dict` 取 typed view 再走度量 | typed 编译期抓错；schema 改一处 evals 视图自动同步；`usage` 字段在 `_pin_trajectory` 一并镜像到 doc.metadata |
+| C. 给 evals 写一套自己的 typed view | 解耦完全 | 双 SoT，与 §15 决策矛盾 |
+
+### Decision
+
+**B**——evals 端全量切到 typed access；envelope schema 同步带上 `usage`；测试 fixture / prediction JSONL 一次性迁移：
+
+| 动点 | 做法 |
+|---|---|
+| `_ae_bridge.py` | re-export `TokenUsage / TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` |
+| `metrics/nudge.py::classify_failure_mode` | 形参 `first_attempt_events: list[TranscriptEntry]`；`isinstance(e, ArtifactEventEntry/ToolCallEntry)` 派发 |
+| `metrics/nudge.py::compute_nudge_fire_rate` | 形参从 `transcript: list[dict]` 改为 `envelope: dict`；内部 `Result.from_dict(envelope)` 取 typed view，下游全 typed |
+| `metrics/nudge.py::nudge_fire_rate_metric` | doc.metadata 取 `trajectory` 整个 envelope（不再只取 `transcript` 子键） |
+| `metrics/trajectory.py::_score_speakers / predicate_speakers_covered` | `entry.get("type") == "speaker"` 替代 `"speaker" in entry`（task 层从 `_pin_trajectory` 写盘的仍是 dict 形态——见下） |
+| `tasks/agent_traj.py::_pin_trajectory` | envelope 5 字段（`transcript / artifact / warnings / success / usage`）严格读；构造 `doc.metadata["trajectory"]` 时把 `Result.transcript` 与 `.usage` 用 `dataclasses.asdict` 拍扁回 dict（metric 层从 `metadata` 读 dict，跨 JSONL 落盘后形态一致）|
+| `tasks/agent_traj.py::load_prediction` | 严格读 5 字段，缺即 `KeyError` |
+| `tasks/nudge_fire_rate.py::_pin_envelope / load_prediction / process_results` | 同上；`process_results` 把 doc.metadata 取出的 trajectory dict 直接给 `compute_nudge_fire_rate(envelope)` |
+| `models/agent_engine_run.py` 文档 | envelope shape 注释加 `usage` 字段 + 说明 `transcript` 元素是 typed dataclass 序列化后的 dict |
+| `evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` × 46 文件 | 一次性迁移脚本注入 `type:"speaker"` 到 speaker entry + `usage: []` 到 envelope；与 agent_engine §14 forward-only 选择一致 |
+| `tests/test_agent_traj_envelope.py` / `test_nudge_metric.py` / `test_metrics_trajectory.py` 等 | fixture 改用 typed entry helper（`SpeakerEntry / TurnEntry / ToolCallEntry / ArtifactEventEntry`）+ `dataclasses.asdict` 落 envelope；envelope 字段集合断言加 `usage` |
+
+### Consequences
+
+| 影响 | 结果 |
+|---|---|
+| schema 单源 | agent_engine §14 改 entry / 加字段 → evals 度量层不修改即兼容（typed dispatch 自动接到）|
+| 测试规模 | evals 仍 456 测试通过（fixture migration 是同等覆盖的形态变更，不增不减）；三项目合计 585（agent_engine 42 / evals 456 / agent_sft 87） |
+| 公开面 | `compute_nudge_fire_rate` 形参从 `transcript: list[dict]` 改为 `envelope: dict`——破坏性，但 evals 是终端 task 而非长期 SDK，调用方仅 `nudge_fire_rate_metric` 一处；用户已确认 forward-only |
+| envelope schema 监控 | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` 现在锁 `{transcript, artifact, warnings, success, usage}`——agent_engine 加字段 evals CI 立刻 fail |
+| `usage` 消费 | 当前仅 `_pin_trajectory` 镜像到 metadata；后续 `efficiency.py` 可直接从 envelope 取 typed `TokenUsage` 计 cost，比 stderr 反推稳得多（待具体驱动场景再做） |
+| 老 prediction JSONL | 一次性迁移脚本处理；不留长期兼容 reader |
+
+### 与 §15 / §11 / agent_engine §14 的关系
+
+| ADR | 立的是什么 |
+|---|---|
+| §11 | envelope SoT 是 `Result` 的 dataclass 字段集合 |
+| §15 | transcript / scenario 解读权（`tool_calls / turns / expanded_turns`）住在 agent_engine |
+| §16 | envelope 字段值本身（`TranscriptEntry` typed union + `TokenUsage`）也住在 agent_engine；evals 度量层 100% typed 消费 |
+
+§11 → §15 → §16 是同一条链的三层收紧：字段名 → 字段解读 → 字段值类型，三者都从 evals 反向工程移交回 agent_engine 的 SoT.
+
 ## 非目标（持续有效）
 
 |项|说明|

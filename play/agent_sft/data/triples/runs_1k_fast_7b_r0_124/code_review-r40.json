@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "检索结果与当前 PR 无关，建议关注现有评审点。",
-      "ts": 1778412545.413273
+      "ts": 1778412545.413273,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -67,7 +68,8 @@
     {
       "speaker": "工程师B",
       "content": "已提交评审意见：检索结果与当前 PR 无关，建议关注评审点。",
-      "ts": 1778412556.062666
+      "ts": 1778412556.062666,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -88,7 +90,8 @@
     {
       "speaker": "工程师A",
       "content": "ponge_section(\"review_a\", \"- 兼容性和性能风险可控，建议合入。\")",
-      "ts": 1778412559.886048
+      "ts": 1778412559.886048,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +101,8 @@
     {
       "speaker": "工程师B",
       "content": "已提交评审意见：兼容性风险可控，性能无显著影响，建议合入。请工程师C补充综合评估。",
-      "ts": 1778412563.9723399
+      "ts": 1778412563.9723399,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +112,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section` 替换 `append_section`。\n\n将继续按照替换方式操作。\n\nwrite_section(\"review_b\", \"- 兼容性风险可控，性能无显著影响，建议合入。\")\n",
-      "ts": 1778412569.270262
+      "ts": 1778412569.270262,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +123,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票：是否合入此 PR? 选项：合入、退回。\n\n请各位工程师投出您的宝贵一票。",
-      "ts": 1778412573.823873
+      "ts": 1778412573.823873,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -142,7 +148,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"风险可控，利于维护\")",
-      "ts": 1778412577.190503
+      "ts": 1778412577.190503,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -152,7 +159,8 @@
     {
       "speaker": "工程师B",
       "content": "已提交评审意见：兼容性风险可控，性能无显著影响，建议合入。\n\n请工程师C补充综合评估并进行投票。",
-      "ts": 1778412581.824521
+      "ts": 1778412581.824521,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -173,7 +181,8 @@
     {
       "speaker": "工程师C",
       "content": "已提交投票：合入。理由：短期兼容性风险可控，利于长期维护。\n\n将继续等待其他评审者投票并决定最终结果。\ncast_vote(\"v1\", \"合入\", \"短期兼容性风险可控，利于长期维护\")\n现在请工程师C进行综合评估和投票。\n如果已有意见，请补充至 `review_c`。",
-      "ts": 1778412587.494117
+      "ts": 1778412587.494117,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -195,5 +204,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

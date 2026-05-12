@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"name\": \"review_a\", \"entry\": \"关注点明确，建议合入。\"} }\n</tool_call>",
-      "ts": 1778412914.688687
+      "ts": 1778412914.688687,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"vote_id\": \"v1234567890abcdef\", \"rationale\": \"短期牺牲测试覆盖换取长期维护。\"}}\n</tool_call>",
-      "ts": 1778412926.425935
+      "ts": 1778412926.425935,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -89,7 +91,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 接受合入，兼顾短期牺牲。\")",
-      "ts": 1778412930.2515688
+      "ts": 1778412930.2515688,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -99,7 +102,8 @@
     {
       "speaker": "工程师B",
       "content": "",
-      "ts": 1778412938.8841112
+      "ts": 1778412938.8841112,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -131,7 +135,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合A/B风险，短期内合入以提升维护性。\")",
-      "ts": 1778412943.324246
+      "ts": 1778412943.324246,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -141,7 +146,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请各位评审选择：{\"options\":[\"合入\",\"退回\"],\"question\":\"是否合入此 PR?\"}，选项 ID 分别为 \"v1\" 和 \"v2\"。",
-      "ts": 1778412948.377219
+      "ts": 1778412948.377219,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -165,7 +171,8 @@
     {
       "speaker": "工程师A",
       "content": "投票已提交，选择\"合入\"选项。",
-      "ts": 1778412952.8416011
+      "ts": 1778412952.8416011,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -187,7 +194,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交，选择\"合入\"选项。",
-      "ts": 1778412958.552827
+      "ts": 1778412958.552827,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -221,7 +229,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合团队意见，短期内合入提升维护性。\")",
-      "ts": 1778412962.317961
+      "ts": 1778412962.317961,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -230,5 +239,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

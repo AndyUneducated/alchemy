@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与模块无关，无关键信息。",
-      "ts": 1778458124.49623
+      "ts": 1778458124.49623,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约或测试用例信息。",
-      "ts": 1778458162.406081
+      "ts": 1778458162.406081,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已更新。接下来需要更多信息来做出更准确的判断。建议继续审查或请求更多详情。",
-      "ts": 1778458182.620219
+      "ts": 1778458182.620219,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口约定信息。需更多细节再判断。",
-      "ts": 1778458223.45877
+      "ts": 1778458223.45877,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "未找到有效投票，先创建投票选项。",
-      "ts": 1778458255.635112
+      "ts": 1778458255.635112,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -138,7 +143,8 @@
     {
       "speaker": "主审",
       "content": "已创建投票，请各位工程师根据评审意见进行投票。",
-      "ts": 1778458276.489312
+      "ts": 1778458276.489312,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -162,7 +168,8 @@
     {
       "speaker": "工程师A",
       "content": "已更新评审意见至 review_a 部分。等待其他工程师的意见和投票结果以做最终决策。",
-      "ts": 1778458301.920745
+      "ts": 1778458301.920745,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -196,7 +203,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口约定，需更多细节。",
-      "ts": 1778458348.9851542
+      "ts": 1778458348.9851542,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -206,7 +214,8 @@
     {
       "speaker": "工程师C",
       "content": "投票完成，等待其他评审意见。",
-      "ts": 1778458368.517869
+      "ts": 1778458368.517869,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -228,5 +237,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

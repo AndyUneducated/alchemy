@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.request
 from typing import Callable
 
-from .config import OLLAMA_BASE_URL, MAX_TOKENS, TEMPERATURE
+from .config import MAX_TOKENS, OLLAMA_BASE_URL, TEMPERATURE
+from .result import TokenUsage
 
 MAX_TOOL_ROUNDS = 5
 
 
-def _call(model: str, messages: list[dict], *, temperature: float,
-          max_tokens: int, stream: bool,
-          tools: list[dict] | None = None) -> dict:
+def _call(
+    model: str,
+    messages: list[dict],
+    *,
+    temperature: float,
+    max_tokens: int,
+    stream: bool,
+    tools: list[dict] | None = None,
+) -> dict:
     """Single Ollama /api/chat round-trip; returns the final JSON frame."""
     body: dict = {
         "model": model,
@@ -59,25 +67,43 @@ def _call(model: str, messages: list[dict], *, temperature: float,
     return last_data
 
 
-def chat(model: str, *, system_prompt: str = "", messages: list[dict],
-         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
-         stream: bool = True,
-         tools: list[dict] | None = None,
-         tool_handler: Callable[[str, dict], str] | None = None) -> str:
-    """Send a chat request to Ollama and return the assistant reply.
+def chat(
+    model: str,
+    *,
+    system_prompt: str = "",
+    messages: list[dict],
+    temperature: float = TEMPERATURE,
+    max_tokens: int = MAX_TOKENS,
+    stream: bool = True,
+    tools: list[dict] | None = None,
+    tool_handler: Callable[[str, dict], str] | None = None,
+    caller: str = "",
+) -> tuple[str, TokenUsage]:
+    """Send a chat request to Ollama and return `(text, TokenUsage)`.
 
-    When *tools* are provided the function enters a tool loop (non-streaming)
-    until the model stops requesting tools or *MAX_TOOL_ROUNDS* is reached.
+    Ollama's `/api/chat` final frame carries `prompt_eval_count` /
+    `eval_count` token counters. `TokenUsage` aggregates across tool-loop
+    rounds. Ollama doesn't expose prompt cache; `cached_tokens=0`.
     """
     msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + list(messages)
+    t0 = time.monotonic()
+    in_tok = out_tok = 0
 
     for _ in range(MAX_TOOL_ROUNDS):
         data = _call(model, msgs, temperature=temperature,
                      max_tokens=max_tokens, stream=stream, tools=tools)
+        in_tok += int(data.get("prompt_eval_count", 0) or 0)
+        out_tok += int(data.get("eval_count", 0) or 0)
 
         tool_calls = data.get("message", {}).get("tool_calls")
         if not tool_calls or not tool_handler:
-            return data["_text"]
+            return data["_text"], TokenUsage(
+                model=model, caller=caller,
+                input_tokens=in_tok, output_tokens=out_tok,
+                cached_tokens=0,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                ts=time.time(),
+            )
 
         msgs.append(data["message"])
         for tc in tool_calls:
@@ -85,4 +111,10 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
             result = tool_handler(fn["name"], fn.get("arguments", {}))
             msgs.append({"role": "tool", "content": result})
 
-    return data["_text"]
+    return data["_text"], TokenUsage(
+        model=model, caller=caller,
+        input_tokens=in_tok, output_tokens=out_tok,
+        cached_tokens=0,
+        duration_ms=int((time.monotonic() - t0) * 1000),
+        ts=time.time(),
+    )

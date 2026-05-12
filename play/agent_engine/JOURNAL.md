@@ -487,3 +487,88 @@ flowchart LR
 |工具|说明|
 |---|---|
 |—|工具集合不变；`require_tool` 现在覆盖所有工具（含非 artifact）是 wiring 修复，不是新工具|
+
+## 2026-05-11 — Result/Scenario 暴露 typed 视图：把 transcript 解读权收回 agent_engine
+
+这个里程碑做的是 §11 的纵向延伸。§11 立 `Result` 是跨项目机器消费 SoT，但只覆盖 envelope **字段** schema；**字段解读**（transcript 怎么切 turn / 怎么抽 tool 调用 / scenario 怎么静态展开）一直由各消费者反向工程：`play/evals` 重写了一遍 `_resolve_who + _expand_steps`，`play/agent_sft` 干脆 `sys.path.insert + from evals.metrics.nudge import _私有_4_个`. DECISIONS §13 把这块解读权收回 agent_engine：`Result.tool_calls() / .turns() / .speakers() / .find_finalize_decision()` + `Scenario.expanded_turns()` 暴露 typed 视图（`ToolCall / TurnView / ExpandedTurn` 三个 frozen dataclass），与 OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool` 同精神。同时本期落地 `play/agent_engine/tests/` 首测试目录（36 测试），含一条关键 invariant：在 7 个现网 scenario 上 `Scenario.expanded_turns()` 长度 / (agent, step_id) 序列与 `Discussion._expand_steps()` 字节相同——锁住"静态展开 == runtime 展开"，让未来重构 `_resolve_who_names` 共用纯函数时不会偷偷偏离。**PR-1 公开签名零破坏**：evals/agent_sft 现有 pytest 全绿（465 + 89），shim 层让 `nudge.py / agent_traj.py` 内部改调新 API 但调用方零修改；PR-2 删 shim + agent_sft 直连 agent_engine 收尾。
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|`Result.from_dict / load_json` + 4 视图方法（`tool_calls / turns / speakers / find_finalize_decision`）|envelope ↔ Result 双向 IO + transcript 解读 SoT；缺字段降级兼容老 envelope|
+|`ToolCall(frozen)` + `TurnView(frozen, start_offset)`|typed 视图，与 OpenAI Agents SDK / inspect_ai 风格对齐；`start_offset` 给 agent_sft turn-indexed 切 context 用|
+|`Scenario.expanded_turns()` + `ExpandedTurn(frozen)`|静态展开 `steps:` 为线性 turn 序列，不实例化 Agent；评测 / 训练数据挖掘消费者不再复刻展开逻辑|
+|抽 `_resolve_who_names(who, declared_order, role_by_name)` 纯函数|`Discussion._resolve_who` runtime 路径 + `Scenario.expanded_turns()` 静态路径**共用**——保证两条路径展开顺序字节相同|
+|`play/agent_engine/tests/` 首测试目录（36 测试）|项目此前无 tests，本期建底；含 7 现网 scenario 上 expanded_turns ≡ Discussion._expanded 的 invariant 锁|
+|公开 surface 通过 `__init__.py` re-export `ExpandedTurn / Result / Scenario / ToolCall / TurnView`|消费者 `from agent_engine import ToolCall, TurnView, ExpandedTurn` 即可|
+
+```mermaid
+flowchart LR
+    subgraph AE[agent_engine（schema + schema 解读 SoT）]
+      RES[Result]
+      RES -->|.tool_calls| TC[list[ToolCall]]
+      RES -->|.turns| TV[list[TurnView]]
+      RES -->|.find_finalize_decision| DEC[str?]
+      SCN[Scenario] -->|.expanded_turns| ET[list[ExpandedTurn]]
+    end
+    EV[play/evals] -. import .-> RES & SCN
+    SFT[play/agent_sft<br/>PR-2 起] -. import .-> RES & SCN
+```
+
+### 新增 scenario
+
+|scenario|目的|演示什么|
+|---|---|---|
+|—|沿用既有 7 scenario（brainstorm/debate/roundtable/panel/code_review/tool_chain/example）|invariant 测试在所有现网 scenario 上锁 expanded_turns ≡ Discussion._expanded|
+
+### 新增 / 改动工具
+
+|工具|说明|
+|---|---|
+|—|本期为视图 API + 测试落地，工具集不变|
+
+## 2026-05-11 — Transcript schema typed 化 + token usage 落地
+
+§13 把 transcript 解读权收回 agent_engine，但 transcript entry 仍是 `list[dict]`——5 个写入点散落、`SpeakerEntry` 没 `type` tag、`Result` 没 `usage` 字段，cost / efficiency 度量得从 stderr 反推. 本期是 §13 的字段层延伸：`TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` 6 个 frozen dataclass 组成 `TranscriptEntry` typed union（`SpeakerEntry` 强制带 `type="speaker"`），`Result` 加 `usage: list[TokenUsage]`，4 LLM client（`openai/anthropic/gemini/ollama`）`chat()` 改返 `(text, TokenUsage)` 二元组，`Agent.respond / Discussion / Engine` 串到 `Result.usage`. **forward-only 升级**——`Result.from_dict` 缺字段直接 `KeyError`，老 envelope 不可读；本仓库无外部消费者，迁移脚本一次性把 evals predictions JSONL × 46 + agent_sft mined envelope JSON × 500 注入 `type:"speaker"` + `usage: []`. `agent_sft` 删 `_split_turns_indexed / _index_steps_by_turn` 共 2 个 shim 函数（typed `Result.turns()` 已能直接给 `start_offset`，shim 失去存在意义）. 三项目 pytest 全绿（agent_engine 42 / evals 456 / agent_sft 87 = 585）+ evals smoke `agent_traj` / `nudge_fire_rate` 通过.
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|6 个 `frozen=True` entry dataclass + `TranscriptEntry` Union|schema 自身 typed 化；与 OpenAI Agents SDK / inspect_ai / LangChain typed message union 同精神|
+|`SpeakerEntry.type: Literal["speaker"]`|修复历史遗漏；transcript 解读 100% 走 type tag 路径|
+|`TokenUsage` frozen + `Result.usage: list[TokenUsage]`|cost / efficiency 度量从 stderr 反推升级到 envelope 字段级|
+|4 LLM client `chat(...)` 签名加 `caller: str` + 返 `(text, TokenUsage)`|跨 OpenAI / Anthropic / Gemini / Ollama 抹平 SDK usage 字段差异|
+|`ConversationMemory.drain_usage()`|SummaryMemory 内部 summarizer 调用产生的 usage 也回收进 envelope|
+|`Result.from_dict` 严格化（缺字段 `KeyError`）|forward-only schema；旧 envelope 一次性迁移脚本处理|
+|删 `agent_sft.data.extractor._split_turns_indexed / _index_steps_by_turn` 共 2 个 shim|`Result.turns()[i].start_offset` 已直接给 turn-indexed 全局 offset|
+|`engine.py` 写盘前 `[dataclasses.asdict(e) for e in history]`|typed entry → JSON 序列化|
+
+```mermaid
+flowchart LR
+    subgraph Schema["agent_engine （schema + 解读 + typed 字段值 SoT）"]
+      RES[Result]
+      RES -->|.transcript| TE["list[TranscriptEntry]<br/>= TopicEntry | TurnEntry |<br/>SpeakerEntry | ToolCallEntry |<br/>ArtifactEventEntry | SummaryEntry"]
+      RES -->|.usage| UU["list[TokenUsage]"]
+      RES -->|.tool_calls| TC["list[ToolCall]"]
+      RES -->|.turns| TV["list[TurnView]"]
+    end
+    CL1[OpenAI client] -->|chat→| TU1[TokenUsage]
+    CL2[Anthropic client] -->|chat→| TU2[TokenUsage]
+    CL3[Gemini client] -->|chat→| TU3[TokenUsage]
+    CL4[Ollama client] -->|chat→| TU4[TokenUsage]
+    TU1 & TU2 & TU3 & TU4 --> AG[Agent.respond] --> DSC[Discussion.usage] --> ENG[Engine.invoke] --> UU
+```
+
+### 新增 scenario
+
+|scenario|目的|演示什么|
+|---|---|---|
+|—|沿用既有 7 scenario|schema 升级与场景集合解耦|
+
+### 新增 / 改动工具
+
+|工具|说明|
+|---|---|
+|—|本期为 schema typed 化 + token usage envelope 落地，工具集不变|

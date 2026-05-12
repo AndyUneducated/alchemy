@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档未提及 `项目代号` 模块历史，仅包含项目事实。",
-      "ts": 1778411715.494829
+      "ts": 1778411715.494829,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到`项目代号`模块历史或相关接口契约/测试用例。\n\nappend_section(\"review_b\", \"无相关文档，建议作者补充。\")",
-      "ts": 1778411723.656609
+      "ts": 1778411723.656609,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "ORMALIZE THE RESPONSE AS NEEDED:\n\nappend_section(\"review_a\", \"- 关注点：缺少模块历史和接口契约，建议补充。\")",
-      "ts": 1778411730.935636
+      "ts": 1778411730.935636,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "需要用 `write_section` 而非 `append_section`。\n\nwrite_section(\"review_b\", \"- 关注点：缺少模块历史，建议补充。\")",
-      "ts": 1778411735.2073212
+      "ts": 1778411735.2073212,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_b\", \"- 关注点：缺少模块历史，建议补充。\")",
-      "ts": 1778411739.321221
+      "ts": 1778411739.321221,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审投票。",
-      "ts": 1778411743.850967
+      "ts": 1778411743.850967,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +146,8 @@
     {
       "speaker": "工程师A",
       "content": "astle vote(vote_id=\"v1\", option=\"退回\", rationale=\"需要补充模块历史和接口契约\")",
-      "ts": 1778411747.4261088
+      "ts": 1778411747.4261088,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -150,7 +157,8 @@
     {
       "speaker": "工程师B",
       "content": "castle_vote(\"v1\", \"退回\", \"需补充模块历史和接口契约\")",
-      "ts": 1778411750.8817039
+      "ts": 1778411750.8817039,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -160,7 +168,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"退回\", \"需补充模块历史和接口契约\")",
-      "ts": 1778411754.339177
+      "ts": 1778411754.339177,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -171,5 +180,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

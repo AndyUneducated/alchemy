@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "review_a 段落只能替换，请使用 `write_section`。\n\n\tappend_section(\"review_a\", \"暂无关键历史信息影响当前决策。\")\n写入评审意见：暂无关键历史信息影响当前决策。\n现在请审阅其他内容并提出反馈。",
-      "ts": 1778413409.1574411
+      "ts": 1778413409.1574411,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "从检索结果看，当前文档无直接涉及接口契约或测试用例信息。\n\nappend_section(\"review_b\", \"当前文档无直接接口契约/测试用例信息。\")",
-      "ts": 1778413417.4296699
+      "ts": 1778413417.4296699,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 无明显性能影响，接受短期测试覆盖率下降。\")",
-      "ts": 1778413420.382902
+      "ts": 1778413420.382902,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换 `append_section`。\n\nwrite_section(\"review_b\", \"- 无明显性能影响，建议合并以提升代码维护性。\")",
-      "ts": 1778413424.6817532
+      "ts": 1778413424.6817532,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_b\", \"- 无明显性能影响，建议合并以提升代码维护性。\")",
-      "ts": 1778413428.856409
+      "ts": 1778413428.856409,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位工程师投票支持。\n- 合入\n- 退回",
-      "ts": 1778413433.5611022
+      "ts": 1778413433.5611022,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"短期牺牲覆盖率换取长期维护性合理。\")",
-      "ts": 1778413437.0688698
+      "ts": 1778413437.0688698,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", \"短期牺牲覆盖率合理，提升代码维护性。\")",
-      "ts": 1778413440.5378282
+      "ts": 1778413440.5378282,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"无明显性能影响，提升代码维护性。\")",
-      "ts": 1778413443.992665
+      "ts": 1778413443.992665,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

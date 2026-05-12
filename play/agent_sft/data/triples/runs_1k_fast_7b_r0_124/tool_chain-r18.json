@@ -30,7 +30,8 @@
     {
       "speaker": "执行者",
       "content": "核心要点：项目代号ZX-7492，服务器SRV-8831，负责人E-2055，启动日期2026年3月14日。",
-      "ts": 1778407040.475745
+      "ts": 1778407040.475745,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "执行者",
       "content": "write_section(\"调研笔记\", \"项目事实清单\\n- 项目代号：ZX-7492\\n- 服务器编号：SRV-8831\\n- 负责人编号：E-2055\\n- 启动日期：2026 年 3 月 14 日\")",
-      "ts": 1778407050.328278
+      "ts": 1778407050.328278,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -74,7 +76,8 @@
     {
       "speaker": "协调者",
       "content": "vote_id: v1\n\ncast_vote(vote_id=\"v1\", option=\"不追加\")",
-      "ts": 1778407054.28024
+      "ts": 1778407054.28024,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -98,7 +101,8 @@
     {
       "speaker": "执行者",
       "content": "cast_vote(\"v1\", \"追加\", \"一句话\")",
-      "ts": 1778407057.087611
+      "ts": 1778407057.087611,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +112,8 @@
     {
       "speaker": "执行者",
       "content": " retrievals = retrieve_docs(\"项目代号 历史\")",
-      "ts": 1778407057.861975
+      "ts": 1778407057.861975,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +123,8 @@
     {
       "speaker": "执行者",
       "content": "append_section(\"调研笔记\", \"- 第2轮: 一句话补充要点\")",
-      "ts": 1778407058.671947
+      "ts": 1778407058.671947,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -126,5 +132,6 @@
     "执行者 skipped required tool 'cast_vote' after 1 attempt(s)",
     "执行者 skipped required tool 'retrieve_docs' after 1 attempt(s)",
     "执行者 skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

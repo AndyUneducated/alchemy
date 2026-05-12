@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，暂无关键信息。",
-      "ts": 1778414725.630933
+      "ts": 1778414725.630933,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见区为只写，请使用 `append_section` 提交意见。",
-      "ts": 1778414734.662876
+      "ts": 1778414734.662876,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "ormalize the path for importing codename module to `from sdk.project import codename`. Considering the deprecation warning might still pollute logs, suggest configuring log filters in the deployment environment.\n\n使用 `write_section` 覆盖写入了评审意见。\n\n继续下一步。",
-      "ts": 1778414740.9060512
+      "ts": 1778414740.9060512,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -85,7 +88,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见区为追加模式，请使用 `append_section` 提交意见。\n\n工程师B → append_section(\"review_b\", \"- 单一入口增加一层调用可能暂时不影响性能，但需留意未来扩展性。\")。",
-      "ts": 1778414745.667768
+      "ts": 1778414745.667768,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +99,8 @@
     {
       "speaker": "工程师C",
       "content": "看来 'review_b' 需要使用 `write_section` 覆盖写入。\n\n工程师C → write_section(\"review_c\", \"- 综合 A/B 风险，建议合入并关注后续性能扩展性。\")。\n继续下一步。\nClientRect: 0,0 374x57\n\n```json\n{\"name\": \"write_section\",",
-      "ts": 1778414751.2450829
+      "ts": 1778414751.2450829,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +110,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审员投票决定是否合入此 PR。\n\n- 合入\n- 退回",
-      "ts": 1778414756.034234
+      "ts": 1778414756.034234,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +135,8 @@
     {
       "speaker": "工程师A",
       "content": "工程师B → append_section(\"review_b\", \"- 单一入口增加一层调用可能暂时不影响性能，但需留意未来扩展性。\")\n\n工程师C → write_section(\"review_c\", \"- 综合 A/B 风险，建议合入并关注后续性能扩展性。\") \n\n主审，请您合并意见后提出最终决策。\n",
-      "ts": 1778414760.850626
+      "ts": 1778414760.850626,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +146,8 @@
     {
       "speaker": "工程师B",
       "content": "评审员已投票支持合入此 PR。\n\n继续下一步。\nClientRect: 0,0 374x59\n\n## review_b\n- 单一入口增加一层调用可能暂时不影响性能，但需留意未来扩展性。\n\n\n## 决策\n建议合入并关注后续性能扩展性。",
-      "ts": 1778414766.596118
+      "ts": 1778414766.596118,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -161,7 +169,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持合入此 PR。\n\n决策选项：\n- 合入: 2 (工程师B, 主审)\n- 退回: 0 (—)\n\n主审将根据多数意见决定合入此 PR。\n\n决策结果：合入。",
-      "ts": 1778414772.3511481
+      "ts": 1778414772.3511481,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -182,5 +191,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性较低，主要为项目事实。",
-      "ts": 1778411214.772813
+      "ts": 1778411214.772813,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。",
-      "ts": 1778411222.5274692
+      "ts": 1778411222.5274692,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险需关注，建议加强新旧路径迁移脚本。\")",
-      "ts": 1778411226.47884
+      "ts": 1778411226.47884,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section(\"review_b\", \"- 性能影响不大，保持当前实现。\")` 替换原有内容。",
-      "ts": 1778411230.414146
+      "ts": 1778411230.414146,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section(\"review_b\", \"- 性能影响不大，保持当前实现。\")` 替换原有内容。",
-      "ts": 1778411234.468968
+      "ts": 1778411234.468968,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请评审们选择“合入”或“退回”。",
-      "ts": 1778411238.805092
+      "ts": 1778411238.805092,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"短期牺牲测试覆盖换取长期维护性值得。\")",
-      "ts": 1778411242.132434
+      "ts": 1778411242.132434,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "投票成功提交。当前票数：合入 1 票，退回 0 票。等待其他评审表态。",
-      "ts": 1778411246.7159302
+      "ts": 1778411246.7159302,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +159,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合风险，选择合入。\")",
-      "ts": 1778411250.123905
+      "ts": 1778411250.123905,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -161,5 +170,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

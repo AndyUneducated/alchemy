@@ -230,7 +230,9 @@ def trajectory_coverage(*, kind: str = "callers") -> Callable[[Doc, Response], f
         if not required:
             return 1.0
         transcript = _traj(doc).get("transcript", []) or []
-        visited = {e["speaker"] for e in transcript if "speaker" in e}
+        # transcript 是 envelope 反序列化的 list[dict]（agent_engine §16 起每条 entry 含
+        # 显式 type 字段；speaker entry 即 type=="speaker"）.
+        visited = {e["speaker"] for e in transcript if e.get("type") == "speaker"}
         return len(required & visited) / len(required)
 
     fn = _score_callers if kind == "callers" else _score_speakers
@@ -271,5 +273,5 @@ def predicate_speakers_covered(doc: Doc) -> bool:
     if not expected:
         return True
     transcript = traj.get("transcript", []) or []
-    spoke = {e["speaker"] for e in transcript if "speaker" in e}
+    spoke = {e["speaker"] for e in transcript if e.get("type") == "speaker"}
     return all(s in spoke for s in expected)

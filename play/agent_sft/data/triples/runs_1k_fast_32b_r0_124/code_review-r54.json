@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档未直接涉及历史 commit 或设计细节。主要信息为项目代号 ZX-7492 等基础数据，与本次 PR 关联不大。需进一步查找具体技术文档或 commit 记录。",
-      "ts": 1778446624.54973
+      "ts": 1778446624.54973,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -66,7 +67,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的文档主要为项目基础信息，无接口详情。\n\n",
-      "ts": 1778446702.029237
+      "ts": 1778446702.029237,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -90,7 +92,8 @@
     {
       "speaker": "工程师A",
       "content": "已更新评审意见。将继续尝试使用更具体的关键词进行文档检索。",
-      "ts": 1778446760.072211
+      "ts": 1778446760.072211,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -124,7 +127,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到具体接口约定，需进一步检索。",
-      "ts": 1778446800.4514718
+      "ts": 1778446800.4514718,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -134,7 +138,8 @@
     {
       "speaker": "工程师C",
       "content": "风险已评估，准备投票。",
-      "ts": 1778446828.203244
+      "ts": 1778446828.203244,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -166,7 +171,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请大家根据评审意见进行投票。",
-      "ts": 1778446848.2870479
+      "ts": 1778446848.2870479,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -190,7 +196,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见更新完成。继续等待其他评审人的投票或反馈。如果有必要，将进一步查找相关文档或直接提出投票意见。",
-      "ts": 1778446873.2515368
+      "ts": 1778446873.2515368,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -224,7 +231,8 @@
     {
       "speaker": "工程师B",
       "content": "仍未找到接口约定相关内容。继续尝试其他关键词检索。",
-      "ts": 1778446926.0332422
+      "ts": 1778446926.0332422,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -234,7 +242,8 @@
     {
       "speaker": "工程师C",
       "content": "投票成功，支持合入。等待其他评审意见。",
-      "ts": 1778446945.924289
+      "ts": 1778446945.924289,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -256,5 +265,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -383,3 +383,58 @@ flowchart LR
 |指标|指标族|说明|
 |---|---|---|
 |—|—|本轮为工程修订，不新增指标|
+
+## 2026-05-11 — transcript / scenario 解读权交还 agent_engine：删 9 私有 helper + 9 等价覆盖测试迁移
+
+这个里程碑是 [agent_engine §13](../agent_engine/DECISIONS.md) 在 evals 侧的对应清理。phase 5 落地以来 evals 一直在反向工程 `agent_engine.Result.transcript` / `Scenario` 的 schema：`metrics/nudge.py` 的 `_split_frontmatter / _FRONTMATTER_RE / _resolve_who_to_agents / split_turns / _split_attempts / _attempt_called_required / _attempt_called_any_tool` 7 个 helper 镜像了 `Discussion._expand_steps + _resolve_who + ToolTracer/ArtifactStore.event` 的整套展开逻辑；`tasks/agent_traj.py` 的 `_extract_tool_calls / _extract_decision` 镜像了 artifact_event 与 tool_call 两类事件的统一规约和 finalize_artifact 的 decision 抽取。schema 改一处需要 evals 跟改一处。本期 agent_engine 暴露 `Result.tool_calls() / .turns() / .find_finalize_decision()` + `TurnView.attempts() / .start_offset` + `Scenario.expanded_turns()` typed 视图（DECISIONS §15 详述），evals 这边删掉 9 个私有 helper、新增 [`_ae_bridge.py`] 集中 sys.path 注入与 import re-export，公开签名（`compute_nudge_fire_rate / classify_failure_mode / FAILURE_MODES / nudge_fire_rate_metric / derive_expected_turns / _pin_trajectory / load_prediction`）零破坏。9 条等价覆盖测试（`test_split_turns_*` 2 + `test_extract_tool_calls_*` 4 + `test_extract_decision_*` 3）迁到 [`agent_engine/tests/test_result_views.py`]；`test_agent_traj_envelope.py` 顺手把旧 `sys.path.insert + try/finally` 黑魔法换成 `from evals._ae_bridge import Result`，envelope 字段 ↔ Result 同源 + `_pin_trajectory` 注入形状 + `AgentTraj.load_prediction` 行为三层契约保留。465 → 456 测试，9 条迁移、0 条破坏。
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|新增 `_ae_bridge.py`：集中 `sys.path.insert(play/) + from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn`|让各 metric / task 模块直接 import re-export，不再各自 sys.path 黑魔法；与 §14（pip install 边界与 import 边界正交）同思路|
+|`metrics/nudge.py`：删 7 私有 helper（`_FRONTMATTER_RE / _split_frontmatter / _resolve_who_to_agents / split_turns / _split_attempts / _attempt_called_required / _attempt_called_any_tool`）|`derive_expected_turns` 内部 = `Scenario.expanded_turns()`；`compute_nudge_fire_rate` 内部 = `Result.turns()` + `TurnView.attempts()`；`classify_failure_mode` 把"是否调过任意工具"内联进 5 行——schema 解读权回 agent_engine|
+|`tasks/agent_traj.py`：删 `_extract_tool_calls / _extract_decision` 2 私有 helper|`_pin_trajectory` 内联 `Result.from_dict + .tool_calls() + .find_finalize_decision()`；公开 `_pin_trajectory` 签名不动|
+|`tests/test_nudge_metric.py`：删 `test_split_turns_*` 2 条 + import 列表去 `split_turns`|等价覆盖已迁到 `agent_engine/tests/test_result_views.py::test_turns_*`|
+|`tests/test_agent_traj_envelope.py`：删 `test_extract_tool_calls_*` 4 + `test_extract_decision_*` 3 + 旧 sys.path try/finally 黑魔法 → `from evals._ae_bridge import Result`|等价覆盖已迁到 `agent_engine/tests/test_result_views.py::test_tool_calls_*` / `test_find_finalize_decision_*`；保留 envelope schema 同源 + `_pin_trajectory` + `load_prediction` 测试|
+|跨项目 import 卫生提升|`play/agent_sft` 同期把 4 私有面 import 替换成直连 `agent_engine`，仅保留 `from evals.metrics.nudge import classify_failure_mode`（合法公开面）|
+
+```mermaid
+flowchart LR
+    AE[agent_engine schema + 解读 SoT] -->|Result/Scenario typed view| BR[evals/_ae_bridge.py]
+    BR --> M1[metrics/nudge.py<br/>compute_nudge_fire_rate]
+    BR --> T1[tasks/agent_traj.py<br/>_pin_trajectory]
+    BR --> SFT[play/agent_sft<br/>extractor / synthesize / formatter]
+    M1 --> SR[SampleResult.metrics]
+    T1 --> DM[doc.metadata.trajectory]
+```
+
+### 指标 / 指标族
+
+|指标|指标族|说明|
+|---|---|---|
+|—|—|本轮为工程修订，公开度量集合不变|
+
+## 2026-05-11 — Transcript schema typed 升级 + envelope `usage` 同步消费（agent_engine §14 配套）
+
+[agent_engine §14](../agent_engine/DECISIONS.md) 把 `Result.transcript` 升级到 6 个 frozen dataclass typed union（`SpeakerEntry` 强制带 `type="speaker"`）+ `Result.usage: list[TokenUsage]` + `Result.from_dict` 严格化（缺字段 `KeyError`）. 这一里程碑是 evals 侧的对应清理：`metrics/nudge.py` / `metrics/trajectory.py` / `tasks/agent_traj.py` / `tasks/nudge_fire_rate.py` 全部切到 typed access；envelope schema 同步带上 `usage`；`evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` × 46 文件一次性迁移脚本注入 `type:"speaker"` + `usage: []`；`_ae_bridge.py` re-export `TokenUsage / TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry`. **公开签名一处破坏**：`compute_nudge_fire_rate(transcript: list[dict])` → `compute_nudge_fire_rate(envelope: dict)`，调用方仅 `nudge_fire_rate_metric` 一处，与 forward-only 决策一致. 456 测试全绿（fixture migration 是同等覆盖的形态变更，不增不减）；smoke `python -m evals score --task agent_traj/nudge_fire_rate` 通过. 详见 [DECISIONS §16](DECISIONS.md).
+
+### 框架变更
+
+|变更|目的|
+|---|---|
+|`metrics/nudge.py::compute_nudge_fire_rate(envelope)` 形参从 `transcript: list[dict]` 改 `envelope: dict`|内部 `Result.from_dict(envelope)` 取 typed view，下游全 typed；envelope 缺字段第一时间 `KeyError`|
+|`metrics/nudge.py::classify_failure_mode(events: list[TranscriptEntry])`|`isinstance(e, ArtifactEventEntry/ToolCallEntry)` 派发；与 `Result.turns().attempts()` 输出形态对齐|
+|`metrics/trajectory.py::_score_speakers / predicate_speakers_covered` 走 `entry.get("type") == "speaker"`|§14 强制 `type` tag 后唯一可靠的 speaker 判别路径|
+|`tasks/agent_traj.py::_pin_trajectory` 严格读 5 字段（`transcript / artifact / warnings / success / usage`）+ `dataclasses.asdict` 拍扁回 dict 进 `doc.metadata`|metric 层从 metadata 读 dict，跨 JSONL 落盘后形态一致；缺字段第一时间 `KeyError`|
+|`tasks/nudge_fire_rate.py::_pin_envelope / load_prediction` 同上|envelope schema 同源|
+|`evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` × 46 一次性迁移|forward-only schema；不留长期兼容 reader|
+|`_ae_bridge.py` re-export 扩展|`TokenUsage / TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` 全部从 `_ae_bridge` 取，避免 sys.path 黑魔法散落|
+|`tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` 更新|envelope 字段集合现在锁 5 个（含 `usage`）；agent_engine 加字段时 evals CI 第一时间显形|
+
+### 指标 / 指标族
+
+|指标|指标族|说明|
+|---|---|---|
+|—|—|本轮为工程修订，公开度量集合不变；`Result.usage` 当前仅 `_pin_trajectory` 镜像到 metadata，`metrics/efficiency.py` 后续可直接从 envelope 取 typed `TokenUsage` 计 cost（待具体驱动场景再做）|
+

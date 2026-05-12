@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到直接相关的历史 commit 或设计文档。",
-      "ts": 1778441706.5370922
+      "ts": 1778441706.5370922,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口契约或测试用例。",
-      "ts": 1778441745.790964
+      "ts": 1778441745.790964,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已提交。下一步可以继续收集其他审阅者的反馈或进行最终决策。",
-      "ts": 1778441767.289113
+      "ts": 1778441767.289113,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "已提交评审意见。等待其他审阅者反馈。",
-      "ts": 1778441820.651094
+      "ts": 1778441820.651094,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "需先提出投票再进行表决。",
-      "ts": 1778441849.444182
+      "ts": 1778441849.444182,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "我已经投了“合入”。请其他审阅者投票。",
-      "ts": 1778441880.560467
+      "ts": 1778441880.560467,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -186,7 +192,8 @@
     {
       "speaker": "工程师A",
       "content": "投票已提交。支持“合入”选项，理由是短期的测试覆盖率下降是可以接受的，长远来看这将提升代码的可维护性。等待其他审阅者的投票结果。",
-      "ts": 1778441905.559131
+      "ts": 1778441905.559131,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -208,7 +215,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交，支持“合入”选项。理由是：提升长期可维护性。等待最终决策。",
-      "ts": 1778441929.894756
+      "ts": 1778441929.894756,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -230,7 +238,8 @@
     {
       "speaker": "工程师C",
       "content": "所有审阅者均支持合入，无需再次投票。直接决定合入。",
-      "ts": 1778441949.539608
+      "ts": 1778441949.539608,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -239,5 +248,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

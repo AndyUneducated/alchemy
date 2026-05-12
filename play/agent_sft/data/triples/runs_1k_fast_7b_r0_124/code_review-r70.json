@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史记录来看，项目代号模块重构已有类似经验。",
-      "ts": 1778414154.264905
+      "ts": 1778414154.264905,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到相关接口契约或测试用例。继续评审基于现有信息。",
-      "ts": 1778414162.028739
+      "ts": 1778414162.028739,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "ponge_section(\"review_a\", \"- 兼容性风险可控，建议合入。\")",
-      "ts": 1778414167.294049
+      "ts": 1778414167.294049,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "ponge_section(\"review_b\", \"- 兼容性合理，短期警告不影响。性能无大碍，可合入。\")",
-      "ts": 1778414171.410727
+      "ts": 1778414171.410727,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -84,7 +88,8 @@
     {
       "speaker": "工程师C",
       "content": "ponge_section(\"review_b\", \"- 兼容性合理，短期警告不影响。性能无大碍，可合入。\")",
-      "ts": 1778414175.6514938
+      "ts": 1778414175.6514938,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -94,7 +99,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审员投票支持您认为合适的选择。",
-      "ts": 1778414180.158507
+      "ts": 1778414180.158507,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +124,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 兼容性风险可控，建议合入。\")",
-      "ts": 1778414183.4252942
+      "ts": 1778414183.4252942,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +135,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", \"短期兼容性不影响，提升维护性\")",
-      "ts": 1778414186.769563
+      "ts": 1778414186.769563,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -138,7 +146,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"兼容性可控，提升代码质量\")",
-      "ts": 1778414190.161508
+      "ts": 1778414190.161508,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -149,5 +158,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

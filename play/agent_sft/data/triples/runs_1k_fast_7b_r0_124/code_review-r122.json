@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR关系不大，主要是项目事实。",
-      "ts": 1778416720.767633
+      "ts": 1778416720.767633,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为只写，请使用 `write_section`。\n\n建议改为：\n",
-      "ts": 1778416732.847609
+      "ts": 1778416732.847609,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -87,7 +89,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 保持兼容性，牺牲部分测试覆盖率以提升维护性是合理的。\")",
-      "ts": 1778416736.8556259
+      "ts": 1778416736.8556259,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 已更新。\n\n## review_b\n- 兼顾兼容性与维护性，但需确保新增测试覆盖。",
-      "ts": 1778416743.735358
+      "ts": 1778416743.735358,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +133,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_b\", \"- 考虑性能影响较小，建议合入。\")",
-      "ts": 1778416747.909284
+      "ts": 1778416747.909284,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审工程师投票决定是否合入此 PR。",
-      "ts": 1778416752.420871
+      "ts": 1778416752.420871,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +169,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"维护性提升值得牺牲少量测试覆盖率。\")",
-      "ts": 1778416755.9269109
+      "ts": 1778416755.9269109,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -173,7 +180,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_c 提交意见：\n\n- 维护性提升值得牺牲少量测试覆盖率。",
-      "ts": 1778416759.488627
+      "ts": 1778416759.488627,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -183,7 +191,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"维护性提升符合长远利益。\")",
-      "ts": 1778416763.034536
+      "ts": 1778416763.034536,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -194,5 +203,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

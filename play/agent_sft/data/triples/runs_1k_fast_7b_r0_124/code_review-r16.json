@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "pton review_a, 使用 write_section 覆盖内容。",
-      "ts": 1778411260.313302
+      "ts": 1778411260.313302,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "当前无直接接口契约信息，关注点主要在兼容性和长期维护。",
-      "ts": 1778411269.234765
+      "ts": 1778411269.234765,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已更新。\n\n- 关注兼容性和长期维护，短期测试覆盖率下降可接受。\n- 项目代号：ZX-7492\n- 启动日期：2026 年 3 月 14 日\n\n下一步：等待其他评审意见。",
-      "ts": 1778411280.849226
+      "ts": 1778411280.849226,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -99,7 +102,8 @@
     {
       "speaker": "工程师B",
       "content": "orton review_b, 已覆盖内容。\n下一步：等待工程师C评审意见。",
-      "ts": 1778411287.069101
+      "ts": 1778411287.069101,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -131,7 +135,8 @@
     {
       "speaker": "工程师C",
       "content": "portun review_c, 覆盖内容。\n下一步：等待投票。\n-------------</artifact_event>\n\n## review_a\n- 关注兼容性和长期维护，短期测试覆盖率下降可接受。\n- 项目代号：ZX-7492\n- 启动日期：2026 年 3 月 14 日\n\n## review_b\n- 认同",
-      "ts": 1778411294.0788639
+      "ts": 1778411294.0788639,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -152,7 +157,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票。请各位评审选择：\n\n- 合入\n- 退回\n\n请尽快完成投票。",
-      "ts": 1778411298.965583
+      "ts": 1778411298.965583,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -176,7 +182,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票：合入。\n\n短期牺牲部分覆盖率换取长期维护性。",
-      "ts": 1778411303.7738721
+      "ts": 1778411303.7738721,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -198,7 +205,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票：合入。\n\n理由：长期维护性重要。",
-      "ts": 1778411308.5299048
+      "ts": 1778411308.5299048,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -220,7 +228,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票：合入。\n\n理由：长期维护性优先。\n-------------</artifact_event>\n\n## review_c\n- 综合 A/B 风险评估，短期兼容性问题可控，合入能提升模块一致性与可维护性。\n\n## 决策\n合入此 PR。\n\n决策基于长期维护性和现有风险接受度。尽管测试覆盖率略有下降，但新的集成测试",
-      "ts": 1778411314.6887932
+      "ts": 1778411314.6887932,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -240,5 +249,6 @@
     "工程师A skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与 PR 关联性较低。需扩大查询范围。",
-      "ts": 1778433607.810695
+      "ts": 1778433607.810695,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的信息与接口契约无关。需重新查询。",
-      "ts": 1778433645.550415
+      "ts": 1778433645.550415,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -77,7 +79,8 @@
     {
       "speaker": "工程师A",
       "content": "需要先澄清，`review_a`部分是否可以使用 append_section 进行追加操作，根据错误提示看似乎不可以。但基于当前指示要求使用append_section进行提交，我们遇到技术限制。\n\n由于无法直接附加评审意见且检索到的信息对决策帮助较小，建议直接提出初步看法：\n\n- 暂无具体代码或详细测试数据支持，仅凭",
-      "ts": 1778433704.086787
+      "ts": 1778433704.086787,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -87,7 +90,8 @@
     {
       "speaker": "工程师B",
       "content": "由于 review_b 部分只能全量替换，请问应该如何操作？当前指示要求使用 append_section 进行提交，但遇到技术限制。",
-      "ts": 1778433723.240284
+      "ts": 1778433723.240284,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -97,7 +101,8 @@
     {
       "speaker": "工程师C",
       "content": "请提供正确的投票ID以进行投票。当前无法确定主审决策投票的ID。",
-      "ts": 1778433757.735213
+      "ts": 1778433757.735213,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +134,8 @@
     {
       "speaker": "主审",
       "content": "我已经投了“合入”。请其他评审工程师根据你们的判断投票。",
-      "ts": 1778433785.705943
+      "ts": 1778433785.705943,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -177,7 +183,8 @@
     {
       "speaker": "工程师A",
       "content": "已提交评审意见到 `review_a` 部分。支持“合入”此 PR 的决定，理由是结构优化有利于长期维护。",
-      "ts": 1778433821.538256
+      "ts": 1778433821.538256,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -221,7 +228,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票支持“合入”此 PR，理由是提高可维护性且风险可控。",
-      "ts": 1778433846.019401
+      "ts": 1778433846.019401,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -243,7 +251,8 @@
     {
       "speaker": "工程师C",
       "content": "所有评审已完成，无需再次投票。准备合入PR。",
-      "ts": 1778433866.8349261
+      "ts": 1778433866.8349261,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -252,5 +261,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

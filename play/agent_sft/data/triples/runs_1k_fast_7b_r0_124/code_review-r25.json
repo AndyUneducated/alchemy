@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 无关，无关键信息。",
-      "ts": 1778411762.044765
+      "ts": 1778411762.044765,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与当前PR无关，无关键信息。\n\n\tappend_section(\"review_b\", \"检索结果与当前PR无关，无关键信息。\")",
-      "ts": 1778411770.193373
+      "ts": 1778411770.193373,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "-write_section(\"review_a\", \"- 兼容性风险需注意，性能影响不大，建议合入。\")",
-      "ts": 1778411774.134128
+      "ts": 1778411774.134128,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "-append_section(\"review_b\", \"- 兼容性风险可控，性能无显著影响，建议合入。\")",
-      "ts": 1778411777.158418
+      "ts": 1778411777.158418,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "由于 'review_c' 部分为只写模式，请使用 write_section 进行更新。\n\nwrite_section(\"review_c\", \"- 综合 A/B 风险评估，建议合入。\")",
-      "ts": 1778411781.701501
+      "ts": 1778411781.701501,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审投票支持。\n- 合入\n- 退回",
-      "ts": 1778411786.340363
+      "ts": 1778411786.340363,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"综合风险，建议合入\")",
-      "ts": 1778411789.7102468
+      "ts": 1778411789.7102468,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", \"兼容性风险可控，性能无显著影响\")",
-      "ts": 1778411793.154881
+      "ts": 1778411793.154881,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合评估后支持合入\")",
-      "ts": 1778411796.534406
+      "ts": 1778411796.534406,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

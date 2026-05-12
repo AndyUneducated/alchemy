@@ -631,3 +631,185 @@ evals 端对应消费契约：
 - §8 引入 ToolTracer 后，"非 artifact 工具被记录"的能力已具备，但本检查面未消费——本 ADR 是补齐这条 wiring，不是新立机制
 - §7 末段的"范围限制"段落 Status 同步 supersede，让旧条目仍可读但指向新解
 
+## 13. 公开 transcript / scenario 解读 API：Result/Scenario 暴露 typed 视图
+
+- **Status**: accepted（extends §11）
+- **Date**: 2026-05-11
+
+### Context
+
+§11 定 envelope 是跨项目机器消费的 SoT（`Result` 字段层）；但 envelope 只覆盖**字段** schema（`{transcript, artifact, warnings, success}`），不覆盖**字段解读**——transcript 内的 `tool_call` / `artifact_event` 怎么规约成"工具调用"、`<turn X of N>` marker 怎么切段、scenario YAML 怎么静态展开成 `(turn_idx, agent, step_id, require_tool)` 序列，全部由各消费者反向工程：
+
+| 消费者 | 解读什么 | 在哪里 | 问题 |
+|---|---|---|---|
+| `play/evals/tasks/agent_traj.py` | transcript → tool_calls / decision | `_extract_tool_calls / _extract_decision` | 与 agent_engine artifact 事件 schema 紧耦合，agent_engine 改字段会静默失败 |
+| `play/evals/metrics/nudge.py` | scenario YAML → expected turn 列表 + transcript 切段 | `derive_expected_turns / split_turns / _split_attempts / _resolve_who_to_agents` | **重复实现** `Discussion._expand_steps + _resolve_who` 整套展开逻辑 |
+| `play/agent_sft/data/extractor.py` | 同上 + 再加 turn-indexed 全局 offset | `_index_steps_by_turn / _split_turns_indexed` + **`sys.path.insert + from evals.metrics.nudge import _split_attempts, _resolve_who_to_agents, _split_frontmatter, derive_expected_turns`** | 跨项目 import 4 个**私有**函数，反模式 |
+
+三处独立解读 ⇒ schema 改动需要同步三处；`play/agent_sft` 的 `sys.path.insert` 黑魔法又引入 evals 私有面依赖，monorepo 解耦原则破洞.
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 现状 | 各消费者各自解读 | schema 改动 → 三处改 + 反模式持续 |
+| B. 把 `_extract_tool_calls / split_turns / derive_expected_turns` 三个公开 plain function 加到 `agent_engine.transcript` / `agent_engine.scenario_static` 模块 | 简洁，函数式 | 每加一个新视图都要新模块；返回 `dict / list[dict]` 类型语义弱 |
+| **C. 在 `Result` / `Scenario` 上加视图方法返回 typed dataclass**（选择） | OO 风格，与 OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool` 同精神 | 需要新增 typed dataclass（`ToolCall` / `TurnView` / `ExpandedTurn`），但 ergonomic 与扩展性最好 |
+| D. 抽出独立 `agent_engine_views` 包给所有消费者 import | 完全解耦 | workshop 体量过度设计；C 已足够 |
+
+### Decision
+
+**C：让 schema 解读权随 schema 一起住在 agent_engine。**
+
+| 动点 | 做法 |
+|---|---|
+| `result.py` 加 `ToolCall` (frozen) / `TurnView` (frozen) | typed view，与 OpenAI Agents SDK / inspect_ai 风格对齐 |
+| `Result.from_dict / load_json` | envelope dict / `--save-result-json` 文件 → Result，缺字段降级（向后兼容老 envelope） |
+| `Result.tool_calls() / turns() / speakers() / find_finalize_decision()` | transcript 视图：tool 调用合并 / turn 切段 / speaker 集 / finalize decision 抽取 |
+| `TurnView.attempts(agent) / tool_calls()` | 段内按 speaker 切 attempt（与 `_run_turn` retry 循环对齐）+ 段内工具调用 |
+| `TurnView.start_offset: int` | 段第一个 entry 在原 transcript 的 0-based 全局索引——给 `agent_sft` extractor 复刻 turn-indexed offset 用，其它消费者可忽略 |
+| `scenario.py` 加 `ExpandedTurn` (frozen) + `Scenario.expanded_turns()` | 静态展开 `steps:` 为线性 turn 序列，不实例化 Agent / 不跑 LLM |
+| `scenario.py` 抽 `_resolve_who_names(who, declared_order, role_by_name)` 纯函数 | `Discussion._resolve_who` runtime 路径 + `Scenario.expanded_turns()` 静态路径**共用此函数**——保证两条路径展开顺序字节相同 |
+| `play/agent_engine/tests/` 首测试目录 | 36 测试覆盖 8 类视图行为 + 7 现网 scenario 上 `expanded_turns()` 长度 / pair 序列与 `Discussion._expand_steps()` 字节相同（关键 invariant 锁） |
+| `play/evals` PR-1 shim | `metrics/nudge.py` / `tasks/agent_traj.py` 内部改调新 API，**公开签名零破坏**——evals/agent_sft 现有 pytest 全绿 |
+| `play/evals/_ae_bridge.py` | 集中 sys.path 注入 + `from agent_engine import ...` re-export，避免各模块各自 sys.path 黑魔法 |
+| PR-2（后续） | 删 evals 私有 `_xxx` shim + agent_sft `extractor.py` 直连 agent_engine + 三 DECISIONS / JOURNAL 同步 |
+
+### 行业光谱
+
+| 框架 | 类似机制 | 对比 |
+|---|---|---|
+| OpenAI Agents SDK | `RunResult.new_items: list[RunItem]`（`MessageOutputItem / ToolCallItem / ToolCallOutputItem`） | 同精神：把"运行产物"转 typed view 给消费者；本项目 `Result.tool_calls / turns` 是裁剪版 |
+| Anthropic Messages API | `Message.content: list[TextBlock \| ToolUseBlock]` | typed union 直接消费；本项目 `ToolCall.kind: "artifact" \| "tracer"` 同思路 |
+| inspect_ai | `ChatMessage` / `ChatMessageTool`（dataclass） + `EvalSample.messages` | typed message + sample API 强类型；本项目走更轻量的 view 方法路线 |
+| LangChain `AIMessage.tool_calls` | typed `ToolCall(name, args, id)` 字段 | 同语义，更细一层（含 id）；本项目当前不需要 id（artifact / tracer 事件无对应字段） |
+| dspy `History` | 弱类型 message dict | 落后形态——本项目 §11 envelope 起点已超过 |
+
+### 工程维度评估
+
+| 维度 | 影响 |
+|---|---|
+| 内聚度 | **升**——schema 与 schema 解读住一起 |
+| 耦合度 | **降**——评测 / 训练数据挖掘消费者不再反向工程 transcript / scenario，agent_engine 字段改动一处同步所有消费者 |
+| 可观测性 | **升**——`ToolCall.kind` 显式区分 artifact vs tracer，比原来的 `entry["type"]` 字符串更安全 |
+| 向后兼容 | **PR-1 纯 additive**——`Result` 仍是 `dataclasses.asdict` 序列化的 envelope SoT，新加方法不影响序列化形状；evals/agent_sft 公开签名零变；老 envelope 缺字段时 `Result.from_dict` 给默认值 |
+| 演化友好 | **升**——未来 `Result` 加新视图（如 `Result.warnings_by_kind() / Result.timeline()`）有清晰 home；`Scenario` 加新静态分析（如 `Scenario.required_tools_set()`）同理 |
+| pytest 安全网 | 36 测试一次性建立，含 `expanded_turns()` 与 `Discussion._expand_steps()` 在 7 现网 scenario 上的字节同源 invariant 锁 |
+| 跨项目 import 卫生 | **升**——`play/agent_sft` PR-2 起从 evals 私有面 import 退出，仅留 `from evals.metrics.nudge import classify_failure_mode`（合法公开面） |
+
+### 与 §11 的关系
+
+§11 立"`Result` 是 envelope SoT"——**字段** schema 由 `dataclasses.fields(Result)` 自描述. §13 是 §11 的纵向延伸：**字段解读**也由 `Result` 上的方法自描述. 两条 ADR 合起来 = "schema + schema 解读权都在 agent_engine 一处"，跨项目契约监控成本接近零.
+
+### 与 PR-2 的关系
+
+PR-2 是 §13 的清理收尾：删 evals 私有 `_xxx` 函数 shim + 改 `play/agent_sft/data/extractor.py` 直连 `agent_engine.Scenario / Result`，并在 [`play/evals/DECISIONS.md`] / [`play/agent_sft/DECISIONS.md`] 同步 ADR；§13 自身 PR-1 落地后即生效，PR-2 是补完而非阻塞.
+
+## 14. Transcript entry typed union + envelope token usage（schema 自身 typed 化）
+
+- **Status**: accepted（破坏性 schema 升级；与 §13 互补——§13 立"解读 SoT"，§14 立"schema 自身 typed 化"）
+- **Date**: 2026-05-11
+
+### Context
+
+§11 把 `Result` 立成跨项目机器消费 envelope SoT；§13 把 transcript / scenario 解读权收回 agent_engine. 但 transcript 内部仍是 `list[dict]`——entry 的字段名 / 必选性 / 类型只在写入点散落，没有任何静态约束：
+
+| 现象 | 根因 |
+|---|---|
+| `Result.transcript[i]["speaker"]` / `entry["type"]` / `entry["tool"]` 三种风格混用 | 5 个写入点（`discussion.py` 3 / `tracer.py` 1 / `artifact.py` 5 / `memory.py` 1）各写各的 dict 字面量，无 schema 强制 |
+| speaker reply 没有 `"type"` 字段，只能靠"`'speaker' in entry`"反向辨识 | 写入点 `discussion.py` L107-111 的历史遗留——其它 entry 全部带 type tag，唯独 speaker reply 没有 |
+| 评测做 LLM cost / token analytics 必须解析 stderr / `🔧` emoji 反推 | envelope 不含 `usage` 字段，4 LLM client 也只 `return text` 不返 usage 数据 |
+| `Result.from_dict` 对缺字段降级返 `Result()`（§13 引入的 backward-compat） | 旧 envelope 与新 envelope 共存的代价；现已确认无外部消费者，可强制升级 |
+
+行业当前形态（参考 §13 同光谱）：OpenAI Agents SDK / Anthropic Messages API / inspect_ai 的"消息 / 事件"全部是 typed union；usage 字段（OpenAI `usage`, Anthropic `usage.cache_read_input_tokens`, Gemini `usage_metadata`）是 1st-class 字段而非 stderr 副产物.
+
+### Options considered
+
+对 transcript entry typed 化：
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 保留 `list[dict]`，仅给 entry 加 TypedDict | 类型注解多但运行时仍是 dict | 静态 mypy 通过但运行时仍可写错字段 |
+| B. 单 `TranscriptEntry` dataclass，type 字段决定其余字段含义 | 字段最少 | 等价 dict + 假 type 注解，差距小 |
+| **C. typed union（6 个 frozen dataclass + `TranscriptEntry = TopicEntry \| TurnEntry \| ...`）**（选择）| 与 OpenAI Agents SDK / Anthropic Messages 同形 | runtime `isinstance` 派发，IDE 推导友好；新增 entry 类型是加新 dataclass + 一行 union 扩张，无 schema 调用面修改 |
+| D. 上 protobuf / msgspec | 跨语言 / 性能强 | workshop 体量过度设计；JSON debug 友好性下降 |
+
+对 token usage：
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 不加；评测自行从 stderr 解析 | 零侵入 | 4 client 都要变更 stderr 格式才能稳定解析；脆弱 |
+| B. 在 `Discussion._run_turn` 包 LLM 调用计时，估算 token | 1 处改动 | 估算误差大；cached_tokens 拿不到 |
+| **C. 4 client 的 `chat()` 改返 `(text, TokenUsage)` 二元组，逐次 LLM 调用落 `Result.usage`**（选择）| typed 单点，与 SDK 原生 usage 字段对齐 | 4 client 要改返回签名；流式调用要在 stream consumed 完取 final chunk usage，工作量中等 |
+
+对 backward-compat 处理：
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. `Result.from_dict` 继续兼容老 envelope（缺字段降级） | 旧数据可读 | 与 §13 一致但与"forward-only 升级"用户决策不一致 |
+| **B. 严格化：缺字段直接 `KeyError`**（选择，用户已确认）| schema 不可降级 | 旧 envelope 不可读，需要重跑 / 迁移；本仓库无外部消费者，可控 |
+
+### Decision
+
+**transcript entry → 6 个 `frozen=True` dataclass + 1 个 `Union`；envelope 加 `usage: list[TokenUsage]`；4 LLM client 全量 typed usage 抓取；`from_dict` 严格化.**
+
+| 动点 | 做法 |
+|---|---|
+| `result.py` 加 `TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry`（均 frozen，均带 `type: Literal[...] = ...` 默认值字段）| typed union，`SpeakerEntry` 强制带 `type="speaker"` 修复历史遗漏 |
+| `result.py` 加 `TokenUsage(model, caller, input_tokens, output_tokens, cached_tokens, duration_ms, ts)` frozen | typed cost 信息源，与 OpenAI / Anthropic / Gemini / Ollama 四方 SDK usage shape 收敛 |
+| `Result.transcript: list[TranscriptEntry]` + `Result.usage: list[TokenUsage]` | 字段层 typed 化 |
+| `Result.from_dict` 不再降级；`data["transcript"] / data["usage"] / data["artifact"] / data["success"] / data["warnings"]` 缺一即 `KeyError` | schema 不可降级；旧 envelope 失效 |
+| `_entry_from_dict(d)` 按 `d["type"]` dispatch 进 `_ENTRY_BY_TYPE` 字典；未知 type → `KeyError` | 反序列化路径 typed |
+| `_entry_to_tool_call` 改 `isinstance(entry, ArtifactEventEntry/ToolCallEntry)` typed 派发 | §13 的 `ToolCall` 视图与新 entry 类型自动对齐 |
+| `TurnView.entries: tuple[TranscriptEntry, ...]` + `TurnView.attempts(agent)` / `Result.speakers()` 全部 `isinstance(e, SpeakerEntry)` | typed 视图层与新 schema 字节同源 |
+| 5 个 entry 写入点（`discussion.py` 3 / `tracer.py` 1 / `artifact.py` 5 / `memory.py` 1）切到 dataclass 实例化 | 移除 dict 字面量散落 |
+| 4 LLM client（`openai/anthropic/gemini/ollama_client.py`）`chat()` 签名 + `chat()` `caller: str` 形参 + 返 `tuple[str, TokenUsage]` | typed usage 抓取，跨 backend 收敛 |
+| `agent.py::Agent.respond` 接二元组 + 累计 `list[TokenUsage]`；`memory.py::ConversationMemory.drain_usage()` 把 SummaryMemory 内部 summarizer 调用产生的 usage 也回收 | 用户感知不到的 LLM 调用（如 SummaryMemory 折叠）也进 `Result.usage` |
+| `Discussion.usage: list[TokenUsage]` + `Engine.invoke` 写入 `Result.usage` | 串到 envelope 出口 |
+| `engine.py` 写盘前 `[dataclasses.asdict(e) for e in history]` | typed entry → JSON 序列化 |
+| `_ae_bridge.py` re-export `TokenUsage / TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` | evals 端零 sys.path 黑魔法可拿到所有 typed 视图 |
+| `agent_sft.data.extractor` 删 `_split_turns_indexed / _index_steps_by_turn` 共 2 个 shim | typed `Result.turns()` 已能直接给 `start_offset`，shim 失去存在意义 |
+| 全量 fixture 改写（~200 inline dict 跨 7 测试文件）+ 新增 `agent_engine/tests/test_token_usage.py` 等 | typed schema 在测试面也强制 |
+| `play/evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` + `agent_sft/data/triples/runs_1k_fast_7b_r0_124/*.json` 一次性迁移脚本注入 `type:"speaker"` + `usage: []` | 用户已确认 forward-only；迁移脚本一次性，不进代码留痕 |
+
+### 行业光谱
+
+| 框架 / SDK | typed message / event | usage shape |
+|---|---|---|
+| OpenAI Agents SDK | `RunResult.new_items: list[MessageOutputItem \| ToolCallItem \| ToolCallOutputItem]` | `response.usage.{prompt_tokens, completion_tokens, prompt_tokens_details.cached_tokens}` |
+| Anthropic Messages | `Message.content: list[TextBlock \| ToolUseBlock]` | `message.usage.{input_tokens, output_tokens, cache_read_input_tokens}` |
+| Google Gemini | `GenerateContentResponse.candidates[].content.parts: list[Part]` | `response.usage_metadata.{prompt_token_count, candidates_token_count, cached_content_token_count}` |
+| Ollama | dict 形态（`role`, `content`, `tool_calls`） | response dict 含 `prompt_eval_count` / `eval_count` |
+| inspect_ai | `ChatMessage` / `ChatMessageTool`（dataclass） + `EvalSample.token_usage: dict[str, ModelUsage]` | typed |
+| LangChain `AIMessage.usage_metadata` | typed `UsageMetadata(input_tokens, output_tokens, total_tokens)` | 同思路 |
+
+本项目 §14 的 `TranscriptEntry` typed union + `TokenUsage` per-call list 与 inspect_ai / LangChain 同精神，比 OpenAI Agents SDK 更扁平（无嵌套 RunItem 层）；多 backend 适配统一抹平四方 SDK 字段差异，对应到一致的 `input_tokens / output_tokens / cached_tokens / duration_ms`.
+
+### 工程维度评估
+
+| 维度 | 影响 |
+|---|---|
+| 内聚度 | **升**——entry schema、entry 写入点、entry 解读权全部在 `result.py` 一处；`TokenUsage` 在 client 一处抓、`Result` 一处展现 |
+| 耦合度 | **降**——评测 / SFT 端再也无 `entry.get("speaker")` / `entry["type"]` 字符串嗅探；`isinstance` 编译期能抓错 |
+| 可观测性 | **升**——`SpeakerEntry.type="speaker"` 让 transcript 解读 100% 走 type tag 路径，无歧义；token usage 永久落 envelope，cost / efficiency / latency 度量从 stderr 反推升级到字段级直接消费 |
+| LLM 不确定性容忍 | **持平**——schema 改造不影响运行时容错；流式取 usage 拿不到时填 0，evals cost 计算降级到已有 `efficiency.py` 路径 |
+| 向后兼容 | **破坏性**——old envelope 不可读；`from_dict` 强制 schema；4 LLM client `chat()` 签名变；本仓库无外部消费者，迁移脚本一次性处理已 mined 数据 |
+| 演化友好 | **升**——加新 entry 类型 = 加 dataclass + 一行 union 扩张 + 写入点；schema 是 SoT，加字段 = `dataclasses.fields` 自动同步 |
+| pytest 安全网 | 三项目 585 测试全绿（agent_engine 42 / evals 456 / agent_sft 87） + evals smoke `agent_traj` / `nudge_fire_rate` 通过 + 现网 envelope round-trip 通过 |
+
+### 与 §11 / §13 的关系
+
+| ADR | 立的是什么 |
+|---|---|
+| §11 | `Result` 是 envelope SoT（**字段** schema：`{transcript, artifact, warnings, success}`） |
+| §13 | `Result` / `Scenario` 暴露 typed 视图（**字段解读**：`tool_calls / turns / expanded_turns`） |
+| §14 | `transcript` 内部本身 typed union + `usage` 字段（**schema 自身**也 typed） |
+
+§11 + §13 + §14 三层合起来：跨项目契约从"字段名 → 字段解读 → 字段值类型"全部由 `agent_engine` 一处自描述，下游消费者无需任何反向工程.
+
+### 不在范围
+
+- `Result.usage` 不做"按 caller / model 聚合"——`evals/metrics/efficiency.py` 已有聚合路径，agent_engine 只产出 raw usage list
+- 流式调用拿不到 usage 时填 0（cached_tokens 也填 0）——不抛异常；evals cost 计算自动降级到 model-level 估算
+- `TokenUsage.duration_ms` 用 `time.monotonic()` 包 client 调用计时；不区分 first-token-latency vs total-latency（workshop 体量未需要）
+- 老 envelope 反向兼容 reader 不写入仓库——一次性迁移脚本足够，不留 `try_legacy_from_dict()` 这种长期 shim

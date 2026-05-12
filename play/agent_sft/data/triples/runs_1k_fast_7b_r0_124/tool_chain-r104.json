@@ -30,7 +30,8 @@
     {
       "speaker": "执行者",
       "content": "核心要点：项目代号为ZX-7492，启动日期为2026年3月14日。",
-      "ts": 1778409812.160743
+      "ts": 1778409812.160743,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "执行者",
       "content": "write_section(\"调研笔记\", \"项目代号：ZX-7492\\n启动日期：2026年3月14日。\")",
-      "ts": 1778409819.9997618
+      "ts": 1778409819.9997618,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -74,7 +76,8 @@
     {
       "speaker": "协调者",
       "content": "vote_id: v1\n\ncast_vote(vote_id=\"v1\", option=\"不追加\")",
-      "ts": 1778409823.7369542
+      "ts": 1778409823.7369542,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -98,7 +101,8 @@
     {
       "speaker": "执行者",
       "content": "cast_vote(\"v1\", \"追加\", \"一句话\")",
-      "ts": 1778409826.35213
+      "ts": 1778409826.35213,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +112,8 @@
     {
       "speaker": "执行者",
       "content": "retrieve_docs({\"query\": \"项目代号 历史\"})",
-      "ts": 1778409827.0944471
+      "ts": 1778409827.0944471,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +123,8 @@
     {
       "speaker": "执行者",
       "content": "append_section(\"调研笔记\", \"- 第2轮: 一句话补充要点\")",
-      "ts": 1778409827.8761559
+      "ts": 1778409827.8761559,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -126,5 +132,6 @@
     "执行者 skipped required tool 'cast_vote' after 1 attempt(s)",
     "执行者 skipped required tool 'retrieve_docs' after 1 attempt(s)",
     "执行者 skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

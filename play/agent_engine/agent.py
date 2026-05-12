@@ -4,6 +4,7 @@ from typing import Callable
 
 from .config import BACKEND, DEFAULT_MODEL, MAX_TOKENS, TEMPERATURE
 from .memory import ConversationMemory, FullHistory
+from .result import TokenUsage, TranscriptEntry
 
 if BACKEND == "anthropic":
     from . import anthropic_client as _client
@@ -38,18 +39,24 @@ class Agent:
 
     def respond(
         self,
-        history: list[dict],
+        history: list[TranscriptEntry],
         *,
         instruction: str | None = None,
         stream: bool = True,
         artifact_view: str | None = None,
-    ) -> str:
+    ) -> tuple[str, list[TokenUsage]]:
+        """跑一次 LLM 调用，返 `(reply_text, list[TokenUsage])`.
+
+        usage 列表通常包含 1 个主调用；若 `SummaryMemory` 在 `build_messages`
+        阶段触发了 summarizer LLM 调用，summarizer usage 排在主调用之前一并返回.
+        """
         messages = self.memory.build_messages(history, self.name)
+        usage_list: list[TokenUsage] = list(self.memory.drain_usage())
         if artifact_view is not None:
             messages.append({"role": "user", "content": f"<artifact>\n{artifact_view}\n</artifact>"})
         if instruction:
             messages.append({"role": "user", "content": f"<instruction>\n{instruction}\n</instruction>"})
-        return _client.chat(
+        text, usage = _client.chat(
             model=self.model,
             system_prompt=self.system_prompt,
             messages=messages,
@@ -58,4 +65,7 @@ class Agent:
             stream=stream,
             tools=self.tools,
             tool_handler=self.tool_handler,
+            caller=self.name,
         )
+        usage_list.append(usage)
+        return text, usage_list

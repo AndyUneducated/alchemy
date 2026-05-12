@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from typing import Callable
 
 from google import genai
 from google.genai import types
 
 from .config import GEMINI_API_KEY, MAX_TOKENS, TEMPERATURE
+from .result import TokenUsage
 
 _client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -43,14 +45,33 @@ def _convert_tools(openai_tools: list[dict]) -> list[types.Tool]:
     return [types.Tool(function_declarations=decls)]
 
 
-def chat(model: str, *, system_prompt: str = "", messages: list[dict],
-         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
-         stream: bool = True,
-         tools: list[dict] | None = None,
-         tool_handler: Callable[[str, dict], str] | None = None) -> str:
-    """Send a chat request to Gemini and return the assistant reply.
+def _extract_usage(resp) -> tuple[int, int, int]:
+    """Gemini response → (input_tokens, output_tokens, cached_tokens)."""
+    u = getattr(resp, "usage_metadata", None)
+    if u is None:
+        return (0, 0, 0)
+    return (
+        int(getattr(u, "prompt_token_count", 0) or 0),
+        int(getattr(u, "candidates_token_count", 0) or 0),
+        int(getattr(u, "cached_content_token_count", 0) or 0),
+    )
 
-    When *tools* are provided the function enters a non-streaming tool loop.
+
+def chat(
+    model: str,
+    *,
+    system_prompt: str = "",
+    messages: list[dict],
+    temperature: float = TEMPERATURE,
+    max_tokens: int = MAX_TOKENS,
+    stream: bool = True,
+    tools: list[dict] | None = None,
+    tool_handler: Callable[[str, dict], str] | None = None,
+    caller: str = "",
+) -> tuple[str, TokenUsage]:
+    """Send a chat request to Gemini and return `(text, TokenUsage)`.
+
+    `TokenUsage` aggregates token counts across tool-loop rounds.
     """
     merged = _merge_consecutive(messages)
     contents: list[types.Content] = []
@@ -66,11 +87,18 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
     if tools:
         config.tools = _convert_tools(tools)
 
+    t0 = time.monotonic()
+    in_tok = out_tok = cached_tok = 0
+
     for _ in range(MAX_TOOL_ROUNDS):
         if tools or not stream:
             response = _client.models.generate_content(
                 model=model, contents=contents, config=config,
             )
+            a, b, c = _extract_usage(response)
+            in_tok += a
+            out_tok += b
+            cached_tok += c
 
             fc_parts = [
                 p for p in (response.candidates[0].content.parts or [])
@@ -94,24 +122,50 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
             text = response.text or ""
             sys.stdout.write(text + "\n")
             sys.stdout.flush()
-            return text
+            return text, TokenUsage(
+                model=model, caller=caller,
+                input_tokens=in_tok, output_tokens=out_tok,
+                cached_tokens=cached_tok,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                ts=time.time(),
+            )
 
         # Streaming path (no tools)
         chunks: list[str] = []
+        last_chunk = None
         for chunk in _client.models.generate_content_stream(
             model=model, contents=contents, config=config,
         ):
+            last_chunk = chunk
             token = chunk.text or ""
             if token:
                 chunks.append(token)
                 sys.stdout.write(token)
                 sys.stdout.flush()
 
+        if last_chunk is not None:
+            a, b, c = _extract_usage(last_chunk)
+            in_tok += a
+            out_tok += b
+            cached_tok += c
+
         sys.stdout.write("\n")
         sys.stdout.flush()
-        return "".join(chunks)
+        return "".join(chunks), TokenUsage(
+            model=model, caller=caller,
+            input_tokens=in_tok, output_tokens=out_tok,
+            cached_tokens=cached_tok,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            ts=time.time(),
+        )
 
     text = response.text or ""
     sys.stdout.write(text + "\n")
     sys.stdout.flush()
-    return text
+    return text, TokenUsage(
+        model=model, caller=caller,
+        input_tokens=in_tok, output_tokens=out_tok,
+        cached_tokens=cached_tok,
+        duration_ms=int((time.monotonic() - t0) * 1000),
+        ts=time.time(),
+    )

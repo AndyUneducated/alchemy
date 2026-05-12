@@ -1,30 +1,30 @@
-{"id": "mt01", "prediction": "今天我吃了一个苹果。"}
-{"id": "mt02", "prediction": "天空蓝得像海。"}
-{"id": "mt03", "prediction": "下雨了大家快回家。"}
-{"id": "mt04", "prediction": "新书发布会在周六举行。"}
-{"id": "mt05", "prediction": "他在公园里散步。"}
-{"id": "mt06", "prediction": "电脑屏幕坏了。"}
-{"id": "mt07", "prediction": "把手机放进口袋里。"}
-{"id": "mt08", "prediction": "她送给我一束花。"}
-{"id": "mt09", "prediction": "这部电影非常感人。"}
-{"id": "mt10", "prediction": "厨房里的水龙头在漏水。"}
-{"id": "mt11", "prediction": "孩子们在草地上玩耍。"}
-{"id": "mt12", "prediction": "公司搬到了新办公楼。"}
-{"id": "mt13", "prediction": "我们去爬山了。"}
-{"id": "mt14", "prediction": "这家餐厅的菜不错。"}
-{"id": "mt15", "prediction": "我的自行车不见了。"}
-{"id": "mt16", "prediction": "明年要去日本旅行。"}
-{"id": "mt17", "prediction": "他每天跑五公里。"}
-{"id": "mt18", "prediction": "音乐会被取消了。"}
-{"id": "mt19", "prediction": "这道菜需要更多盐。"}
-{"id": "mt20", "prediction": "图书馆周日不开门。"}
-{"id": "mt21", "prediction": "她正在学习钢琴。"}
-{"id": "mt22", "prediction": "网络断了我连不上。"}
-{"id": "mt23", "prediction": "桌子上有一杯水。"}
-{"id": "mt24", "prediction": "猫咪在沙发上睡觉。"}
-{"id": "mt25", "prediction": "今晚月亮特别圆。"}
-{"id": "mt26", "prediction": "把灯打开会更亮。"}
-{"id": "mt27", "prediction": "新员工今天报到。"}
-{"id": "mt28", "prediction": "这本书我已经看完了。"}
-{"id": "mt29", "prediction": "周末我喜欢睡懒觉。"}
-{"id": "mt30", "prediction": "外面的风越来越大。"}
+{"id":"mt01","prediction":"今天我吃了一个苹果。","usage":[]}
+{"id":"mt02","prediction":"天空蓝得像海。","usage":[]}
+{"id":"mt03","prediction":"下雨了大家快回家。","usage":[]}
+{"id":"mt04","prediction":"新书发布会在周六举行。","usage":[]}
+{"id":"mt05","prediction":"他在公园里散步。","usage":[]}
+{"id":"mt06","prediction":"电脑屏幕坏了。","usage":[]}
+{"id":"mt07","prediction":"把手机放进口袋里。","usage":[]}
+{"id":"mt08","prediction":"她送给我一束花。","usage":[]}
+{"id":"mt09","prediction":"这部电影非常感人。","usage":[]}
+{"id":"mt10","prediction":"厨房里的水龙头在漏水。","usage":[]}
+{"id":"mt11","prediction":"孩子们在草地上玩耍。","usage":[]}
+{"id":"mt12","prediction":"公司搬到了新办公楼。","usage":[]}
+{"id":"mt13","prediction":"我们去爬山了。","usage":[]}
+{"id":"mt14","prediction":"这家餐厅的菜不错。","usage":[]}
+{"id":"mt15","prediction":"我的自行车不见了。","usage":[]}
+{"id":"mt16","prediction":"明年要去日本旅行。","usage":[]}
+{"id":"mt17","prediction":"他每天跑五公里。","usage":[]}
+{"id":"mt18","prediction":"音乐会被取消了。","usage":[]}
+{"id":"mt19","prediction":"这道菜需要更多盐。","usage":[]}
+{"id":"mt20","prediction":"图书馆周日不开门。","usage":[]}
+{"id":"mt21","prediction":"她正在学习钢琴。","usage":[]}
+{"id":"mt22","prediction":"网络断了我连不上。","usage":[]}
+{"id":"mt23","prediction":"桌子上有一杯水。","usage":[]}
+{"id":"mt24","prediction":"猫咪在沙发上睡觉。","usage":[]}
+{"id":"mt25","prediction":"今晚月亮特别圆。","usage":[]}
+{"id":"mt26","prediction":"把灯打开会更亮。","usage":[]}
+{"id":"mt27","prediction":"新员工今天报到。","usage":[]}
+{"id":"mt28","prediction":"这本书我已经看完了。","usage":[]}
+{"id":"mt29","prediction":"周末我喜欢睡懒觉。","usage":[]}
+{"id":"mt30","prediction":"外面的风越来越大。","usage":[]}

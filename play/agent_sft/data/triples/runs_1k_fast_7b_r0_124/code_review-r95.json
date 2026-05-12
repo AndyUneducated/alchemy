@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "pton review_a, 暂无关键历史信息支持。继续评审。\n\n\tappend_section(\"review_a\", \"暂无关键历史信息支持。\")",
-      "ts": 1778415366.325383
+      "ts": 1778415366.325383,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，建议继续评审。\n\n\tappend_section(\"review_b\", \"检索结果与接口契约/测试用例无关。\")\n}",
-      "ts": 1778415374.3951879
+      "ts": 1778415374.3951879,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +107,8 @@
     {
       "speaker": "工程师A",
       "content": "根据检索结果，当前评审关注点主要集中在：\n- 兼容性：老 import path 仍工作但会带来日志污染。\n- 性能：单一入口无明显性能下降。\n- 测试覆盖：集成测试覆盖率略低。\n\n附上简要结论供参考。\n\n\tappend_section(\"review_a\", \"关注兼容性和长期维护，建议合入。\")",
-      "ts": 1778415398.649668
+      "ts": 1778415398.649668,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -115,7 +118,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 替换只读部分。\n\normalize the response as json:\n\n",
-      "ts": 1778415406.648549
+      "ts": 1778415406.648549,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -158,7 +162,8 @@
     {
       "speaker": "工程师C",
       "content": "ormalize the response as json:\n\n\nwrite_section(\"review_b\", \"- 关注兼容性和长期维护，建议合入。\")",
-      "ts": 1778415411.061194
+      "ts": 1778415411.061194,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -168,7 +173,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n邀请大家投票决定是否合入此 PR。请在评论中选择“合入”或“退回”。",
-      "ts": 1778415415.9545448
+      "ts": 1778415415.9545448,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -192,7 +198,8 @@
     {
       "speaker": "工程师A",
       "content": " Nack，根据投票流程，请先查看 `review_b` 的内容并进行评审。目前 `review_b` 为空。\n\n写入评审意见：\n\nwrite_section(\"review_b\", \"- 兼容性和长期维护重要，建议合入。\")",
-      "ts": 1778415420.191988
+      "ts": 1778415420.191988,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -202,7 +209,8 @@
     {
       "speaker": "工程师B",
       "content": "ORMALIZE THE RESPONSE AS JSON:\n\n",
-      "ts": 1778415428.346078
+      "ts": 1778415428.346078,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -256,7 +264,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票：合入。理由：长期维护更重要，建议合入。\n\n当前票数：\n- 合入: 1 (主审)\n- 退回: 0\n\n等待其他评审成员投票决定是否合入此 PR。",
-      "ts": 1778415433.89785
+      "ts": 1778415433.89785,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -278,5 +287,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

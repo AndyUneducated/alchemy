@@ -6,7 +6,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 import yaml
 
@@ -326,6 +326,48 @@ def _split_frontmatter(text: str) -> tuple[str | None, str]:
     return m.group("meta"), m.group("body").strip()
 
 
+def _resolve_who_names(
+    who: Any,
+    declared_order: list[str],
+    role_by_name: dict[str, str],
+) -> list[str]:
+    """纯函数版 who 解析：返回 agent 名字列表（不返回 Agent 对象）.
+
+    与 `Discussion._resolve_who` 字节同源——后者在此基础上 `self._by_name[n]`
+    转回 Agent 对象。本函数被 `Scenario.expanded_turns()`（静态展开，不需要
+    runtime Agent）与 `Discussion._resolve_who`（runtime）共用，确保两条路径
+    展开顺序与名单完全一致。
+
+    四种 `who` 形态见 [`README.md`](README.md) Scenario schema：
+      - `"all"`：全员，按声明顺序
+      - `"moderator"` / `"member"`：按 role 过滤，按声明顺序
+      - `["name1", ...]`：显式名单
+    """
+    if isinstance(who, str):
+        if who == "all":
+            return list(declared_order)
+        return [n for n in declared_order if role_by_name.get(n) == who]
+    if isinstance(who, list):
+        return [str(n) for n in who]
+    raise TypeError(f"Unsupported who form: {who!r}")
+
+
+@dataclass(frozen=True)
+class ExpandedTurn:
+    """`Scenario.expanded_turns()` 一项：静态展开的一个 (agent, step) turn.
+
+    与 `Discussion._expand_steps` 展开形态字节相同；`turn_idx` 1-based，`require_tool`
+    / `max_retries` 直接透传 step 字段，让消费者（evals nudge_fire_rate / agent_sft
+    extractor）不需要解析 scenario YAML 自己复刻展开逻辑。
+    """
+    turn_idx: int
+    agent: str
+    step_id: str | None
+    instruction: str
+    require_tool: str | None
+    max_retries: int
+
+
 @dataclass
 class Assembly:
     agents: list[Agent]
@@ -436,3 +478,40 @@ class Scenario:
             artifact=store,
             tracer=tracer,
         )
+
+    def expanded_turns(self) -> list[ExpandedTurn]:
+        """静态展开 `steps:` 列表为线性 `ExpandedTurn` 序列——不实例化 Agent / 不跑 LLM.
+
+        展开顺序 = `Discussion._expand_steps()` 同源（共用 `_resolve_who_names`）：
+        steps 顺序 × 每 step 内 who 解析后的 agent 顺序。`turn_idx` 1-based，与
+        `Discussion.run` 写入 history 的 `turn N of M` marker 对齐。
+
+        给评测 / 训练数据挖掘等"不跑 LLM 也想知道这个 scenario 会展开成什么"的消费者
+        用：例如 `play/evals` `nudge_fire_rate` task 派生 `expected_require_tool_turns`、
+        `play/agent_sft` extractor 按 turn_idx 索引 step instruction（DECISIONS §13）.
+        """
+        agents_cfg = self.meta.get("agents") or []
+        declared_order = [a["name"] for a in agents_cfg]
+        role_by_name = dict(self.agent_roles)
+        steps = self.meta.get("steps") or []
+
+        out: list[ExpandedTurn] = []
+        turn_idx = 0
+        for step in steps:
+            who = step.get("who")
+            for agent_name in _resolve_who_names(who, declared_order, role_by_name):
+                turn_idx += 1
+                require_tool = step.get("require_tool")
+                instruction = step.get("instruction") or ""
+                max_retries = int(step.get(
+                    "max_retries", 1 if require_tool else 0,
+                ))
+                out.append(ExpandedTurn(
+                    turn_idx=turn_idx,
+                    agent=agent_name,
+                    step_id=step.get("id"),
+                    instruction=str(instruction),
+                    require_tool=str(require_tool) if require_tool else None,
+                    max_retries=max_retries,
+                ))
+        return out

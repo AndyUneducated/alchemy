@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与当前 PR 关联性不高，主要为项目事实。",
-      "ts": 1778415579.023214
+      "ts": 1778415579.023214,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，无关键信息。\n\nappend_section(\"review_b\", \"检索结果与接口契约/测试用例无关，无关键信息。\")",
-      "ts": 1778415587.364789
+      "ts": 1778415587.364789,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 无关键问题，建议合入。\")",
-      "ts": 1778415591.0229938
+      "ts": 1778415591.0229938,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 无明显风险，同意A/B评审。\", \"name\": \"review_c\"}}\n</tool_call>",
-      "ts": 1778415596.057611
+      "ts": 1778415596.057611,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +100,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 综合A/B评审，建议合入。\", \"name\": \"review_c\"}}\n</tool_call>",
-      "ts": 1778415599.530261
+      "ts": 1778415599.530261,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +111,8 @@
     {
       "speaker": "主审",
       "content": "portun\n{\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}\n</tool_call>",
-      "ts": 1778415603.391496
+      "ts": 1778415603.391496,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +122,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"整体风险可控，提升维护性。\"}}\n</tool_call>",
-      "ts": 1778415607.030308
+      "ts": 1778415607.030308,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -126,7 +133,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"兼容性和性能无大碍，维护性提升。\"}}\n</tool_call>",
-      "ts": 1778415610.78316
+      "ts": 1778415610.78316,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -136,7 +144,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"整体风险评估后一致建议。\"}}\n</tool_call>",
-      "ts": 1778415614.470454
+      "ts": 1778415614.470454,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -147,5 +156,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

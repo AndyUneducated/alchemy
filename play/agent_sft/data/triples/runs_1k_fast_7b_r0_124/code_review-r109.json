@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 无关。继续评审。\n\nappend_section(\"review_a\", \"建议合入，兼顾长期维护。\")",
-      "ts": 1778416089.4932249
+      "ts": 1778416089.4932249,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与当前PR无关，忽略。\n\nappend_section(\"review_b\", \"建议合入，长期维护更重要。\")",
-      "ts": 1778416097.553005
+      "ts": 1778416097.553005,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"合入，短期覆盖率下降可接受。\")",
-      "ts": 1778416100.310147
+      "ts": 1778416100.310147,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "portun\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 考虑长期维护，合入。\",\"name\":\"review_b\"}}\n</tool_call>",
-      "ts": 1778416107.411056
+      "ts": 1778416107.411056,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -120,7 +124,8 @@
     {
       "speaker": "工程师C",
       "content": "append_section(\"review_b\", \"- 考虑长期维护，合入。\")\n\nportun\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 综合 A/B 风险，建议合入以兼顾长期维护。\",\"name\":\"review_c\"}}\n</tool_call>",
-      "ts": 1778416112.38333
+      "ts": 1778416112.38333,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -130,7 +135,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审用一句话表达意见并投票。\n\n## review_a\n_(empty)_\n\n## review_b\n- 无明显性能影响，合入合理。\n- 综合 A/B 风险一句话\n\n## review_c\n- 考虑长期维护，合入。\n\n## 决策\n_(empty)_\n请投票：",
-      "ts": 1778416118.226058
+      "ts": 1778416118.226058,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -154,7 +160,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"综合评审意见，合入合理。\")",
-      "ts": 1778416122.037698
+      "ts": 1778416122.037698,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -164,7 +171,8 @@
     {
       "speaker": "工程师B",
       "content": "投票成功，支持合入此 PR。\n\nappend_section(\"review_b\", \"同意 A/B 评审结果，合入。\")",
-      "ts": 1778416126.96602
+      "ts": 1778416126.96602,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -186,7 +194,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"长期维护优于当前覆盖率。\")",
-      "ts": 1778416130.804193
+      "ts": 1778416130.804193,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -196,5 +205,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

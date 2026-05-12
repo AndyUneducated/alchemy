@@ -30,7 +30,8 @@
     {
       "speaker": "执行者",
       "content": "核心要点：项目代号ZX-7492，服务器编号SRV-8831，负责人E-2055，启动日期2026年3月14日。",
-      "ts": 1778410034.6454139
+      "ts": 1778410034.6454139,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -40,7 +41,8 @@
     {
       "speaker": "执行者",
       "content": "搞定一轮核心要点记录。下一步：等待更多资料进行二次调研。",
-      "ts": 1778410037.097174
+      "ts": 1778410037.097174,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -61,7 +63,8 @@
     {
       "speaker": "协调者",
       "content": "投票已提议。请执行者进行投票：`cast_vote(vote_id=\"v1\", option=\"追加\")` 或 `cast_vote(vote_id=\"v1\", option=\"不追加\")`。",
-      "ts": 1778410041.3844962
+      "ts": 1778410041.3844962,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -85,7 +88,8 @@
     {
       "speaker": "执行者",
       "content": "投票记录成功。下一步：进行二次调研。",
-      "ts": 1778410044.89902
+      "ts": 1778410044.89902,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -120,7 +124,8 @@
     {
       "speaker": "执行者",
       "content": "补充了项目代号ZX-7492的历史信息。",
-      "ts": 1778410050.854482
+      "ts": 1778410050.854482,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -130,7 +135,8 @@
     {
       "speaker": "执行者",
       "content": "搞定二次调研补充。下一步：等待更多资料进行二次笔记。",
-      "ts": 1778410052.5756621
+      "ts": 1778410052.5756621,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -145,5 +151,6 @@
     }
   ],
   "success": true,
-  "warnings": []
+  "warnings": [],
+  "usage": []
 }

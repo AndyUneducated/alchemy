@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .result import ArtifactEventEntry
 from .tools import warn_if_error
 
 
@@ -38,7 +39,7 @@ class ArtifactStore:
         self.finalized: bool = False
         self.final_decision: str | None = None
         self.final_rationale: str | None = None
-        self._events: list[dict] = []
+        self._events: list[ArtifactEventEntry] = []
         self._next_vote_num: int = 1
         self._tool_owners: dict[str, list[str]] = dict(tool_owners or {})
 
@@ -77,7 +78,7 @@ class ArtifactStore:
 
         return "\n\n".join(parts) if parts else "_(empty artifact)_"
 
-    def drain_events(self) -> list[dict]:
+    def drain_events(self) -> list[ArtifactEventEntry]:
         events, self._events = self._events, []
         return events
 
@@ -136,14 +137,13 @@ def _h_write_section(store: ArtifactStore, args: dict, caller: str) -> str:
     store.sections[name] = content
     n = len(content)
     print(f"📝 [{caller}] wrote section '{name}' ({n} chars)", flush=True)
-    store._events.append({
-        "type": "artifact_event",
-        "tool": "write_section",
-        "caller": caller,
-        "arguments": dict(args),
-        "content": f"{caller} wrote section '{name}' ({n} chars)",
-        "ts": time.time(),
-    })
+    store._events.append(ArtifactEventEntry(
+        tool="write_section",
+        caller=caller,
+        arguments=dict(args),
+        content=f"{caller} wrote section '{name}' ({n} chars)",
+        ts=time.time(),
+    ))
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
 
 
@@ -162,14 +162,13 @@ def _h_append_section(store: ArtifactStore, args: dict, caller: str) -> str:
     store.sections[name] = (old + "\n" + entry) if old else entry
     n = len(entry)
     print(f"➕ [{caller}] appended to '{name}' ({n} chars)", flush=True)
-    store._events.append({
-        "type": "artifact_event",
-        "tool": "append_section",
-        "caller": caller,
-        "arguments": dict(args),
-        "content": f"{caller} appended to '{name}' ({n} chars)",
-        "ts": time.time(),
-    })
+    store._events.append(ArtifactEventEntry(
+        tool="append_section",
+        caller=caller,
+        arguments=dict(args),
+        content=f"{caller} appended to '{name}' ({n} chars)",
+        ts=time.time(),
+    ))
     return json.dumps({"ok": True, "section": name}, ensure_ascii=False)
 
 
@@ -185,14 +184,13 @@ def _h_propose_vote(store: ArtifactStore, args: dict, caller: str) -> str:
     store._next_vote_num += 1
     store.votes[vid] = Vote(vote_id=vid, question=question, options=options)
     print(f"🗳  [{caller}] proposed vote {vid}: \"{question}\"", flush=True)
-    store._events.append({
-        "type": "artifact_event",
-        "tool": "propose_vote",
-        "caller": caller,
-        "arguments": {"question": question, "options": list(options)},
-        "content": f"{caller} proposed vote {vid}: '{question}'",
-        "ts": time.time(),
-    })
+    store._events.append(ArtifactEventEntry(
+        tool="propose_vote",
+        caller=caller,
+        arguments={"question": question, "options": list(options)},
+        content=f"{caller} proposed vote {vid}: '{question}'",
+        ts=time.time(),
+    ))
     return json.dumps({"vote_id": vid}, ensure_ascii=False)
 
 
@@ -209,14 +207,13 @@ def _h_cast_vote(store: ArtifactStore, args: dict, caller: str) -> str:
         })
     vote.ballots[caller] = (option, rationale)
     print(f"✓ [{caller}] cast {vid} → {option}", flush=True)
-    store._events.append({
-        "type": "artifact_event",
-        "tool": "cast_vote",
-        "caller": caller,
-        "arguments": dict(args),
-        "content": f"{caller} cast {vid} → {option}",
-        "ts": time.time(),
-    })
+    store._events.append(ArtifactEventEntry(
+        tool="cast_vote",
+        caller=caller,
+        arguments=dict(args),
+        content=f"{caller} cast {vid} → {option}",
+        ts=time.time(),
+    ))
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -233,14 +230,13 @@ def _h_finalize_artifact(store: ArtifactStore, args: dict, caller: str) -> str:
     store.final_decision = decision
     store.final_rationale = rationale
     print(f"🏁 [{caller}] finalized: {decision}", flush=True)
-    store._events.append({
-        "type": "artifact_event",
-        "tool": "finalize_artifact",
-        "caller": caller,
-        "arguments": dict(args),
-        "content": f"{caller} finalized: {decision}",
-        "ts": time.time(),
-    })
+    store._events.append(ArtifactEventEntry(
+        tool="finalize_artifact",
+        caller=caller,
+        arguments=dict(args),
+        content=f"{caller} finalized: {decision}",
+        ts=time.time(),
+    ))
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 

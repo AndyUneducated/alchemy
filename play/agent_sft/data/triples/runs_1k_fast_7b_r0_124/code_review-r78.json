@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已添加。\n\n\tappend_section(\"review_a\", \"兼容性风险可控，短期内接受。\")",
-      "ts": 1778414528.240316
+      "ts": 1778414528.240316,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -65,7 +66,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，忽略。\n\n-append_section(\"review_b\", \"暂无相关关键信息。\")",
-      "ts": 1778414536.2368572
+      "ts": 1778414536.2368572,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "由于 'review_a' 为只替换模式，使用 write_section 更新评审意见。\n\nwrite_section(\"review_a\", \"短期兼容性风险可控，建议合入以提升可维护性。\")",
-      "ts": 1778414540.483119
+      "ts": 1778414540.483119,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +88,8 @@
     {
       "speaker": "工程师B",
       "content": "ilor\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 兼容性风险短期可接受，性能影响微乎其微。\\n\", \"name\": \"review_b\"}}\n-Shirt\n\n工程师C的意见如下：\n\nappend_section(\"review_c\", \"- 综合A/B意见：兼容性可控，合入以提升维护性。\")",
-      "ts": 1778414545.621488
+      "ts": 1778414545.621488,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +99,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_b\", \"- 兼容性风险短期可接受，性能影响微乎其微。\")",
-      "ts": 1778414549.9499898
+      "ts": 1778414549.9499898,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +110,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审员投下您的一票。",
-      "ts": 1778414554.432209
+      "ts": 1778414554.432209,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +135,8 @@
     {
       "speaker": "工程师A",
       "content": "投票已提交。\n\n cast_vote(\"v1\", \"合入\", \"综合评审意见，提升代码可维护性。\")",
-      "ts": 1778414558.126844
+      "ts": 1778414558.126844,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +146,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交：\n\ncast_vote(\"v1\", \"合入\", \"短期兼容性风险可控，利于维护。\")",
-      "ts": 1778414562.879381
+      "ts": 1778414562.879381,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -161,7 +169,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合评审意见，提升代码可维护性。\")",
-      "ts": 1778414566.539222
+      "ts": 1778414566.539222,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -171,5 +180,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

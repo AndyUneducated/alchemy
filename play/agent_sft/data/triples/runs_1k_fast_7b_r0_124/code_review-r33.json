@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史记录与当前 PR 关联性不高。",
-      "ts": 1778412166.803563
+      "ts": 1778412166.803563,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为只写模式，请覆写内容。提交意见如下：\n\n改动接受，短期覆盖下降换长期维护。附性能无显著影响。同意合入。",
-      "ts": 1778412176.19007
+      "ts": 1778412176.19007,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "已完成覆写 `review_a` 部分。\n\n## review_a\n- 兼容性风险可控，性能无显著影响，同意合入以提升维护性。\n\n请继续其他评审意见。\n## review_b\n_(empty)_\n\n## review_c\n_(empty)_\n\n## 决策\n_(empty)_",
-      "ts": 1778412183.841186
+      "ts": 1778412183.841186,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为追加模式，请追加意见如下：\n\n- 认同A，性能无显著影响，短期覆盖下降可接受。\n\n请主审汇总决策。",
-      "ts": 1778412188.387224
+      "ts": 1778412188.387224,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 综合 A/B 风险可控，同意合入。\\n\", \"name\": \"review_c\"}}\n</tool_call>",
-      "ts": 1778412194.8087199
+      "ts": 1778412194.8087199,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -128,7 +133,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n请各位评审员投下您的一票。",
-      "ts": 1778412199.5272808
+      "ts": 1778412199.5272808,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -152,7 +158,8 @@
     {
       "speaker": "工程师A",
       "content": "ronics\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"风险可控，性能无影响。\"}}\n</tool_call>",
-      "ts": 1778412203.504821
+      "ts": 1778412203.504821,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -162,7 +169,8 @@
     {
       "speaker": "工程师B",
       "content": "评审区 review_b 为追加模式，请追加意见如下：\n\n- 投票支持合入，无显著风险。\n\n请主审汇总决策。",
-      "ts": 1778412208.4654698
+      "ts": 1778412208.4654698,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -172,7 +180,8 @@
     {
       "speaker": "工程师C",
       "content": "看来投票尚未生成。让我再试一次直接投合入票。\n\nronics\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"风险可控，性能无影响。\"}}\n</tool_call>",
-      "ts": 1778412213.675385
+      "ts": 1778412213.675385,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -183,5 +192,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

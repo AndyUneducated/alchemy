@@ -15,9 +15,10 @@
 
 数据契约：
   - 输入：scenario_path（相对 `scenarios_root` 或绝对路径都接）
-  - 输出：envelope dict `{transcript, artifact, warnings, success}`，schema 与
-    `play/agent_engine/result.py::Result` 完全一致（由 cli.py --save-result-json
-    用 dataclasses.asdict 序列化）.
+  - 输出：envelope dict `{transcript, artifact, warnings, success, usage}`，schema 与
+    `play/agent_engine/result.py::Result` 完全一致（由 cli.py --save-result-json 用
+    dataclasses.asdict 序列化；§16 起 transcript entry 与 TokenUsage 都是 typed
+    dataclass，asdict 递归展平为 dict 形态）.
 """
 
 from __future__ import annotations

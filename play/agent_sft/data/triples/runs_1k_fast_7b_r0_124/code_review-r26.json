@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与当前 PR 关联性不高，未找到直接相关的历史 commit 或设计文档。",
-      "ts": 1778411804.461061
+      "ts": 1778411804.461061,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，无关键信息。建议主审关注PR描述内容。\n\n\tappend_section(\"review_b\", \"无相关接口契约/测试用例信息。\")\n\t}",
-      "ts": 1778411812.753474
+      "ts": 1778411812.753474,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 write_section(\"review_a\", \"- 关键关注点明确，建议合入。\")",
-      "ts": 1778411816.5505338
+      "ts": 1778411816.5505338,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": " EngineersB 已提交评审意见。\n\nappend_section(\"review_c\", \"- 综合A/B风险，建议合入以提升长期可维护性。\")",
-      "ts": 1778411821.6753988
+      "ts": 1778411821.6753988,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -95,7 +99,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 write_section(\"review_c\", \"- 综合A/B风险，建议合入以提升长期可维护性。\") 更新评审意见。",
-      "ts": 1778411826.0830898
+      "ts": 1778411826.0830898,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +110,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审工程师投票决定是否合入此 PR。\n\n- 投票选项：\n  - 合入\n  - 退回\n\n使用 `cast_vote(vote_id=\"v1\", option=\"<选择>\")` 进行投票。\n",
-      "ts": 1778411831.738158
+      "ts": 1778411831.738158,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +135,8 @@
     {
       "speaker": "工程师A",
       "content": "投票结果记录成功：`v1` 合入。",
-      "ts": 1778411836.1606321
+      "ts": 1778411836.1606321,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +158,8 @@
     {
       "speaker": "工程师B",
       "content": "ursal\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"短期兼容性影响可接受，长期维护更佳。\"}}",
-      "ts": 1778411840.2227468
+      "ts": 1778411840.2227468,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -161,7 +169,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `cast_vote(\"v1\", \"合入\", \"提升长期可维护性。\")` 记录我的投票。\n\n## 决策\n_(empty)_\n\n## Votes\n\n### v1: 是否合入此 PR?\n\n- 合入: 2 (工程师A, 我)\n- 退回: 0 (—)\n\n```json\n{\"name\": \"cast",
-      "ts": 1778411848.290627
+      "ts": 1778411848.290627,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -194,5 +203,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

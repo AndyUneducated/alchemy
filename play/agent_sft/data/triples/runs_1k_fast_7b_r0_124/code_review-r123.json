@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已添加至 review_a 部分，请参阅。\n\nappend_section(\"review_a\", \"建议合入，短期测试覆盖下降换取长期维护性提升。\")",
-      "ts": 1778416777.58732
+      "ts": 1778416777.58732,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约无关，继续评审。\n\nappend_section(\"review_b\", \"暂无相关接口契约信息。\")",
-      "ts": 1778416785.553053
+      "ts": 1778416785.553053,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"建议合入，短期测试覆盖下降换取长期维护性提升。\")",
-      "ts": 1778416788.477364
+      "ts": 1778416788.477364,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "write_section(\"review_c\", \"- 综合 A/B 风险，建议合入以提升长期维护性。\")\n\n请工程师C确认此决策。\n工程师C，请提交综合评审意见。",
-      "ts": 1778416794.619145
+      "ts": 1778416794.619145,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -98,7 +102,8 @@
     {
       "speaker": "工程师C",
       "content": "请使用 `write_section` 替换 review_b 的内容。\n\nwrite_section(\"review_b\", \"- 暂无相关接口契约信息。\")\ncast_vote(\"vote_id_123\", \"合入\")",
-      "ts": 1778416799.0562098
+      "ts": 1778416799.0562098,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -108,7 +113,8 @@
     {
       "speaker": "主审",
       "content": "请各位评审投票：是否合入此 PR? 选项：合入、退回。您的选择将决定项目的下一步走向。\n\ncast_vote(\"v1\", \"合入\")",
-      "ts": 1778416803.861899
+      "ts": 1778416803.861899,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -132,7 +138,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"提升长期维护性值得短期牺牲。\")",
-      "ts": 1778416807.342391
+      "ts": 1778416807.342391,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -142,7 +149,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_vote(\"v1\", \"合入\", \"支持提升长期维护性。\")",
-      "ts": 1778416810.789767
+      "ts": 1778416810.789767,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -152,7 +160,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合评审一致同意。\")",
-      "ts": 1778416814.222336
+      "ts": 1778416814.222336,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -163,5 +172,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

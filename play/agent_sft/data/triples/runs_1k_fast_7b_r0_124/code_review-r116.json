@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史 commit 中未找到直接相关文档，但发现一个提及项目代号 `ZX-7492` 的文件。",
-      "ts": 1778416422.295016
+      "ts": 1778416422.295016,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果未找到直接相关的接口契约或测试用例。\n\n\tappend_section(\"review_b\", \"暂无相关文档，建议审查代码。\")",
-      "ts": 1778416430.470793
+      "ts": 1778416430.470793,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 关注兼容性和长期可维护性，建议合入。\")",
-      "ts": 1778416434.2707798
+      "ts": 1778416434.2707798,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "-append_section(\"review_b\", \"- 考虑长期维护，兼容性风险可控，建议合入。\")\n\nappend_section(\"review_c\", \"- 综合 A/B 风险，建议合入以提高可维护性。\")",
-      "ts": 1778416438.878182
+      "ts": 1778416438.878182,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合A/B评审风险，建议合入以提高可维护性。\")",
-      "ts": 1778416443.167795
+      "ts": 1778416443.167795,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审员投出您的宝贵一票。",
-      "ts": 1778416447.732694
+      "ts": 1778416447.732694,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_section(\"v1\", option=\"合入\", rationale=\"提高可维护性优先\")",
-      "ts": 1778416451.129458
+      "ts": 1778416451.129458,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_section(\"v1\", option=\"合入\", rationale=\"保持团队一致性\")",
-      "ts": 1778416454.4813719
+      "ts": 1778416454.4813719,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", option=\"合入\", rationale=\"符合多数意见\")",
-      "ts": 1778416457.8384
+      "ts": 1778416457.8384,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

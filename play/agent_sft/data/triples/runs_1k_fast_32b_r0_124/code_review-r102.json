@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与 PR 关联性低。需进一步查询。",
-      "ts": 1778461404.9898171
+      "ts": 1778461404.9898171,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "检索信息不相关，需重新查询。",
-      "ts": 1778461442.482385
+      "ts": 1778461442.482385,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "继续检索相关信息以形成评审意见。",
-      "ts": 1778461494.897865
+      "ts": 1778461494.897865,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -120,7 +123,8 @@
     {
       "speaker": "工程师B",
       "content": "检索信息与接口约定无关，需重新查询。",
-      "ts": 1778461535.117734
+      "ts": 1778461535.117734,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -130,7 +134,8 @@
     {
       "speaker": "工程师C",
       "content": "投票ID错误，需确认正确ID后重新投票。",
-      "ts": 1778461570.487544
+      "ts": 1778461570.487544,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -162,7 +167,8 @@
     {
       "speaker": "主审",
       "content": "请各位根据评审意见，选择“合入”或“退回”。",
-      "ts": 1778461595.121473
+      "ts": 1778461595.121473,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -211,7 +217,8 @@
     {
       "speaker": "工程师A",
       "content": "文档未提及重构细节，继续查找。",
-      "ts": 1778461639.084987
+      "ts": 1778461639.084987,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -233,7 +240,8 @@
     {
       "speaker": "工程师B",
       "content": "文档检索未找到相关接口约定信息，继续查找。",
-      "ts": 1778461683.846994
+      "ts": 1778461683.846994,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -243,7 +251,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持合入。等待其他评审意见。",
-      "ts": 1778461703.726209
+      "ts": 1778461703.726209,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -265,5 +274,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

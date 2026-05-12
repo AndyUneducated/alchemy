@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到相关 commit/doc，仅有项目基本信息。",
-      "ts": 1778449406.91385
+      "ts": 1778449406.91385,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约或测试用例信息。",
-      "ts": 1778449443.859742
+      "ts": 1778449443.859742,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已提交。继续关注是否有更多相关信息或更新。",
-      "ts": 1778449492.806366
+      "ts": 1778449492.806366,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到具体的接口约定信息。建议继续查找或咨询负责人。",
-      "ts": 1778449532.712654
+      "ts": 1778449532.712654,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "先合入，持续监控。\n",
-      "ts": 1778449566.9229271
+      "ts": 1778449566.9229271,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +155,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请各位根据评审意见进行投票。",
-      "ts": 1778449586.684911
+      "ts": 1778449586.684911,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -174,7 +180,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持“合入”，理由是“长期可维护性优先”。继续关注其他评审意见和最终决策。",
-      "ts": 1778449606.939863
+      "ts": 1778449606.939863,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -209,7 +216,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票支持“合入”，理由是“优先考虑长期可维护性”。将持续关注合并后的系统表现和日志情况。",
-      "ts": 1778449662.8579211
+      "ts": 1778449662.8579211,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -243,7 +251,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持“合入”，理由是“长期维护性重要”。将继续监控合并后的系统表现。",
-      "ts": 1778449683.7869241
+      "ts": 1778449683.7869241,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -263,5 +272,6 @@
     "工程师A skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

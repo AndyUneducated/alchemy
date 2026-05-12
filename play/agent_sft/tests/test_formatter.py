@@ -421,10 +421,12 @@ def test_agent_prompt_lookup(tmp_path):
 
 
 def test_render_recent_context_handles_all_entry_types():
+    """§16 起 entry dict 必含显式 `type` 字段（含 speaker entry）；formatter 在 JSONL
+    层面消费 list[dict]（dataclasses.asdict 已展平），按 type 分支渲染."""
     ctx = [
         {"type": "topic", "content": "T"},
         {"type": "turn", "content": "turn 1 of 2"},
-        {"speaker": "A", "content": "hello"},
+        {"type": "speaker", "speaker": "A", "content": "hello"},
         {"type": "tool_call", "tool": "foo", "caller": "A"},
         {"type": "artifact_event", "tool": "append_section", "caller": "A"},
         "string entry should be skipped",
@@ -447,10 +449,10 @@ def test_max_recent_truncates_long_context(tmp_path):
     long_context = [
         {"type": "topic", "content": "T"},
         {"type": "turn", "content": "turn 1"},
-        {"speaker": "X", "content": "old1"},
-        {"speaker": "X", "content": "old2"},
-        {"speaker": "X", "content": "recent1"},
-        {"speaker": "X", "content": "recent2"},
+        {"type": "speaker", "speaker": "X", "content": "old1"},
+        {"type": "speaker", "speaker": "X", "content": "old2"},
+        {"type": "speaker", "speaker": "X", "content": "recent1"},
+        {"type": "speaker", "speaker": "X", "content": "recent2"},
     ]
     triple = make_triple(context=long_context)
     user_msg = format_triple(triple, scen, max_recent=2)["messages"][1]["content"]

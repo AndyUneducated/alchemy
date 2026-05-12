@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，主要为项目事实。",
-      "ts": 1778413451.77543
+      "ts": 1778413451.77543,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，主要为项目事实。",
-      "ts": 1778413459.632104
+      "ts": 1778413459.632104,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险需监控，性能无显著影响，建议合入。\")",
-      "ts": 1778413463.595702
+      "ts": 1778413463.595702,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交。\n\n## review_a\n- 兼容性风险需监控，性能无显著影响，建议合入。\n\n## review_b\n- 兼容性风险可控，性能无显著影响，建议合入。\n\n## review_c\n- 综合A/B风险，建议合入以提升长期可维护性。",
-      "ts": 1778413471.882136
+      "ts": 1778413471.882136,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合A/B风险，性能无显著下降，建议尽快合入以提高代码整洁性。\")",
-      "ts": 1778413476.587357
+      "ts": 1778413476.587357,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -117,7 +122,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请各位评审选择【合入】或【退回】。",
-      "ts": 1778413481.12256
+      "ts": 1778413481.12256,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -141,7 +147,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"综合多方意见，提升代码整洁性\")",
-      "ts": 1778413484.675045
+      "ts": 1778413484.675045,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -151,7 +158,8 @@
     {
       "speaker": "工程师B",
       "content": "评审投票已提交。\n\n## review_b\n- 兼容性风险可控，性能无显著影响，建议合入。\n- 同意A的评估。\n\n## review_c\n- 综合A/B风险，建议合入以提升长期可维护性。\n- 同意B的评估。\n\n## 决策\n建议合入此 PR 以提高代码整洁性和",
-      "ts": 1778413490.5455842
+      "ts": 1778413490.5455842,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -173,7 +181,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"符合多数意见，提升代码整洁性\")",
-      "ts": 1778413494.38594
+      "ts": 1778413494.38594,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -183,5 +192,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

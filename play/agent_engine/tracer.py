@@ -4,6 +4,7 @@ import json
 import sys
 import time
 
+from .result import ToolCallEntry
 from .tools import is_error
 
 
@@ -54,7 +55,7 @@ def _preview_result(result: str, ok: bool) -> str:
 
 class ToolTracer:
     def __init__(self) -> None:
-        self._events: list[dict] = []
+        self._events: list[ToolCallEntry] = []
 
     def record(self, caller: str, tool: str, arguments: dict, result: str) -> None:
         ok = not is_error(result)
@@ -63,17 +64,16 @@ class ToolTracer:
             f"→ {_preview_result(result, ok)}",
             file=sys.stderr, flush=True,
         )
-        self._events.append({
-            "type": "tool_call",
-            "caller": caller,
-            "tool": tool,
-            "arguments": arguments,
-            "result": result,
-            "ok": ok,
-            "visible": False,
-            "ts": time.time(),
-        })
+        self._events.append(ToolCallEntry(
+            caller=caller,
+            tool=tool,
+            arguments=dict(arguments),
+            result=result,
+            ok=ok,
+            visible=False,
+            ts=time.time(),
+        ))
 
-    def drain(self) -> list[dict]:
+    def drain(self) -> list[ToolCallEntry]:
         events, self._events = self._events, []
         return events

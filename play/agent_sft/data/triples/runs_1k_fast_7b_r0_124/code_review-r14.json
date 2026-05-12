@@ -45,7 +45,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前PR关系不大，无直接帮助。继续评审。\n\nappend_section(\"review_a\", \"建议合入，短期牺牲测试覆盖换取长期维护性。\")",
-      "ts": 1778411156.175776
+      "ts": 1778411156.175776,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -68,7 +69,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。\n\nappend_section(\"review_b\", \"与接口契约/测试用例无关。\")",
-      "ts": 1778411164.269241
+      "ts": 1778411164.269241,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -78,7 +80,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"兼容性风险可控，性能影响小，合入提高维护性。\")",
-      "ts": 1778411167.212875
+      "ts": 1778411167.212875,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +91,8 @@
     {
       "speaker": "工程师B",
       "content": "工程师C → append_section(\"review_c\", \"- 兼容性风险可控，性能影响小，建议合入以提高维护性。\")\n\n工程师B的评审意见已更新至 `review_b` 部分。现在请工程师C综合A/B的意见。",
-      "ts": 1778411175.2048042
+      "ts": 1778411175.2048042,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -120,7 +124,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section` 替换 `append_section`。\n\n",
-      "ts": 1778411183.757309
+      "ts": 1778411183.757309,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +168,8 @@
     {
       "speaker": "主审",
       "content": "已更新 `review_a` 部分：\n\n## review_a\n建议合入，短期牺牲测试覆盖换取长期维护性。\n\n请继续等待其他工程师投票。\n",
-      "ts": 1778411193.186115
+      "ts": 1778411193.186115,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -209,7 +215,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"综合评审意见，建议合入以提高维护性。\")",
-      "ts": 1778411197.0176792
+      "ts": 1778411197.0176792,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -219,7 +226,8 @@
     {
       "speaker": "工程师B",
       "content": "append_section(\"review_a\", \"综合评审意见一致，建议合入以提高维护性。\")",
-      "ts": 1778411200.8786318
+      "ts": 1778411200.8786318,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -229,7 +237,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持合入此 PR，理由：提高长期维护性是值得的。\n\n## Votes\n\n### v1: 是否合入此 PR?\n\n- 合入: 2 (主审, 工程师A, 工程师B)\n- 退回: 0 (—)\n\n## 决策\n待定\n\n请等待最终决策。\n## review_a\n",
-      "ts": 1778411206.949106
+      "ts": 1778411206.949106,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -251,5 +260,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

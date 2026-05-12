@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的是项目基本信息，无相关 commit/doc。需进一步查找。",
-      "ts": 1778450360.83258
+      "ts": 1778450360.83258,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到相关接口契约和测试用例信息。",
-      "ts": 1778450398.3544
+      "ts": 1778450398.3544,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "已提交评审意见至 artifact。需更多具体信息以作进一步评估。",
-      "ts": 1778450447.3366349
+      "ts": 1778450447.3366349,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "工程师B",
       "content": "已更新评审意见至 artifact，强调了需要确认新旧 API 的一致性与兼容性。等待进一步信息以完成评估。",
-      "ts": 1778450468.6049302
+      "ts": 1778450468.6049302,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -117,7 +121,8 @@
     {
       "speaker": "工程师C",
       "content": "需先提出投票选项，再进行投票。",
-      "ts": 1778450502.168894
+      "ts": 1778450502.168894,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -149,7 +154,8 @@
     {
       "speaker": "主审",
       "content": "已创建投票，请各位根据评审意见进行投票。",
-      "ts": 1778450522.578063
+      "ts": 1778450522.578063,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -186,7 +192,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到直接相关的代码或测试用例信息，仅获得项目基本信息。需进一步查找具体变更和影响评估的资料。建议补充相关文档或详细变更列表以供评审。",
-      "ts": 1778450571.095667
+      "ts": 1778450571.095667,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -196,7 +203,8 @@
     {
       "speaker": "工程师B",
       "content": "为了更好地做出决策，我们先需要更详细的接口约定和测试用例信息。不过根据当前的信息，虽然存在一些风险点，但考虑到长期的可维护性收益，我倾向于支持合入此 PR，并在后续迭代中逐步解决潜在问题。这符合我们的开发实践：优先确保代码库的整洁性和长远的可持续发展。\n\n",
-      "ts": 1778450592.817145
+      "ts": 1778450592.817145,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -206,7 +214,8 @@
     {
       "speaker": "工程师C",
       "content": "写入 review_c 部分失败，需用 write_section 重试。投票已完成。",
-      "ts": 1778450617.872915
+      "ts": 1778450617.872915,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -228,5 +237,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

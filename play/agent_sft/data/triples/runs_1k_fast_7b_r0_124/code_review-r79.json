@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，无关键信息。",
-      "ts": 1778414574.389924
+      "ts": 1778414574.389924,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。",
-      "ts": 1778414582.153908
+      "ts": 1778414582.153908,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "ORMALIZE THE TEXT SPACING AND USE CONSISTENT LINEBREAKS. 已覆盖 'review_a' 部分，如需追加意见，请使用 `append_section`。\n\n- 兼容性和性能可控，可合入。",
-      "ts": 1778414588.273507
+      "ts": 1778414588.273507,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -86,7 +89,8 @@
     {
       "speaker": "工程师B",
       "content": "pongection\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 保留兼容性警告，关注长期维护。\\n- 综合 A/B 风险一句话\", \"name\": \"review_b\"}}",
-      "ts": 1778414592.742336
+      "ts": 1778414592.742336,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -96,7 +100,8 @@
     {
       "speaker": "工程师C",
       "content": "pongection\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 保留兼容性警告，关注长期维护。\\n- 综合 A/B 风险一句话\", \"name\": \"review_b\"}}\n",
-      "ts": 1778414598.3933618
+      "ts": 1778414598.3933618,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +111,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`\n\n邀请大家投票，选项为“合入”或“退回”。",
-      "ts": 1778414602.973526
+      "ts": 1778414602.973526,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -130,7 +136,8 @@
     {
       "speaker": "工程师A",
       "content": "看来目前没有有效的投票ID。我将直接表达我的意见和投票。\n\nappend_section(\"review_a\", \"- 短期警告不影响大局，提升维护性，投合入票。\")\ncast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"短期警告不影响大局，提升维护性。\")",
-      "ts": 1778414609.962514
+      "ts": 1778414609.962514,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -140,7 +147,8 @@
     {
       "speaker": "工程师B",
       "content": "pongection\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"短期警告不影响大局，提升维护性。\"}}",
-      "ts": 1778414613.8833
+      "ts": 1778414613.8833,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -150,7 +158,8 @@
     {
       "speaker": "工程师C",
       "content": "pongection\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性可控，性能无明显影响，可合入。\", \"name\": \"review_c\"}}\npolloction\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"整体风险可控，提升代码组织性。\"}}",
-      "ts": 1778414618.711645
+      "ts": 1778414618.711645,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -161,5 +170,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

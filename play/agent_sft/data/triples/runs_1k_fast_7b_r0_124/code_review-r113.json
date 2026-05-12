@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，未找到关键信息。",
-      "ts": 1778416274.8479528
+      "ts": 1778416274.8479528,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与当前 PR 关联性不高。\n\nappend_section(\"review_b\", \"检索结果关联性不高。\")",
-      "ts": 1778416282.874542
+      "ts": 1778416282.874542,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险可控，性能影响不大，接受短期覆盖率下降以提升维护性。\")",
-      "ts": 1778416287.027402
+      "ts": 1778416287.027402,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "aporend_section(\"review_b\", \"- 兼容性风险可控，性能无明显影响，短期覆盖率下降可接受以提升维护性。\")",
-      "ts": 1778416291.4043782
+      "ts": 1778416291.4043782,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合A/B兼容性风险可控，性能无明显影响，短期覆盖率下降可接受以提升维护性。\")",
-      "ts": 1778416296.007995
+      "ts": 1778416296.007995,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "请各位评审投票：是否合入此 PR? (投票ID: v1)",
-      "ts": 1778416300.363657
+      "ts": 1778416300.363657,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"短期覆盖率下降可接受，提升长期维护性\")",
-      "ts": 1778416303.849288
+      "ts": 1778416303.849288,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交：选项为“合入”，理由为“短期覆盖率下降可接受，提升维护性”。",
-      "ts": 1778416308.400906
+      "ts": 1778416308.400906,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +159,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期覆盖率下降可接受，提升维护性\")",
-      "ts": 1778416311.901273
+      "ts": 1778416311.901273,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -161,5 +170,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

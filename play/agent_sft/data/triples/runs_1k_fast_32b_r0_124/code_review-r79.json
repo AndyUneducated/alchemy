@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与本次 PR 关联性较低。需进一步查询。",
-      "ts": 1778454542.738452
+      "ts": 1778454542.738452,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -66,7 +67,8 @@
     {
       "speaker": "工程师B",
       "content": "重新查询后仍无相关接口契约信息。\n",
-      "ts": 1778454626.0372758
+      "ts": 1778454626.0372758,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -76,7 +78,8 @@
     {
       "speaker": "工程师A",
       "content": "已完成提交评审意见。下一步需要其他审阅者提供他们的评审意见或进行投票决策。",
-      "ts": 1778454646.684581
+      "ts": 1778454646.684581,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "更新了评审意见，已记录对 deprecation warning 影响的关注。\n下一步需要工程师C提供评审意见或进行投票决策。",
-      "ts": 1778454668.504799
+      "ts": 1778454668.504799,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "下一步，需要提出具体投票选项以进行决策。请确认投票 ID 后再执行投票操作。",
-      "ts": 1778454696.742986
+      "ts": 1778454696.742986,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "请各位根据评审意见，对是否合入此 PR 进行投票。",
-      "ts": 1778454721.60731
+      "ts": 1778454721.60731,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -175,7 +181,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持“合入”此 PR，理由为“长期可维护性重要”。等待其他审阅者的最终立场。",
-      "ts": 1778454742.4643672
+      "ts": 1778454742.4643672,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -197,7 +204,8 @@
     {
       "speaker": "工程师B",
       "content": "已投票支持“合入”此 PR，理由为“长期维护性优先”。等待其他审阅者的最终立场。",
-      "ts": 1778454763.8983612
+      "ts": 1778454763.8983612,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -219,7 +227,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持“合入”此 PR，理由为“风险可控，维护性提升”。所有审阅者均同意合入，可执行合并操作。",
-      "ts": 1778454787.2183769
+      "ts": 1778454787.2183769,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -239,5 +248,6 @@
     "工程师A skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

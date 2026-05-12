@@ -35,12 +35,14 @@ predictions（perfect / partial / wrong_decision / garbage）。教学叙事核�
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, ClassVar
 
+from .._ae_bridge import Result
 from ..api import Doc, Response, SampleResult
 from ..metrics.judge_core import g_eval
 from ..metrics.trajectory import (
@@ -142,12 +144,17 @@ class AgentTraj(Task):
         return out
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：row 内的 envelope 字段 → doc.metadata['trajectory']；Response 占位."""
+        """score 路径：row 内的 envelope 字段 → doc.metadata['trajectory']；Response 占位.
+
+        Predictions JSONL 由 run 路径写出，含 §16 envelope 全 5 字段（含 typed
+        transcript entry + usage list）.
+        """
         envelope = {
-            "transcript": row.get("transcript", []),
-            "artifact": row.get("artifact", {}),
-            "warnings": row.get("warnings", []),
-            "success": row.get("success", False),
+            "transcript": row["transcript"],
+            "artifact": row["artifact"],
+            "warnings": row["warnings"],
+            "success": row["success"],
+            "usage": row["usage"],
         }
         enriched = _pin_trajectory(doc, envelope)
         return enriched, Response(doc_id=doc.id)
@@ -260,65 +267,29 @@ class AgentTraj(Task):
 def _pin_trajectory(doc: Doc, envelope: dict[str, Any]) -> Doc:
     """从 envelope 派生 tool_calls / tool_seq / decision，写回 doc.metadata['trajectory'].
 
-    envelope 必须形似 `Result.asdict()`：`{transcript, artifact, warnings, success}`.
+    envelope 必须形似 `Result.asdict()`（§16，5 字段）：`{transcript, artifact,
+    warnings, success, usage}`. `Result.from_dict` 严格反序列化（缺字段 KeyError）.
+
+    `trajectory` 字典内的 `transcript` / `usage` 都 reserialize 成 list[dict] 形态
+    供 evals 度量层（[`metrics/trajectory.py`]）按 dict 消费——metadata 经过 predictions
+    JSONL 落盘 + 读回时也保持同型.
     """
-    transcript = envelope.get("transcript") or []
-    tool_calls = _extract_tool_calls(transcript)
-    tool_seq = [c["tool"] for c in tool_calls]
-    decision = _extract_decision(envelope.get("artifact") or {}, tool_calls)
+    result = Result.from_dict(envelope)
+    tool_calls = [
+        {"tool": c.tool, "caller": c.caller, "arguments": dict(c.arguments)}
+        for c in result.tool_calls()
+    ]
     trajectory = {
-        "transcript": list(transcript),
-        "artifact": dict(envelope.get("artifact") or {}),
-        "warnings": list(envelope.get("warnings") or []),
-        "success": bool(envelope.get("success", False)),
+        "transcript": [dataclasses.asdict(e) for e in result.transcript],
+        "artifact": dict(result.artifact),
+        "warnings": list(result.warnings),
+        "success": bool(result.success),
+        "usage": [dataclasses.asdict(u) for u in result.usage],
         "tool_calls": tool_calls,
-        "tool_seq": tool_seq,
-        "decision": decision,
+        "tool_seq": [c["tool"] for c in tool_calls],
+        "decision": result.find_finalize_decision(),
     }
     return replace(doc, metadata={**doc.metadata, "trajectory": trajectory})
-
-
-def _extract_tool_calls(transcript: list[dict]) -> list[dict]:
-    """transcript 中的 `tool_call` (tracer 写) 与 `artifact_event` (artifact 写) 都是工具调用.
-
-    统一规约成 `{tool, caller, arguments}`：
-      - tool_call 类型已带这三字段
-      - artifact_event 类型从 phase 5 起也带 arguments（agent_engine artifact.py 同步改）
-    """
-    out: list[dict] = []
-    for entry in transcript:
-        if not isinstance(entry, dict):
-            continue
-        kind = entry.get("type")
-        if kind == "tool_call":
-            out.append({
-                "tool": entry.get("tool", ""),
-                "caller": entry.get("caller", ""),
-                "arguments": dict(entry.get("arguments") or {}),
-            })
-        elif kind == "artifact_event":
-            out.append({
-                "tool": entry.get("tool", ""),
-                "caller": entry.get("caller", ""),
-                "arguments": dict(entry.get("arguments") or {}),
-            })
-    return out
-
-
-def _extract_decision(artifact: dict, tool_calls: list[dict]) -> str | None:
-    """从 finalize_artifact 的 arguments 抽 decision；缺失则 None.
-
-    优先看 tool_calls 里 finalize_artifact 的 arguments['decision']（最权威）；
-    artifact dict 通常没有专门 key，只能 fallback 解析 render() 后的 markdown 不直观，
-    故先 tool_call 后回 None.
-    """
-    for c in tool_calls:
-        if c.get("tool") == "finalize_artifact":
-            args = c.get("arguments") or {}
-            d = args.get("decision")
-            if d:
-                return str(d).strip()
-    return None
 
 
 def _trajectory_summary_response(doc: Doc) -> Response:

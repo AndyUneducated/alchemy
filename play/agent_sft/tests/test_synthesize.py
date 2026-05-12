@@ -9,12 +9,18 @@
 
 from __future__ import annotations
 
+import dataclasses
 import textwrap
 
 from synthesize import (  # type: ignore[import-not-found]
     _extract_call_template,
     envelope_to_synthetic_triples,
     synthesize_corrected_response,
+)
+from agent_engine import (  # type: ignore[import-not-found]
+    SpeakerEntry,
+    ToolCallEntry,
+    TurnEntry,
 )
 
 
@@ -44,20 +50,26 @@ def write_scenario(tmp_path, yaml_text=SCENARIO_YAML):
     return p
 
 
-def envelope(transcript):
-    return {"transcript": transcript, "artifact": {}, "warnings": [], "success": True}
+def envelope(transcript_entries):
+    return {
+        "transcript": [dataclasses.asdict(e) for e in transcript_entries],
+        "artifact": {},
+        "warnings": [],
+        "success": True,
+        "usage": [],
+    }
 
 
-def turn_marker(idx):
-    return {"type": "turn", "content": f"turn {idx} of 1", "ts": 1.0}
+def turn_marker(idx, total=1):
+    return TurnEntry(content=f"turn {idx} of {total}", ts=1.0)
 
 
 def speaker(agent, content):
-    return {"speaker": agent, "content": content, "ts": 1.0}
+    return SpeakerEntry(speaker=agent, content=content, ts=1.0)
 
 
 def tool_call(caller, tool, ok=True):
-    return {"type": "tool_call", "caller": caller, "tool": tool, "ok": ok}
+    return ToolCallEntry(caller=caller, tool=tool, ok=ok, ts=1.0)
 
 
 # --- _extract_call_template ----------------------------------------------
@@ -222,7 +234,7 @@ steps:
     scen = write_scenario(tmp_path, yaml_text=yaml_text)
     transcript = []
     for i in range(1, 6):
-        transcript.append({"type": "turn", "content": f"turn {i} of 5", "ts": 1.0})
+        transcript.append(turn_marker(i, total=5))
         transcript.append(speaker("A", f"missed {i}"))
         transcript.append(speaker("A", f"still missed {i}"))
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高。继续审阅现有信息。\n\n-append_section(\"review_a\", \"暂无相关历史信息，建议基于当前描述评审。\")-",
-      "ts": 1778415969.694551
+      "ts": 1778415969.694551,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与 API 契约无关，继续基于现有信息评审。\n\n-append_section(\"review_b\", \"检索结果无直接关联。\")-",
-      "ts": 1778415977.774015
+      "ts": 1778415977.774015,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "-append_section(\"review_a\", \"- 兼容性风险可控，性能无显著影响，建议合入。\")-",
-      "ts": 1778415980.7577758
+      "ts": 1778415980.7577758,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "-Shirt section 'review_b' is append-only, using append_section.\n\n-append_section(\"review_b\", \"- 兼容性有warn，但短期内影响有限。\")-\n",
-      "ts": 1778415985.91057
+      "ts": 1778415985.91057,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section` 替换 `append_section`。\n\nwrite_section(\"review_b\", \"- 兼容性有warn，但短期内影响有限。\")",
-      "ts": 1778415990.256608
+      "ts": 1778415990.256608,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1` - 是否合入此 PR? 选项：合入、退回。请各位评审员投票。",
-      "ts": 1778415994.834497
+      "ts": 1778415994.834497,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"短期兼容性warn不影响长期维护\")",
-      "ts": 1778415998.241305
+      "ts": 1778415998.241305,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "-Shirt section 'review_b' is append-only, using append_section.\n\n-append_section(\"review_b\", \"- 兼容性warn短期影响有限，建议合入。\")-",
-      "ts": 1778416001.973265
+      "ts": 1778416001.973265,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期兼容性warn不影响核心功能\")",
-      "ts": 1778416005.433355
+      "ts": 1778416005.433355,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，未找到直接相关的历史 commit 或设计文档。",
-      "ts": 1778410626.1303082
+      "ts": 1778410626.1303082,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。\n\n\tappend_section(\"review_b\", \"检索结果未见相关接口契约/测试用例。\")",
-      "ts": 1778410634.247472
+      "ts": 1778410634.247472,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "",
-      "ts": 1778410641.707493
+      "ts": 1778410641.707493,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "-append_section(\"review_b\", \"- 兼容性风险需留意，短期内影响较小。\")-",
-      "ts": 1778410644.806459
+      "ts": 1778410644.806459,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -118,7 +122,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 综合 A/B 风险，建议合入。\", \"name\": \"review_c\"}}\n</tool_call>",
-      "ts": 1778410651.414997
+      "ts": 1778410651.414997,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -150,7 +155,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票：`v1`。请各位工程师选择“合入”或“退回”。",
-      "ts": 1778410656.042531
+      "ts": 1778410656.042531,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -174,7 +180,8 @@
     {
       "speaker": "工程师A",
       "content": "表决已投：`合入`。理由：整体风险可控，利于长期维护。",
-      "ts": 1778410660.685933
+      "ts": 1778410660.685933,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -196,7 +203,8 @@
     {
       "speaker": "工程师B",
       "content": "看来投票 ID 生成出现了问题，请稍后再试或联系管理员。\n\n\tappend_section(\"review_b\", \"投票生成出现问题，请稍后重试。\")",
-      "ts": 1778410665.4242198
+      "ts": 1778410665.4242198,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -206,7 +214,8 @@
     {
       "speaker": "工程师C",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"整体风险可控。\"}}\n</tool_call>",
-      "ts": 1778410669.332649
+      "ts": 1778410669.332649,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -216,5 +225,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

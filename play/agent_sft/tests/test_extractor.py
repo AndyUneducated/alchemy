@@ -7,10 +7,14 @@
   - 2nd fail drop → 0 triple
   - multi-nudge  → 1 triple，failure_mode 看 first attempt，corrected = 最终成功
   - no require_tool → 0 triple
+
+§16 起 envelope/transcript 全 typed dataclass entry：fixture 用 helper 工厂构造
+`SpeakerEntry / TurnEntry / ToolCallEntry / TopicEntry`，不再内联裸 dict.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import textwrap
 
 import pytest
@@ -18,10 +22,14 @@ import pytest
 from extractor import (  # type: ignore[import-not-found]
     NUDGE_TEMPLATE,
     Triple,
-    _index_steps_by_turn,
     _parse_envelope_name,
-    _split_turns_indexed,
     extract_triples,
+)
+from agent_engine import (  # type: ignore[import-not-found]
+    SpeakerEntry,
+    TopicEntry,
+    ToolCallEntry,
+    TurnEntry,
 )
 
 
@@ -51,25 +59,31 @@ def write_scenario(tmp_path, yaml_text=SCENARIO_YAML):
     return p
 
 
-def envelope(transcript):
+def envelope(transcript_entries):
+    """typed entries → envelope dict (asdict 回 dict 形态，让 Result.from_dict 重建 typed)."""
     return {
-        "transcript": transcript,
+        "transcript": [dataclasses.asdict(e) for e in transcript_entries],
         "artifact": {},
         "warnings": [],
         "success": True,
+        "usage": [],
     }
 
 
 def turn_marker(idx, total=1):
-    return {"type": "turn", "content": f"turn {idx} of {total}", "ts": 1.0}
+    return TurnEntry(content=f"turn {idx} of {total}", ts=1.0)
 
 
 def speaker(agent, content):
-    return {"speaker": agent, "content": content, "ts": 1.0}
+    return SpeakerEntry(speaker=agent, content=content, ts=1.0)
 
 
 def tool_call(caller, tool, ok=True):
-    return {"type": "tool_call", "caller": caller, "tool": tool, "ok": ok}
+    return ToolCallEntry(caller=caller, tool=tool, ok=ok, ts=1.0)
+
+
+def topic(content):
+    return TopicEntry(content=content, ts=0.0)
 
 
 # --- behavior tests -------------------------------------------------------
@@ -77,7 +91,7 @@ def tool_call(caller, tool, ok=True):
 def test_missed_first_attempt_then_success(tmp_path):
     scen = write_scenario(tmp_path)
     transcript = [
-        {"type": "topic", "content": "test topic", "ts": 0.0},
+        topic("test topic"),
         turn_marker(1),
         speaker("A", "我先想想"),  # missed: no tool call
         speaker("A", "现在调 foo_tool"),
@@ -98,9 +112,11 @@ def test_missed_first_attempt_then_success(tmp_path):
     assert t.scenario == "scen"
     assert t.instruction.startswith("调用 foo_tool")
     # context 包含 topic + turn marker；不包含 first speaker entry
-    assert any(e.get("type") == "topic" for e in t.context)
-    assert any(e.get("type") == "turn" for e in t.context)
-    assert all(e.get("speaker") != "A" for e in t.context)
+    assert any(isinstance(e, TopicEntry) for e in t.context)
+    assert any(isinstance(e, TurnEntry) for e in t.context)
+    assert all(
+        not (isinstance(e, SpeakerEntry) and e.speaker == "A") for e in t.context
+    )
 
 
 def test_wrong_tool_first_attempt(tmp_path):
@@ -218,49 +234,6 @@ steps:
 
 
 # --- helper unit tests ----------------------------------------------------
-
-def test_split_turns_indexed_returns_global_offsets():
-    transcript = [
-        {"type": "topic", "content": "x"},
-        turn_marker(1),
-        speaker("A", "a"),
-        speaker("A", "b"),
-        turn_marker(2),
-        speaker("B", "c"),
-    ]
-    segs = _split_turns_indexed(transcript)
-    assert len(segs) == 2
-    assert segs[0][0] == 2  # 第一段第 1 个 entry 是 transcript[2]
-    assert len(segs[0][1]) == 2
-    assert segs[1][0] == 5  # 第二段从 transcript[5] 起
-    assert len(segs[1][1]) == 1
-
-
-def test_index_steps_by_turn_expands_who(tmp_path):
-    yaml_text = textwrap.dedent("""\
----
-agents:
-  - {name: A, role: member, prompt: a}
-  - {name: B, role: member, prompt: b}
-steps:
-  - id: open
-    who: [A, B]
-    instruction: hi everyone
-  - id: vote
-    who: member
-    require_tool: cast_vote
-    instruction: vote please
----
-""")
-    p = tmp_path / "s.md"
-    p.write_text(yaml_text, encoding="utf-8")
-    out = _index_steps_by_turn(p)
-    # Step 1 expands to [A, B] → turns 1, 2; step 2 with who=member expands to [A, B] → 3, 4
-    assert set(out.keys()) == {1, 2, 3, 4}
-    assert out[1]["id"] == "open"
-    assert out[3]["id"] == "vote"
-    assert out[3]["require_tool"] == "cast_vote"
-
 
 def test_parse_envelope_name():
     assert _parse_envelope_name("tool_chain-r3") == ("tool_chain", 3)

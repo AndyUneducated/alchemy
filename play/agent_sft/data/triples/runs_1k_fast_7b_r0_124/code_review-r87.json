@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前评审无关，无关键信息。",
-      "ts": 1778414969.076967
+      "ts": 1778414969.076967,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，无关键信息。\n\nolith\n{\"name\": \"append_section\", \"arguments\": {\"name\": \"review_b\", \"entry\": \"检索结果与接口契约/测试用例无关，无关键信息。\"}}",
-      "ts": 1778414977.505922
+      "ts": 1778414977.505922,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "使用 `write_section` 重写 `review_a` 部分。\n\nolith\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 兼容性风险可控，性能影响不大，建议合入。\\n\",\"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778414984.176191
+      "ts": 1778414984.176191,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -85,7 +88,8 @@
     {
       "speaker": "工程师B",
       "content": "olith\n{\"name\": \"append_section\", \"arguments\": {\"name\": \"review_b\", \"entry\": \"- 兼容性风险可控，性能影响不大，建议合入。\"}}\n</tool_call>",
-      "ts": 1778414987.7372758
+      "ts": 1778414987.7372758,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +99,8 @@
     {
       "speaker": "工程师C",
       "content": "olith\n{\"name\": \"append_section\", \"arguments\": {\"name\": \"review_c\", \"entry\": \"- 综合A/B风险，建议合入。\"}}\n</tool_call>",
-      "ts": 1778414991.348288
+      "ts": 1778414991.348288,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +110,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审选择“合入”或“退回”。",
-      "ts": 1778414995.986384
+      "ts": 1778414995.986384,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -129,7 +135,8 @@
     {
       "speaker": "工程师A",
       "content": "olith\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"综合风险，建议合入。\"}}\n</tool_call>",
-      "ts": 1778414999.961556
+      "ts": 1778414999.961556,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +146,8 @@
     {
       "speaker": "工程师B",
       "content": "olith\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"与A意见一致。\"}}\n</tool_call>",
-      "ts": 1778415004.011411
+      "ts": 1778415004.011411,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -149,7 +157,8 @@
     {
       "speaker": "工程师C",
       "content": "olith\n{\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"综合评估后建议合入。\"}}\n</tool_call>",
-      "ts": 1778415008.140186
+      "ts": 1778415008.140186,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -160,5 +169,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

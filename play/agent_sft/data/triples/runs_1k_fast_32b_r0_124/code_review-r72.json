@@ -44,7 +44,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到具体技术文档和历史commit记录。\n再次检索相关 commit 和设计文档。\n",
-      "ts": 1778452173.112546
+      "ts": 1778452173.112546,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -66,7 +67,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到接口契约和测试用例信息。",
-      "ts": 1778452213.4099882
+      "ts": 1778452213.4099882,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -88,7 +90,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到直接相关的重构讨论或技术细节。\n继续检索更具体的重构信息和影响评估。\n",
-      "ts": 1778452258.130562
+      "ts": 1778452258.130562,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -110,7 +113,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口约定信息。继续查找。",
-      "ts": 1778452297.1111429
+      "ts": 1778452297.1111429,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -120,7 +124,8 @@
     {
       "speaker": "工程师C",
       "content": "现在已根据A/B评审综合了风险点，下一步需要决定是否合入此PR。\n\n考虑到兼容性警告和测试覆盖率下降的风险，但长期可维护性的提升也是明显的优势。在没有更具体的技术文档、接口契约和相关讨论信息的情况下，决策较为困难。\n\n我倾向于接受短期风险以换取长期的代码结构优化，因此建议**合入**该 PR",
-      "ts": 1778452335.166529
+      "ts": 1778452335.166529,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -152,7 +157,8 @@
     {
       "speaker": "主审",
       "content": "已发起投票，请大家根据评审意见进行投票。",
-      "ts": 1778452355.69806
+      "ts": 1778452355.69806,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -188,7 +194,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与 PR 相关性较低。\n继续查找更具体的重构信息和影响评估文档。\n",
-      "ts": 1778452405.168299
+      "ts": 1778452405.168299,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -210,7 +217,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接关联的接口约定和测试用例信息。继续查找。",
-      "ts": 1778452452.885491
+      "ts": 1778452452.885491,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -220,7 +228,8 @@
     {
       "speaker": "工程师C",
       "content": "已投票支持**合入**，理由为“长期维护性提升”。等待其他评审意见。",
-      "ts": 1778452473.768725
+      "ts": 1778452473.768725,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -242,5 +251,6 @@
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

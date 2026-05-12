@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "从历史commit中未找到直接相关文档，但发现项目事实提及“项目代号ZX-7492”。",
-      "ts": 1778413898.889983
+      "ts": 1778413898.889983,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索到的文档未提及接口契约或测试用例。",
-      "ts": 1778413906.6654022
+      "ts": 1778413906.6654022,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "ursalite/project_codename: - 兼容性风险需关注，建议加强日志处理。",
-      "ts": 1778413913.65246
+      "ts": 1778413913.65246,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `write_section` 重写 section 'review_b'。\n\nimonial\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 兼容性与性能无明显影响，建议合入。\\n\", \"name\": \"review_b\"}}",
-      "ts": 1778413918.380417
+      "ts": 1778413918.380417,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "",
-      "ts": 1778413925.9769
+      "ts": 1778413925.9769,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审员选择“合入”或“退回”。",
-      "ts": 1778413930.6247091
+      "ts": 1778413930.6247091,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -163,7 +169,8 @@
     {
       "speaker": "工程师A",
       "content": "请先确认投票ID是否正确。我将重新提出一个投票尝试。\n\n",
-      "ts": 1778413935.408319
+      "ts": 1778413935.408319,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -173,7 +180,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 `append_section(\"review_b\", \"...\")` 重新提交评审意见。\n\nimonial\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 确认投票ID后合入。\", \"name\": \"review_b\"}}",
-      "ts": 1778413940.559974
+      "ts": 1778413940.559974,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -183,7 +191,8 @@
     {
       "speaker": "工程师C",
       "content": "看来投票ID没有正确初始化。让我重新提出一个投票，并记录我的表决。\n\n我将使用 `propose_vote` 来重新发起投票，然后进行表决。\n",
-      "ts": 1778413946.370482
+      "ts": 1778413946.370482,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -194,5 +203,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

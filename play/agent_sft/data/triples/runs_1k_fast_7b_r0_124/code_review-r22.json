@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史记录与当前 PR 关联性不高。",
-      "ts": 1778411619.4564888
+      "ts": 1778411619.4564888,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交，该部分支持追加内容。\n\nappend_section(\"review_b\", \"当前无直接相关接口契约/测试用例文档。需关注模块变更对现有功能影响。\")",
-      "ts": 1778411629.024696
+      "ts": 1778411629.024696,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险需监控，性能影响可忽略，测试覆盖率虽降但长期有益。\")",
-      "ts": 1778411633.2503612
+      "ts": 1778411633.2503612,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交，该部分支持追加内容。\n\nappend_section(\"review_c\", \"- 综合 A/B 风险，短期兼容性警告监控，长期可维护性提升。\")",
-      "ts": 1778411637.690162
+      "ts": 1778411637.690162,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -84,7 +88,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合 A/B 风险，短期兼容性警告监控，长期可维护性提升。\")",
-      "ts": 1778411642.195382
+      "ts": 1778411642.195382,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -94,7 +99,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审员投下您神圣的一票。",
-      "ts": 1778411646.763644
+      "ts": 1778411646.763644,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -118,7 +124,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"长期维护性提升值得兼容性警告监控。\")",
-      "ts": 1778411650.2213812
+      "ts": 1778411650.2213812,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -128,7 +135,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见已提交，该部分支持追加内容。\n\nappend_section(\"review_b\", \"同意 A 观点，长期维护性提升优先。\")",
-      "ts": 1778411653.94091
+      "ts": 1778411653.94091,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -138,7 +146,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"支持长期维护性提升，监控兼容性警告。\")",
-      "ts": 1778411657.4861188
+      "ts": 1778411657.4861188,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -149,5 +158,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

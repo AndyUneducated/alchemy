@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import sys
+import time
 from typing import Callable
 
 import anthropic
 
 from .config import ANTHROPIC_API_KEY, MAX_TOKENS, TEMPERATURE
+from .result import TokenUsage
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -41,17 +42,38 @@ def _convert_tools(openai_tools: list[dict]) -> list[dict]:
     return out
 
 
-def chat(model: str, *, system_prompt: str = "", messages: list[dict],
-         temperature: float = TEMPERATURE, max_tokens: int = MAX_TOKENS,
-         stream: bool = True,
-         tools: list[dict] | None = None,
-         tool_handler: Callable[[str, dict], str] | None = None) -> str:
-    """Send a chat request to Claude and return the assistant reply.
+def _extract_usage(resp) -> tuple[int, int, int]:
+    """Anthropic Message → (input_tokens, output_tokens, cached_tokens)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return (0, 0, 0)
+    return (
+        int(getattr(u, "input_tokens", 0) or 0),
+        int(getattr(u, "output_tokens", 0) or 0),
+        int(getattr(u, "cache_read_input_tokens", 0) or 0),
+    )
 
-    When *tools* are provided the function enters a non-streaming tool loop.
+
+def chat(
+    model: str,
+    *,
+    system_prompt: str = "",
+    messages: list[dict],
+    temperature: float = TEMPERATURE,
+    max_tokens: int = MAX_TOKENS,
+    stream: bool = True,
+    tools: list[dict] | None = None,
+    tool_handler: Callable[[str, dict], str] | None = None,
+    caller: str = "",
+) -> tuple[str, TokenUsage]:
+    """Send a chat request to Claude and return `(text, TokenUsage)`.
+
+    `TokenUsage` aggregates token counts across tool-loop rounds.
     """
     msgs = list(messages)
     anthropic_tools = _convert_tools(tools) if tools else None
+    t0 = time.monotonic()
+    in_tok = out_tok = cached_tok = 0
 
     for _ in range(MAX_TOOL_ROUNDS):
         filtered = _merge_consecutive(msgs)
@@ -65,9 +87,12 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
 
         if anthropic_tools or not stream:
             response = _client.messages.create(**kwargs)
+            a, b, c = _extract_usage(response)
+            in_tok += a
+            out_tok += b
+            cached_tok += c
 
             if response.stop_reason == "tool_use" and tool_handler:
-                # Build assistant message with all content blocks
                 msgs.append({"role": "assistant", "content": response.content})
                 tool_results = []
                 for block in response.content:
@@ -86,7 +111,13 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
             )
             sys.stdout.write(text + "\n")
             sys.stdout.flush()
-            return text
+            return text, TokenUsage(
+                model=model, caller=caller,
+                input_tokens=in_tok, output_tokens=out_tok,
+                cached_tokens=cached_tok,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                ts=time.time(),
+            )
 
         # Streaming path (no tools)
         chunks: list[str] = []
@@ -96,12 +127,30 @@ def chat(model: str, *, system_prompt: str = "", messages: list[dict],
                     chunks.append(text)
                     sys.stdout.write(text)
                     sys.stdout.flush()
+            final_msg = stream_resp.get_final_message()
+
+        a, b, c = _extract_usage(final_msg)
+        in_tok += a
+        out_tok += b
+        cached_tok += c
 
         sys.stdout.write("\n")
         sys.stdout.flush()
-        return "".join(chunks)
+        return "".join(chunks), TokenUsage(
+            model=model, caller=caller,
+            input_tokens=in_tok, output_tokens=out_tok,
+            cached_tokens=cached_tok,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            ts=time.time(),
+        )
 
     text = next((b.text for b in response.content if hasattr(b, "text")), "")
     sys.stdout.write(text + "\n")
     sys.stdout.flush()
-    return text
+    return text, TokenUsage(
+        model=model, caller=caller,
+        input_tokens=in_tok, output_tokens=out_tok,
+        cached_tokens=cached_tok,
+        duration_ms=int((time.monotonic() - t0) * 1000),
+        ts=time.time(),
+    )

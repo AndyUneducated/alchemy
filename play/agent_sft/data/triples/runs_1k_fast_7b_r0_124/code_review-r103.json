@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，继续评审现有信息。",
-      "ts": 1778415771.550453
+      "ts": 1778415771.550453,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，继续评审现有信息。\n\nappend_section(\"review_b\", \"检索结果与此PR无关。\")",
-      "ts": 1778415779.779211
+      "ts": 1778415779.779211,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"write_section\", \"arguments\": {\"content\":\"- 兼容性风险需关注，建议加强测试覆盖。\",\"name\":\"review_a\"}}\n</tool_call>",
-      "ts": 1778415785.028904
+      "ts": 1778415785.028904,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -86,7 +89,8 @@
     {
       "speaker": "工程师B",
       "content": "使用 write_section 替换 review_b 内容。\n\nwrite_section(\"review_b\", \"- 兼容性与性能无大碍，但测试覆盖略低。\")",
-      "ts": 1778415789.4049122
+      "ts": 1778415789.4049122,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -96,7 +100,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 write_section 替换 review_b 内容。\n\nwrite_section(\"review_b\", \"- 兼容性与性能无大碍，但测试覆盖略低。\")",
-      "ts": 1778415793.908237
+      "ts": 1778415793.908237,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -106,7 +111,8 @@
     {
       "speaker": "主审",
       "content": "portun\n{\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}\n</tool_call>",
-      "ts": 1778415797.764467
+      "ts": 1778415797.764467,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +122,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"长期可维护性更重要。\"}}\n</tool_call>",
-      "ts": 1778415801.4172301
+      "ts": 1778415801.4172301,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -126,7 +133,8 @@
     {
       "speaker": "工程师B",
       "content": "append_section(\"review_b\", \"- 测试覆盖略低，但不影响大局。\")",
-      "ts": 1778415804.803241
+      "ts": 1778415804.803241,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -136,7 +144,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(vote_id=\"v1\", option=\"合入\", rationale=\"测试覆盖不足可后续补全。\")",
-      "ts": 1778415808.381858
+      "ts": 1778415808.381858,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -147,5 +156,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

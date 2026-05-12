@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史记录与当前 PR 关联性不高，暂无关键信息。继续评审。\n\nappend_section(\"review_a\", \"暂无关键历史信息影响评估。\")",
-      "ts": 1778415442.139555
+      "ts": 1778415442.139555,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关。\n\nappend_section(\"review_b\", \"检索结果与接口契约/测试用例无关。\")",
-      "ts": 1778415450.322777
+      "ts": 1778415450.322777,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 无明显风险，建议合入。\")",
-      "ts": 1778415453.15822
+      "ts": 1778415453.15822,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "anolim\n\n使用 `write_section` 进行覆盖操作。\n\nwrite_section(\"review_b\", \"- 无明显性能影响，建议合入。\")",
-      "ts": 1778415457.2508311
+      "ts": 1778415457.2508311,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "使用 `write_section` 进行覆盖操作。\n\nwrite_section(\"review_c\", \"- 综合 A/B 评审，建议合入。\")",
-      "ts": 1778415461.505301
+      "ts": 1778415461.505301,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：是否合入此 PR? 选项：合入、退回。请各位评审并投票。",
-      "ts": 1778415466.0220711
+      "ts": 1778415466.0220711,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -119,7 +125,8 @@
     {
       "speaker": "工程师A",
       "content": "cast_vote(\"v1\", \"合入\", \"综合评审意见，提升长期可维护性。\")",
-      "ts": 1778415469.488256
+      "ts": 1778415469.488256,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -129,7 +136,8 @@
     {
       "speaker": "工程师B",
       "content": "cast_section(\"v1\", \"无明显风险，建议合入。\")",
-      "ts": 1778415472.7539442
+      "ts": 1778415472.7539442,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -139,7 +147,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"综合评审意见，提升长期可维护性。\")",
-      "ts": 1778415476.218482
+      "ts": 1778415476.218482,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -150,5 +159,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的文档与当前 PR 关联性不高，暂无关键信息。",
-      "ts": 1778411498.8319511
+      "ts": 1778411498.8319511,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -55,7 +56,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics {\"name\": \"append_section\", \"arguments\": {\"entry\": \"暂无关键接口契约或测试用例发现。\", \"name\": \"review_b\"}}",
-      "ts": 1778411508.2668731
+      "ts": 1778411508.2668731,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -65,7 +67,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见时遇到限制，使用 `write_section` 代替。\n\n调用 `write_section(\"review_a\", \"- 兼容性风险存在，但短期内可接受；性能影响不大；测试覆盖率略降。建议合入并关注后续日志污染情况。\")`。",
-      "ts": 1778411513.3334668
+      "ts": 1778411513.3334668,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics {\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控；性能无显著影响；测试覆盖率轻微下降，建议合入。\", \"name\": \"review_b\"}}",
-      "ts": 1778411516.836853
+      "ts": 1778411516.836853,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -85,7 +89,8 @@
     {
       "speaker": "工程师C",
       "content": "ronics {\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控；性能无显著影响；测试覆盖率轻微下降，建议合入。\", \"name\": \"review_c\"}}",
-      "ts": 1778411520.4718862
+      "ts": 1778411520.4718862,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -95,7 +100,8 @@
     {
       "speaker": "主审",
       "content": "ronics {\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}，请各位评审尽快投票。",
-      "ts": 1778411524.4727411
+      "ts": 1778411524.4727411,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -105,7 +111,8 @@
     {
       "speaker": "工程师A",
       "content": "ronics {\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"兼容性风险可控，性能无显著影响。\"}}",
-      "ts": 1778411528.339853
+      "ts": 1778411528.339853,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -115,7 +122,8 @@
     {
       "speaker": "工程师B",
       "content": "ronics {\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"短期内兼容性风险可控。\"}}",
-      "ts": 1778411532.185427
+      "ts": 1778411532.185427,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -125,7 +133,8 @@
     {
       "speaker": "工程师C",
       "content": "ronics {\"name\": \"cast_vote\", \"arguments\": {\"vote_id\": \"v1\", \"option\": \"合入\", \"rationale\": \"综合考虑后的最佳选择。\"}}",
-      "ts": 1778411536.105227
+      "ts": 1778411536.105227,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -136,5 +145,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

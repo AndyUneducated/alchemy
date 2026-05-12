@@ -29,7 +29,8 @@
     {
       "speaker": "执行者",
       "content": "ZX-7492 是项目代号，2026 年启动。",
-      "ts": 1778427470.9854689
+      "ts": 1778427470.9854689,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -39,7 +40,8 @@
     {
       "speaker": "执行者",
       "content": "已完成第1轮调研记录。下一步？",
-      "ts": 1778427477.774296
+      "ts": 1778427477.774296,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -60,7 +62,8 @@
     {
       "speaker": "协调者",
       "content": "已收到，请执行者投票。",
-      "ts": 1778427499.780448
+      "ts": 1778427499.780448,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -96,7 +99,8 @@
     {
       "speaker": "执行者",
       "content": "投票完成。下一步？",
-      "ts": 1778427514.246061
+      "ts": 1778427514.246061,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -131,7 +135,8 @@
     {
       "speaker": "执行者",
       "content": "追加调研完成。下一步？",
-      "ts": 1778427543.532722
+      "ts": 1778427543.532722,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -141,7 +146,8 @@
     {
       "speaker": "执行者",
       "content": "二次调研结果已记入。下一步？",
-      "ts": 1778427549.495981
+      "ts": 1778427549.495981,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -156,5 +162,6 @@
     }
   ],
   "success": true,
-  "warnings": []
+  "warnings": [],
+  "usage": []
 }

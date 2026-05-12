@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的历史信息与当前 PR 关联性不高，主要为项目事实。",
-      "ts": 1778412329.155244
+      "ts": 1778412329.155244,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，直接评审。\n\n-append_section(\"review_b\", \"暂无相关文档或测试用例影响。\")-",
-      "ts": 1778412337.124219
+      "ts": 1778412337.124219,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "write_section(\"review_a\", \"- 兼容性风险需关注，建议加强测试。\")",
-      "ts": 1778412340.900016
+      "ts": 1778412340.900016,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "pongection_section(\"review_b\", \"- 性能影响不大，测试覆盖略降可接受。\")",
-      "ts": 1778412344.8536031
+      "ts": 1778412344.8536031,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -84,7 +88,8 @@
     {
       "speaker": "工程师C",
       "content": "extrême\n\nwrite_section(\"review_c\", \"- 综合 A/B 评审：兼容性风险可控，性能无显著影响，测试覆盖略降可接受。建议合入。\")",
-      "ts": 1778412351.6746082
+      "ts": 1778412351.6746082,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票：`v1`。请各位评审工程师投票决定是否合入此 PR。\n\n- 合入\n- 退回",
-      "ts": 1778412356.3906748
+      "ts": 1778412356.3906748,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +146,8 @@
     {
       "speaker": "工程师A",
       "content": "append_section(\"review_a\", \"- 兼容性风险需关注，建议加强测试。\")",
-      "ts": 1778412359.8860888
+      "ts": 1778412359.8860888,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -150,7 +157,8 @@
     {
       "speaker": "工程师B",
       "content": "投票已提交：选择“合入”。\n\n-append_section(\"review_b\", \"同意C评审，整体风险可控，建议合入。\")-",
-      "ts": 1778412364.6371741
+      "ts": 1778412364.6371741,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -172,7 +180,8 @@
     {
       "speaker": "工程师C",
       "content": "投票已提交：选择“合入”。\n\n## review_c\n- 综合 A/B 评审：兼容性风险可控，性能无显著影响，测试覆盖略降可接受。建议合入。\n\n## 决策\n合入此 PR。\n\n## Votes\n\n### v1: 是否合入此 PR?\n\n- 合入: 2 (工程师B, 主审)\n",
-      "ts": 1778412370.485555
+      "ts": 1778412370.485555,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -193,5 +202,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

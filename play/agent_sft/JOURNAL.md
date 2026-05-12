@@ -239,3 +239,61 @@
 - llama.cpp 装在 workspace 外 `~/Tools/llama.cpp/` 而非进 repo——不是本项目源码，且 `.venv` 大依赖（torch 2.6 ~250 MB）跨 OS 不可复用；deploy/README 写明安装命令即可。
 - Step 5B 不强制 `--max-rounds 1`——agent_engine CLI 没这个 flag，且端到端 8 step 跑完 ~4 min 在可接受范围；transcript 抓 10 个 tool_call event 远超 ≥1 验收门槛，"过度验证"对 Phase 5 信心是净增益。
 - Phase 1 baseline 80-batch + Phase 5 端到端复测仍 pending——Phase 4 已交付 Phase 5 的所有 prerequisite（model tag 注册 + agent_engine 兼容 + smoke 通过），下一步只需跑 `python eval/run_baseline.py --models ollama:qwen2.5:7b ollama:agent-sft-qwen ollama:qwen2.5:32b --tasks nudge_fire_rate agent_traj bfcl_slice mmlu_slice --seeds 10`；该实跑独立成 5.A 里程碑。
+
+## 2026-05-11 — 数据流水线直连 agent_engine：删 sys.path.insert + evals 私有面 4 import 反模式
+
+这个里程碑把 [`DECISIONS §3`](DECISIONS.md) Consequences 里的"对 evals.metrics.nudge 私 helper 有耦合"这条历史负债清掉。phase 2 数据流水线落地时为了少写代码直接 `sys.path.insert(0, str(PLAY_DIR))` + `from evals.metrics.nudge import _attempt_called_required, _resolve_who_to_agents, _split_attempts, _split_frontmatter, classify_failure_mode, derive_expected_turns`——4 个私有 + 2 个公开。私有 4 个其实是 evals 反向工程 agent_engine 的 transcript / scenario schema 的镜像，跨项目 import 私有面 = "双层间接依赖踩雷面"：agent_engine 改 schema → evals 改镜像 → agent_sft 改对镜像的 import。本期 [`agent_engine §13`](../agent_engine/DECISIONS.md) 把解读权收回 agent_engine（暴露 `Result.tool_calls() / .turns() / .find_finalize_decision()` + `TurnView.attempts() / .start_offset` + `Scenario.expanded_turns()` typed 视图），agent_sft 把跨项目 import 改为直连 `from agent_engine import Result, Scenario, TurnView, ExpandedTurn`，仅保留 `from evals.metrics.nudge import classify_failure_mode`（合法公开面，"missed / wrong_tool" taxonomy 拥有方）。`extractor.py` / `synthesize.py` / `formatter.py` 三脚本同步重写：步骤迭代用 `Scenario.expanded_turns()`、attempt 切分用 `TurnView.attempts(agent)`、context 切片用 `TurnView.start_offset`、frontmatter 解析用 `Scenario.from_yaml(p).meta`. `tests/test_extractor.py` 零修改 pass（旧 helper 单测靠 1-2 行 backward-compat shim 续命）；89 测试全绿；smoke 跑了 5 个 fast envelope 出 21 triples（synthesize），与 phase 2 历史 yield 同序。
+
+### 功能
+
+|item|状态|说明|
+|---|---|---|
+|跨项目 import 私有面退出|✅|`extractor.py` / `synthesize.py` / `formatter.py` 全部从 `from evals.metrics.nudge import _4_私有` 切到 `from agent_engine import Result, Scenario, TurnView, ExpandedTurn`，只剩 1 个跨项目公开 import（`classify_failure_mode`）|
+|extractor / synthesize 主路径直连 agent_engine|✅|`extract_triples` / `envelope_to_synthetic_triples` 都改用 `Scenario.expanded_turns()` 迭代 require_tool turns + `Result.turns()` 切段 + `TurnView.attempts()` 切 attempts + `TurnView.start_offset` 算全局 offset|
+|formatter frontmatter 解析换源|✅|`_read_scenario_meta` 改走 `Scenario.from_yaml(p).meta`，schema 校验跟 agent_engine 同源；`yaml` import 删除|
+|backward-compat shim|✅|`_index_steps_by_turn` / `_split_turns_indexed` / `_attempt_called_required` 退化为 1-5 行模块本地 shim/helper，让 `tests/test_extractor.py` / `tests/test_synthesize.py` 零修改 pass|
+
+### 技术
+
+|要点|说明|
+|---|---|
+|公开面 vs 私有面 跨项目 import 卫生|`from evals.metrics.nudge import classify_failure_mode` 是合法（公开 API），`from evals.metrics.nudge import _split_frontmatter / _resolve_who_to_agents / _split_attempts / _attempt_called_required` 是反模式（消费私有实现细节）。本期把后者降到 0，前者留 1|
+|schema 解读权归位|"transcript 内 entry 怎么变成 ToolCall"是 schema 的一部分，住 agent_engine（Result / Scenario / TurnView 视图层）；"failure mode 分类 / SFT triple 配对策略"是 evals/sft 自己的语义判断，留在 evals/agent_sft|
+|端到端 smoke|5 个 fast envelope（code_review × 2 + tool_chain × 3）经 synthesize 出 21 triples（code_review-r0 8 + r1 7 + tool_chain-r0/1/2 各 2），与 phase 2 同环境历史 yield 同序|
+|测试|89 测试全绿（test_extractor 零修改、test_synthesize 零修改、test_formatter 零修改）；agent_engine 端 36 测试新建，evals 端 9 条等价覆盖测试迁出（465 → 456）|
+|跨项目契约监控|evals `test_envelope_field_names_match_result_dataclass` 仍是单一断言点；agent_engine `test_expanded_turns_matches_discussion_expanded` 锁住 7 现网 scenario 上"静态展开 == runtime 展开"|
+
+### 取舍
+
+- 反链 [`DECISIONS §7`](DECISIONS.md) 全部决策（修正 §3 Consequences "对 evals 私 helper 有耦合"，§3 整体决策结构不动）。
+- `_index_steps_by_turn` / `_split_turns_indexed` 留 1-2 行 shim 而非整段删——plan 给的硬约束是"`tests/test_extractor.py` 零修改 pass"，shim 续命比改测试更稳。新代码不应再调，注释已标 `[DEPRECATED §13 起]`。
+- `_attempt_called_required` 在 extractor.py 留 5-line 模块本地 helper 而非全部内联到 caller 处——synthesize.py 跨脚本共用同一逻辑，重复定义信号噪声更大。该函数与 agent_engine `Discussion._called_tool` 检查面字节相同，schema 漂移风险已收敛到 1 个文件。
+- `classify_failure_mode` 不上提到 agent_engine——"missed / wrong_tool" 是 evals/sft 视角的语义判断（"模型有没有'尝试干活'"是评测态度，不是 dispatch 真相），上提会污染 agent_engine 的关注边界；如未来 agent_engine `dispatch error` 路径补 `{ok: false}` event 启用 wrong_args 桶时再讨论上提。
+
+## 2026-05-11 — Transcript schema typed 升级 + envelope `usage` 同步消费（agent_engine §14 配套）
+
+[`agent_engine §14`](../agent_engine/DECISIONS.md) 把 transcript 升级到 6 个 frozen dataclass typed union（`SpeakerEntry` 强制带 `type="speaker"`）+ `Result.usage: list[TokenUsage]` + `Result.from_dict` 严格化（缺字段 `KeyError`）. agent_sft 三脚本同步切到 typed access：[`extractor.py`] 删 `_split_turns_indexed / _index_steps_by_turn` 共 2 个 shim（`Result.turns()[i].start_offset` 已直接给 turn-indexed 全局 offset，shim 失去存在意义）+ 对应 [`tests/test_extractor.py`] 2 条 shim 单测；[`synthesize.py`] 切 `isinstance(e, SpeakerEntry)` 派发；[`formatter.py::_render_recent_context`] 走 `entry.get("type") == "speaker"` 判断（§14 已强制写入 `type` 字段）；500 个历史 mined envelope JSON 一次性迁移注入 `type:"speaker"` + `usage: []`. 87 测试全绿（§7 时 89 → §14 时 87 = -2 等价覆盖移到 agent_engine）；新写 mining 自动产 §14 schema. 详见 [`DECISIONS §8`](DECISIONS.md).
+
+### 功能
+
+|item|状态|说明|
+|---|---|---|
+|typed entry 切换|✅|`extractor / synthesize / formatter` 三脚本从 `entry.get("speaker") / entry["type"]` 切到 `isinstance(e, SpeakerEntry/...)` + `entry.get("type") == "speaker"`|
+|shim cleanup|✅|`_split_turns_indexed` / `_index_steps_by_turn` 共 2 个 §7 时期的 shim 退役；新代码直接用 `Scenario.expanded_turns()` / `Result.turns()`|
+|历史 mined envelope 迁移|✅|`data/triples/runs_1k_fast_7b_r0_124/*.json` × 500 一次性脚本注入 `type:"speaker"` + `usage: []`，与 forward-only 选择一致|
+
+### 技术
+
+|要点|说明|
+|---|---|
+|typed import 扩展|`from agent_engine import TokenUsage, ArtifactEventEntry, SpeakerEntry, ToolCallEntry, TranscriptEntry`；与 §7 直连面同源延伸|
+|`Triple.context` 类型|`list[dict[str, Any]]` → `list[TranscriptEntry]`；落盘后由 `engine.py::transcript_path` 写入路径走 `dataclasses.asdict` 拍扁回 dict（formatter 端读 metadata 仍是 dict 形态，但有强制 `type` 字段单源）|
+|`_attempt_called_required` 形参|`list[ToolCallEntry \| ArtifactEventEntry]`（§7 时是 `list[dict]`），与 agent_engine `Discussion._called_tool` 检查面字节同源|
+|测试|87 测试全绿（删 2 条 shim 单测后；89 → 87 = -2 等价覆盖移到 agent_engine 的 typed entry round-trip 测试）|
+|`Result.usage` 当前不消费|mining 阶段关心"做对什么"而非"花多少 token"；后续训练数据筛选若需 cost 过滤，从 `result.usage` 直接聚合即可|
+
+### 取舍
+
+- 反链 [`DECISIONS §8`](DECISIONS.md) 全部决策；§7 立的"直连 agent_engine 公开面"边界向内推到 typed entry。
+- 500 个历史 mined envelope 选迁移而非重跑——重跑 mining 需要 ollama + ~小时级 LLM 成本，迁移脚本秒级；本仓库无外部消费者，迁移是更便宜的等价路径。后续重跑 mining 自动产 §14 schema，迁移产物会被自然替换。
+- 不在 agent_sft 内做 `Result.usage` 聚合（如 cost / token-by-caller 视图）——agent_engine 只产 raw list，聚合住 `evals/metrics/efficiency.py`；agent_sft 若需要"按 caller 折叠 usage"自己写 5 行循环，不要回头加视图。

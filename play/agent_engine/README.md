@@ -204,6 +204,89 @@ result.success      # bool (True iff no warnings)
 result.warnings     # require_tool 用尽等软失败
 ```
 
+#### Result / Scenario typed 视图（DECISIONS §13）
+
+`Result` 既是 `Engine.invoke()` 返回值，又是 `--save-result-json` envelope 的 schema 来源。从 §13 起 transcript / scenario 的解读权也住在 agent_engine——评测 / 训练数据挖掘等消费者不需要再反向工程 transcript 形状或复刻 step 展开逻辑：
+
+```python
+from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn
+
+# 从落盘的 envelope 还原
+result = Result.load_json("/tmp/result.json")
+# 或从 dict（任何来源）
+result = Result.from_dict(some_envelope_dict)
+
+# transcript 视图
+calls: list[ToolCall] = result.tool_calls()       # tool_call ∪ artifact_event 合并规约
+turns: list[TurnView] = result.turns()            # 按 <turn> marker 切段，含 start_offset
+result.speakers()                                  # set[str]：实际说过话的 agent
+result.find_finalize_decision()                    # str | None：finalize_artifact 的 decision
+
+# 段内进一步切 attempt / 工具调用
+for tv in turns:
+    for attempt_events in tv.attempts(agent="主持人"):
+        ...
+    tv.tool_calls()                                # 段内 ToolCall 列表
+
+# scenario 静态展开（不实例化 Agent / 不跑 LLM）
+scn = Scenario.from_yaml("agent_engine/scenarios/panel.md")
+expanded: list[ExpandedTurn] = scn.expanded_turns()
+for e in expanded:
+    e.turn_idx, e.agent, e.step_id, e.require_tool, e.max_retries
+```
+
+`ToolCall` / `TurnView` / `ExpandedTurn` 均是 frozen dataclass；与 OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool` 同精神，但更轻量。
+
+#### Transcript entry typed union + token usage（DECISIONS §14）
+
+`Result.transcript` 内部本身也是 typed union——6 个 `frozen=True` dataclass 覆盖所有 entry 形态；`Result.usage` 是逐次 LLM 调用的 token 用量列表。**forward-only schema**：`Result.from_dict` 缺字段直接 `KeyError`，老 envelope 不可读。
+
+```python
+from agent_engine import (
+    Result,
+    TranscriptEntry,           # = TopicEntry | TurnEntry | SpeakerEntry
+                                #   | ToolCallEntry | ArtifactEventEntry | SummaryEntry
+    TopicEntry, TurnEntry, SpeakerEntry,
+    ToolCallEntry, ArtifactEventEntry, SummaryEntry,
+    TokenUsage,
+)
+
+result = Result.load_json("/tmp/result.json")
+
+# typed 派发（IDE 推导 + 静态检查友好）
+for entry in result.transcript:
+    if isinstance(entry, SpeakerEntry):
+        # entry.speaker / entry.content / entry.ts / entry.type == "speaker"
+        ...
+    elif isinstance(entry, ToolCallEntry):
+        # entry.tool / entry.caller / entry.arguments / entry.ok / entry.visible
+        ...
+    elif isinstance(entry, ArtifactEventEntry):
+        # entry.tool / entry.caller / entry.arguments / entry.content
+        ...
+
+# token usage：逐次 LLM 调用的 raw 列表（cost / efficiency 聚合在 evals/metrics/efficiency.py）
+for u in result.usage:
+    u.model            # "qwen2.5:7b" / "claude-3-5-sonnet-20241022" / ...
+    u.caller           # 调用方 agent 名（含 SummaryMemory 内部 summarizer 的隐性调用）
+    u.input_tokens
+    u.output_tokens
+    u.cached_tokens    # OpenAI prompt_tokens_details.cached / Anthropic cache_read_input_tokens
+    u.duration_ms
+    u.ts
+```
+
+| Entry 类型 | 何时产生 | 关键字段 |
+|---|---|---|
+| `TopicEntry` | 每个 run 起始一次 | `content`（scenario body 即 topic） |
+| `TurnEntry` | 每 turn 起始 | `content`（如 `"turn 5 of 26"`），pinned marker |
+| `SpeakerEntry` | agent reply | `speaker`, `content`；`type` 字段是 §14 引入的强制 tag |
+| `ToolCallEntry` | 非 artifact 工具调用（来自 `ToolTracer`） | `caller`, `tool`, `arguments`, `result`, `ok`, `visible`（默认 False）|
+| `ArtifactEventEntry` | 6 个 artifact 工具的事件 | `caller`, `tool`, `arguments`, `content`（人类可读摘要） |
+| `SummaryEntry` | `SummaryMemory` 折叠产物 | `content` |
+
+`TokenUsage` 在 4 个 backend client 内部抓取（OpenAI `usage.prompt_tokens` / Anthropic `usage.input_tokens` / Gemini `usage_metadata.prompt_token_count` / Ollama `prompt_eval_count`），跨 backend 抹平字段差异；流式调用拿不到 usage 时填 0（不抛异常，evals 端 cost 计算自动降级）。
+
 ### 作为 CLI（thin adapter）
 
 在 **`play/`** 目录下（`python -m agent_engine` 能解析包名；scenario 路径相对当前工作目录）：
@@ -243,7 +326,7 @@ python -m agent_engine agent_engine/scenarios/example.md
 |`--no-stream`|flag|`False`|关闭流式输出（CLI 默认开；库调用默认关）|
 |`--save-artifact`|否|—|把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效）|
 |`--save-transcript`|否|—|落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON|
-|`--save-result-json`|否|—|落盘完整 `Result` envelope（`{transcript, artifact, warnings, success}`，`dataclasses.asdict` 直出）。机器消费格式，与上两个 human format 并列；`play/evals` phase 5 trajectory eval 通过此 flag 走 subprocess + JSON envelope 接 agent_engine（详见 [`DECISIONS §11`](DECISIONS.md)）|
+|`--save-result-json`|否|—|落盘完整 `Result` envelope（`{transcript, artifact, warnings, success, usage}`，`dataclasses.asdict` 直出，`transcript` 元素为 typed dataclass 序列化后的 dict、`usage` 为 `list[TokenUsage]`）。机器消费格式，与上两个 human format 并列；`play/evals` phase 5 trajectory eval / `play/agent_sft` mining 都走此 flag 接 agent_engine（详见 [`DECISIONS §11`](DECISIONS.md) / [§14](DECISIONS.md)）|
 
 ## Scenario schema
 
@@ -289,6 +372,17 @@ YAML frontmatter 字段：
 
 `require_tool: <tool>` 在 step 结束后扫 `artifact.drain_events()` 验证调用是否发生；未命中追加 nudge instruction 重试，重试用尽 stderr WARNING。
 
+## Tests
+
+测试集从 DECISIONS §13 起落地（项目此前无 tests）。当前 36 测试覆盖 `Result` / `Scenario` 视图层 + 7 现网 scenario 上的 `expanded_turns ≡ Discussion._expanded` invariant 锁；不依赖 ollama / VDB / 外部服务，纯函数级测，秒级跑完。
+
+```bash
+# 在 play/ 目录下
+python -m pytest agent_engine/tests/ -v
+```
+
+底层视图行为（tool 调用规约 / turn 切段 / attempt 切分 / decision 抽取 / scenario 静态展开）的契约都在 `tests/test_result_views.py` 与 `tests/test_scenario_static.py`；引擎本身的 e2e live 测试在 [`play/evals`](../evals/)（agent_traj / nudge_fire_rate）。
+
 ## Scenario 库
 
 |文件|用途|
@@ -312,7 +406,7 @@ play/agent_engine/
 ├── __main__.py                 # python -m agent_engine 入口
 ├── cli.py                      # zero-logic CLI: argparse → Engine.invoke
 ├── engine.py                   # Engine class (invoke / ainvoke* / stream* / astream*)
-├── result.py                   # Result dataclass (artifact / transcript / success / warnings)
+├── result.py                   # Result dataclass (artifact / transcript / success / warnings / usage) + 6 entry dataclass + TokenUsage
 ├── events.py                   # Event base + 5 子类（流式占位，今天仅 RunFinished 触发）
 ├── callbacks.py                # Callback base（on_xxx 方法）
 ├── scenario.py                 # Scenario.from_yaml + 装配 Assembly

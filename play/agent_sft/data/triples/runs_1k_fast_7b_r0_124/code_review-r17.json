@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见已锁定，请使用 `write_section` 更新。\n\n",
-      "ts": 1778411327.2911391
+      "ts": 1778411327.2911391,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -77,7 +78,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，忽略。",
-      "ts": 1778411335.278476
+      "ts": 1778411335.278476,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -87,7 +89,8 @@
     {
       "speaker": "工程师A",
       "content": "orsch\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 兼容性风险可控，建议合入。\\n\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778411339.424711
+      "ts": 1778411339.424711,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "orsch\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 性能无明显影响，建议合入。\\n\", \"name\": \"review_b\"}}\n</tool_call>",
-      "ts": 1778411343.776425
+      "ts": 1778411343.776425,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "orsch\n{\"name\": \"append_section\", \"arguments\": {\"entry\": \"- 兼容性风险可控，性能无明显影响，建议合入。\\n\", \"name\": \"review_b\"}}\n",
-      "ts": 1778411348.164423
+      "ts": 1778411348.164423,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -117,7 +122,8 @@
     {
       "speaker": "主审",
       "content": "orsch\n{\"name\": \"propose_vote\", \"arguments\": {\"options\": [\"合入\", \"退回\"], \"question\": \"是否合入此 PR?\"}}\n请各位评审发表意见并投票。",
-      "ts": 1778411352.22885
+      "ts": 1778411352.22885,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -127,7 +133,8 @@
     {
       "speaker": "工程师A",
       "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"短期牺牲小，长期收益大。\"}}\n</tool_call>",
-      "ts": 1778411355.926031
+      "ts": 1778411355.926031,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -137,7 +144,8 @@
     {
       "speaker": "工程师B",
       "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"兼容性风险低，性能无影响。\"}}",
-      "ts": 1778411359.704687
+      "ts": 1778411359.704687,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -147,7 +155,8 @@
     {
       "speaker": "工程师C",
       "content": "orsch\n{\"name\": \"cast_vote\", \"arguments\": {\"option\": \"合入\", \"rationale\": \"一致意见，支持合入。\"}}\n</tool_call>",
-      "ts": 1778411363.5738099
+      "ts": 1778411363.5738099,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -158,5 +167,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

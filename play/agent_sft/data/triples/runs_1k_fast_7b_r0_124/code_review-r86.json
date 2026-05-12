@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与当前 PR 关联性不高，主要为项目事实。",
-      "ts": 1778414916.427346
+      "ts": 1778414916.427346,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -54,7 +55,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，仅包含项目事实。",
-      "ts": 1778414924.12029
+      "ts": 1778414924.12029,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -64,7 +66,8 @@
     {
       "speaker": "工程师A",
       "content": "写入评审意见时发现 section 'review_a' 为只替换模式，将使用 write_section 进行全 overwrite 写入。\n\nwrite_section(\"review_a\", \"- 兼容性和性能风险可控，暂接受。建议加强后续集成测试。\")\n",
-      "ts": 1778414929.158259
+      "ts": 1778414929.158259,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -74,7 +77,8 @@
     {
       "speaker": "工程师B",
       "content": "评审意见提交完成。\n\n## review_a\n- 兼容性和性能风险可控，暂接受。建议加强后续集成测试。\n\n## review_b\n- 兼容性和性能风险可控，建议结合业务紧急程度决策。\n\n## review_c\n- 综合 A/B 风险，建议短期内合入以增强维护性。\n\n## 决策\n_(empty)_",
-      "ts": 1778414937.4918919
+      "ts": 1778414937.4918919,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -106,7 +110,8 @@
     {
       "speaker": "工程师C",
       "content": "write_section(\"review_c\", \"- 综合 A/B 风险，建议短期内合入以增强维护性。\")",
-      "ts": 1778414942.081355
+      "ts": 1778414942.081355,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -116,7 +121,8 @@
     {
       "speaker": "主审",
       "content": "已提议投票。请各位评审员通过以下选项进行投票：\n\n- 合入\n- 退回\n\n使用 `cast_vote(vote_id=\"v1\", option=\"<你的选择>\")` 命令参与投票。",
-      "ts": 1778414947.308832
+      "ts": 1778414947.308832,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +146,8 @@
     {
       "speaker": "工程师A",
       "content": "投票完成，选择“合入”。理由：短期内提升代码质量与维护性更为关键。\n\ncast_vote(\"v1\", \"合入\", \"短期维护性提升优先\")",
-      "ts": 1778414952.4594939
+      "ts": 1778414952.4594939,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -162,7 +169,8 @@
     {
       "speaker": "工程师B",
       "content": "投票完成，选择“合入”。理由：短期维护性提升优先。\n\ncast_vote(\"v1\", \"合入\", \"短期维护性提升优先\")",
-      "ts": 1778414957.553473
+      "ts": 1778414957.553473,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -184,7 +192,8 @@
     {
       "speaker": "工程师C",
       "content": "cast_vote(\"v1\", \"合入\", \"短期维护性提升优先\")",
-      "ts": 1778414961.3990679
+      "ts": 1778414961.3990679,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -193,5 +202,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

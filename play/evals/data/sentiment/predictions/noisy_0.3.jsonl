@@ -1,30 +1,30 @@
-{"id": "s01", "prediction": "positive"}
-{"id": "s02", "prediction": "negative"}
-{"id": "s03", "prediction": "negative"}
-{"id": "s04", "prediction": "positive"}
-{"id": "s05", "prediction": "positive"}
-{"id": "s06", "prediction": "positive"}
-{"id": "s07", "prediction": "positive"}
-{"id": "s08", "prediction": "neutral"}
-{"id": "s09", "prediction": "neutral"}
-{"id": "s10", "prediction": "negative"}
-{"id": "s11", "prediction": "negative"}
-{"id": "s12", "prediction": "negative"}
-{"id": "s13", "prediction": "neutral"}
-{"id": "s14", "prediction": "positive"}
-{"id": "s15", "prediction": "negative"}
-{"id": "s16", "prediction": "positive"}
-{"id": "s17", "prediction": "neutral"}
-{"id": "s18", "prediction": "positive"}
-{"id": "s19", "prediction": "negative"}
-{"id": "s20", "prediction": "neutral"}
-{"id": "s21", "prediction": "positive"}
-{"id": "s22", "prediction": "neutral"}
-{"id": "s23", "prediction": "neutral"}
-{"id": "s24", "prediction": "negative"}
-{"id": "s25", "prediction": "positive"}
-{"id": "s26", "prediction": "positive"}
-{"id": "s27", "prediction": "negative"}
-{"id": "s28", "prediction": "neutral"}
-{"id": "s29", "prediction": "positive"}
-{"id": "s30", "prediction": "neutral"}
+{"id":"s01","prediction":"positive","usage":[]}
+{"id":"s02","prediction":"negative","usage":[]}
+{"id":"s03","prediction":"negative","usage":[]}
+{"id":"s04","prediction":"positive","usage":[]}
+{"id":"s05","prediction":"positive","usage":[]}
+{"id":"s06","prediction":"positive","usage":[]}
+{"id":"s07","prediction":"positive","usage":[]}
+{"id":"s08","prediction":"neutral","usage":[]}
+{"id":"s09","prediction":"neutral","usage":[]}
+{"id":"s10","prediction":"negative","usage":[]}
+{"id":"s11","prediction":"negative","usage":[]}
+{"id":"s12","prediction":"negative","usage":[]}
+{"id":"s13","prediction":"neutral","usage":[]}
+{"id":"s14","prediction":"positive","usage":[]}
+{"id":"s15","prediction":"negative","usage":[]}
+{"id":"s16","prediction":"positive","usage":[]}
+{"id":"s17","prediction":"neutral","usage":[]}
+{"id":"s18","prediction":"positive","usage":[]}
+{"id":"s19","prediction":"negative","usage":[]}
+{"id":"s20","prediction":"neutral","usage":[]}
+{"id":"s21","prediction":"positive","usage":[]}
+{"id":"s22","prediction":"neutral","usage":[]}
+{"id":"s23","prediction":"neutral","usage":[]}
+{"id":"s24","prediction":"negative","usage":[]}
+{"id":"s25","prediction":"positive","usage":[]}
+{"id":"s26","prediction":"positive","usage":[]}
+{"id":"s27","prediction":"negative","usage":[]}
+{"id":"s28","prediction":"neutral","usage":[]}
+{"id":"s29","prediction":"positive","usage":[]}
+{"id":"s30","prediction":"neutral","usage":[]}

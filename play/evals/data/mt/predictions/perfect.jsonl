@@ -1,30 +1,30 @@
-{"id": "mt01", "prediction": "你好，世界。"}
-{"id": "mt02", "prediction": "你今天怎么样？"}
-{"id": "mt03", "prediction": "我喜欢早上喝咖啡。"}
-{"id": "mt04", "prediction": "今天天气很好。"}
-{"id": "mt05", "prediction": "玩得开心时光飞逝。"}
-{"id": "mt06", "prediction": "迟到总比不到好。"}
-{"id": "mt07", "prediction": "熟能生巧。"}
-{"id": "mt08", "prediction": "一图胜千言。"}
-{"id": "mt09", "prediction": "最近的火车站在哪里？"}
-{"id": "mt10", "prediction": "你到了请给我打电话。"}
-{"id": "mt11", "prediction": "书在桌子上。"}
-{"id": "mt12", "prediction": "她流利地说三种语言。"}
-{"id": "mt13", "prediction": "我明天见你。"}
-{"id": "mt14", "prediction": "咖啡和朋友一起喝更好喝。"}
-{"id": "mt15", "prediction": "猫坐在垫子上。"}
-{"id": "mt16", "prediction": "请随手关门。"}
-{"id": "mt17", "prediction": "你能帮我解决这个问题吗？"}
-{"id": "mt18", "prediction": "早起的鸟儿有虫吃。"}
-{"id": "mt19", "prediction": "不要以貌取人。"}
-{"id": "mt20", "prediction": "事实胜于雄辩。"}
-{"id": "mt21", "prediction": "金钱买不到幸福。"}
-{"id": "mt22", "prediction": "知识就是力量。"}
-{"id": "mt23", "prediction": "一天一苹果，医生远离我。"}
-{"id": "mt24", "prediction": "罗马不是一天建成的。"}
-{"id": "mt25", "prediction": "闪光的不都是金子。"}
-{"id": "mt26", "prediction": "入乡随俗。"}
-{"id": "mt27", "prediction": "三个臭皮匠顶个诸葛亮。"}
-{"id": "mt28", "prediction": "有志者事竟成。"}
-{"id": "mt29", "prediction": "笔比剑更有力。"}
-{"id": "mt30", "prediction": "物以类聚。"}
+{"id":"mt01","prediction":"你好，世界。","usage":[]}
+{"id":"mt02","prediction":"你今天怎么样？","usage":[]}
+{"id":"mt03","prediction":"我喜欢早上喝咖啡。","usage":[]}
+{"id":"mt04","prediction":"今天天气很好。","usage":[]}
+{"id":"mt05","prediction":"玩得开心时光飞逝。","usage":[]}
+{"id":"mt06","prediction":"迟到总比不到好。","usage":[]}
+{"id":"mt07","prediction":"熟能生巧。","usage":[]}
+{"id":"mt08","prediction":"一图胜千言。","usage":[]}
+{"id":"mt09","prediction":"最近的火车站在哪里？","usage":[]}
+{"id":"mt10","prediction":"你到了请给我打电话。","usage":[]}
+{"id":"mt11","prediction":"书在桌子上。","usage":[]}
+{"id":"mt12","prediction":"她流利地说三种语言。","usage":[]}
+{"id":"mt13","prediction":"我明天见你。","usage":[]}
+{"id":"mt14","prediction":"咖啡和朋友一起喝更好喝。","usage":[]}
+{"id":"mt15","prediction":"猫坐在垫子上。","usage":[]}
+{"id":"mt16","prediction":"请随手关门。","usage":[]}
+{"id":"mt17","prediction":"你能帮我解决这个问题吗？","usage":[]}
+{"id":"mt18","prediction":"早起的鸟儿有虫吃。","usage":[]}
+{"id":"mt19","prediction":"不要以貌取人。","usage":[]}
+{"id":"mt20","prediction":"事实胜于雄辩。","usage":[]}
+{"id":"mt21","prediction":"金钱买不到幸福。","usage":[]}
+{"id":"mt22","prediction":"知识就是力量。","usage":[]}
+{"id":"mt23","prediction":"一天一苹果，医生远离我。","usage":[]}
+{"id":"mt24","prediction":"罗马不是一天建成的。","usage":[]}
+{"id":"mt25","prediction":"闪光的不都是金子。","usage":[]}
+{"id":"mt26","prediction":"入乡随俗。","usage":[]}
+{"id":"mt27","prediction":"三个臭皮匠顶个诸葛亮。","usage":[]}
+{"id":"mt28","prediction":"有志者事竟成。","usage":[]}
+{"id":"mt29","prediction":"笔比剑更有力。","usage":[]}
+{"id":"mt30","prediction":"物以类聚。","usage":[]}

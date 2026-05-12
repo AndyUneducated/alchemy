@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "检索到的信息与模块无关，未找到相关历史 commit 或设计文档。需进一步查找。",
-      "ts": 1778446048.916905
+      "ts": 1778446048.916905,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到接口契约与测试用例相关信息。",
-      "ts": 1778446086.775712
+      "ts": 1778446086.775712,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -75,7 +77,8 @@
     {
       "speaker": "工程师A",
       "content": "已将评审意见写入 artifact。继续查找相关信息以完善评审。",
-      "ts": 1778446134.351996
+      "ts": 1778446134.351996,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -109,7 +112,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到关于接口约定的具体信息。继续查找中。",
-      "ts": 1778446173.830076
+      "ts": 1778446173.830076,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -119,7 +123,8 @@
     {
       "speaker": "工程师C",
       "content": "先提议决策投票，再进行投票。",
-      "ts": 1778446205.169808
+      "ts": 1778446205.169808,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -151,7 +156,8 @@
     {
       "speaker": "主审",
       "content": "请投票选择“合入”或“退回”。",
-      "ts": 1778446231.288568
+      "ts": 1778446231.288568,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -175,7 +181,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票选择“合入”，理由是“长期可维护性优先”。继续等待其他评审意见。",
-      "ts": 1778446251.287898
+      "ts": 1778446251.287898,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -209,7 +216,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口约定信息。建议进一步人工审查代码和文档以确保无遗漏。附上初步评审意见：\n\n项目代号模块重构的 PR，从维护性角度出发，倾向于合入此PR。尽管存在兼容性和测试覆盖率下降的风险，但这些风险在可接受范围内，且长远来看统一入口利于维护。\n\n考虑到现有信息不足以全面评估接口变更的影响",
-      "ts": 1778446300.563427
+      "ts": 1778446300.563427,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -219,7 +227,8 @@
     {
       "speaker": "工程师C",
       "content": "投票完成，支持合入。等待其他评审结果。",
-      "ts": 1778446320.7986271
+      "ts": 1778446320.7986271,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -240,5 +249,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

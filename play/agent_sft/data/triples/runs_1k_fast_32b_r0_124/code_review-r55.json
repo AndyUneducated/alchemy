@@ -31,7 +31,8 @@
     {
       "speaker": "工程师A",
       "content": "未找到与「项目代号」模块重构直接相关的关键历史信息。",
-      "ts": 1778446982.5139031
+      "ts": 1778446982.5139031,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口契约和测试用例。",
-      "ts": 1778447019.9447198
+      "ts": 1778447019.9447198,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -63,7 +65,8 @@
     {
       "speaker": "工程师A",
       "content": "已更新评审意见。下一步需要进一步讨论测试覆盖率的问题以及兼容性风险的处理方案。",
-      "ts": 1778447040.075503
+      "ts": 1778447040.075503,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -97,7 +100,8 @@
     {
       "speaker": "工程师B",
       "content": "未找到直接相关的接口约定信息。需要进一步查找。",
-      "ts": 1778447079.93166
+      "ts": 1778447079.93166,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -107,7 +111,8 @@
     {
       "speaker": "工程师C",
       "content": "需要先提出投票选项才能投票。提议投票。\n",
-      "ts": 1778447114.2040691
+      "ts": 1778447114.2040691,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -139,7 +144,8 @@
     {
       "speaker": "主审",
       "content": "请各位根据评审意见投出宝贵的一票。",
-      "ts": 1778447138.8517828
+      "ts": 1778447138.8517828,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -175,7 +181,8 @@
     {
       "speaker": "工程师A",
       "content": "已投票支持“合入”。考虑到兼容性的警告已经足够提示用户潜在问题，并且测试覆盖率虽然下降但整体仍处于合理范围，可以接受。同时，长期来看这种重构有利于提高代码的可维护性。",
-      "ts": 1778447174.167244
+      "ts": 1778447174.167244,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -233,7 +240,8 @@
     {
       "speaker": "工程师B",
       "content": "未发现直接相关的接口定义，需进一步确认。\n\n",
-      "ts": 1778447231.471256
+      "ts": 1778447231.471256,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -243,7 +251,8 @@
     {
       "speaker": "工程师C",
       "content": "投票完成，支持合入。等待其他评审意见。",
-      "ts": 1778447252.0761878
+      "ts": 1778447252.0761878,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -264,5 +273,6 @@
     "工程师B skipped required tool 'append_section' after 1 attempt(s)",
     "工程师C skipped required tool 'append_section' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }

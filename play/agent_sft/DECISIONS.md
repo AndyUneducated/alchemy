@@ -225,3 +225,117 @@ Phase 4 把 [§5](DECISIONS.md) 选定的 `iters/200` adapter fuse 进 Qwen2.5-7
 - llama.cpp 引入是 [§2](DECISIONS.md) 的**显式留口**——§2 "MLX-LM 三步 CLI" 承诺 _训练阶段_ 不出 MLX-LM 一家；部署阶段 GGUF 转换走 llama.cpp 在 §2 Consequences 末段已铺垫（"`mlx_lm.convert` 直出 GGUF 还是回 HF 走 llama.cpp 路径，留 Phase 4 真碰到时再决定（YAGNI）"）。Phase 4 决定走 llama.cpp，§2 不需要更新 Status。
 - **永久禁区不变**（§1）：deploy 链路完全本地、零闭源依赖；模型不进 HF Hub（v3-B 候选才会）。
 - **后续可滑性**：量化等级若 Phase 5 真测显示 Q4_K_M 压坏 SFT 信号，回滚到 Q5_K_M 仅需 `bash deploy/build.sh --force QUANT=Q5_K_M`，链路其他步骤零改动——本条决策可被一行环变覆盖。
+
+## 7. extractor / synthesize / formatter 直连 agent_engine（删 evals 私有 import 反模式）
+
+- **Status**: accepted（修正 §3 Consequences "对 evals.metrics.nudge 私 helper 有耦合"）
+- **Date**: 2026-05-11
+
+### Context
+
+§3 落地数据流水线时，`extractor.py` / `synthesize.py` 用以下反模式从 evals 偷私有 helper：
+
+```python
+sys.path.insert(0, str(PLAY_DIR))
+from evals.metrics.nudge import (
+    _attempt_called_required,    # 私有
+    _resolve_who_to_agents,      # 私有
+    _split_attempts,             # 私有
+    _split_frontmatter,          # 私有
+    classify_failure_mode,       # 公开（OK）
+    derive_expected_turns,       # 公开（OK）
+)
+```
+
+`formatter.py` 也偷一个：`from evals.metrics.nudge import _split_frontmatter`. 这 4 个私有函数是 evals 反向工程 agent_engine `Discussion._expand_steps + _resolve_who + ToolTracer/ArtifactStore.event` schema 的镜像。schema 真源在 agent_engine，反向工程在 evals，agent_sft 又跨项目 import evals 的反向工程产物——**双层间接依赖让 schema 改动像踩雷**。
+
+[`agent_engine §13`](../agent_engine/DECISIONS.md) 同期落地：把 transcript / scenario 解读权收回 agent_engine，新增 typed 视图 `Result.tool_calls() / .turns() / .find_finalize_decision()` + `TurnView.attempts() / .start_offset` + `Scenario.expanded_turns()` + `ExpandedTurn` dataclass。本 ADR 是 agent_sft 的对应面：把私有面跨项目 import 替换成 agent_engine 公开面。
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. 现状 | 继续 sys.path.insert + 4 个私有 import | schema 改动连锁三处；agent_sft 单测对 evals 内部表征敏感 |
+| **B. 直连 agent_engine 公开面**（选择） | `from agent_engine import Result, Scenario, TurnView, ExpandedTurn`；保留 `from evals.metrics.nudge import classify_failure_mode`（evals 合法公开面）| 0 私有面跨项目 import；signal flow agent_engine schema → agent_sft 直接消费一层；evals.metrics.nudge 仅作为"failure mode taxonomy 拥有者"被引用 |
+| C. 把 `classify_failure_mode` 也上提到 agent_engine | 完全无需 import evals | "missed / wrong_tool" 是 evals/sft 视角的语义判断（非 agent_engine 关心的 dispatch 真相），上提会污染 agent_engine 关注边界；deferred 到 PR-3 if needed |
+
+### Decision
+
+**B**：
+
+| 模块 | 改动 |
+|---|---|
+| [`data/extractor.py`] | 删 `_split_frontmatter / _resolve_who_to_agents / _split_attempts / derive_expected_turns / _attempt_called_required` 跨项目 import；改 `from agent_engine import ExpandedTurn, Result, Scenario, TurnView`；`extract_triples` 内部用 `Scenario.expanded_turns()` + `Result.turns()` + `TurnView.attempts()` + `TurnView.start_offset` 直接迭代；`_attempt_called_required` 内化为 5 行模块本地 helper（仍被 synthesize 共享 import）|
+| [`data/extractor.py`] 旧 helper | `_index_steps_by_turn` / `_split_turns_indexed` 退化为 1-2 行 shim（`Scenario.expanded_turns` / `Result.turns().start_offset` 的薄封装），仅为 [`tests/test_extractor.py`] 旧 helper 单测零修改 pass；新代码请直接用 agent_engine 视图 |
+| [`data/synthesize.py`] | 同 extractor：删 4 个私有 import；改用 agent_engine 视图；`from extractor import _attempt_called_required`（同模块内 5-line helper，避免重复定义）|
+| [`data/formatter.py`] | 删 `from evals.metrics.nudge import _split_frontmatter`；改 `from agent_engine import Scenario`；`_read_scenario_meta` 走 `Scenario.from_yaml(p).meta`（schema 校验自动跟 agent_engine 同源）；`yaml` import 删除（不再需要）|
+| 跨项目 import 公开面纪律 | 唯一仍跨项目 import 的是 `from evals.metrics.nudge import classify_failure_mode`——evals 合法公开面（"missed / wrong_tool" 分类 + `FAILURE_MODES` taxonomy 拥有方）|
+
+### Consequences
+
+| 影响 | 结果 |
+|---|---|
+| schema 单源 | agent_engine 改 `Result.transcript` 形状 / `Scenario` step 字段 → agent_sft 改一处即可（`Scenario.expanded_turns()` / `Result.turns()` 视图层）|
+| import 边界 | agent_sft 与 evals 仅 1 个公开函数依赖（`classify_failure_mode`），与 agent_engine 直连；vs PR-2 前的 4 私有 + 2 公开 = 6 个跨项目 import |
+| 测试规模 | 89 测试全绿；`test_extractor.py` / `test_synthesize.py` 零修改（旧 `_index_steps_by_turn` / `_split_turns_indexed` 单测靠 1-2 行 shim 续命）|
+| 演化友好 | 未来 agent_engine 给 transcript 加新 entry 类型 / Scenario 加新字段，agent_sft 自动接到（`Result.tool_calls()` / `expanded_turns()` 同步生效）|
+| §3 修正 | §3 Consequences "对 evals.metrics.nudge 私 helper 有耦合" 不再成立；本 ADR 修正而非 supersede §3 整体（流水线四脚本结构与职责分工不变）|
+
+### 后续可滑性
+
+- 若 `classify_failure_mode` 后续也要从 evals 上提到 agent_engine（"missed / wrong_tool" 语义中性度待商）→ 写 PR-3 ADR；本方案先不做。
+- 若 `play/agent_sft` 自身需要新视图（如"`turn N 的 attempt 数超过 max_retries 几次"）→ 加在 agent_engine.Result 上，不要回头在 agent_sft 内复刻。
+
+## 8. Transcript schema typed 升级 + envelope `usage` 同步消费（agent_engine §14 的 agent_sft 对应面）
+
+- **Status**: accepted（紧跟 [`agent_engine §14`](../agent_engine/DECISIONS.md)；扩展 §7 的"直连 agent_engine"边界到 typed entry）
+- **Date**: 2026-05-11
+
+### Context
+
+§7 把 `extractor / synthesize / formatter` 直连 agent_engine 公开面（`Result / Scenario / TurnView / ExpandedTurn`），但 transcript 内部仍是 `list[dict]`. agent_engine §14 同期把 transcript 升级到 `list[TranscriptEntry]` typed union（6 个 frozen dataclass，`SpeakerEntry` 强制带 `type="speaker"`）+ `Result.usage: list[TokenUsage]` + `Result.from_dict` 严格化. agent_sft 三脚本要同步切到 typed access，否则：
+
+| 失效点 | 原因 |
+|---|---|
+| `extractor.py::_attempt_called_required(events: list[dict])` 用 `e.get("tool")` | typed dataclass 不再有 `.get()` |
+| `extract_triples` 用 `entry["content"] / entry.get("speaker")` | typed dispatch 应走 `isinstance(e, SpeakerEntry)` + `e.content` |
+| `synthesize.py` 同上 | 同 |
+| `formatter.py::_render_recent_context` 把 dict 形态投影成 prompt 段落 | 字典形态仍合法（落盘后是 dict），但 speaker 分支历史靠 `"speaker" in entry` 嗅探，§14 后该判断歧义（其它 entry 也可能含 speaker 字段） |
+| `data/triples/runs_1k_fast_7b_r0_124/*.json` × 500 历史 mined envelope | `Result.from_dict` 严格化后无 `type:"speaker"` / `usage: []` 即 `KeyError` |
+
+### Options considered
+
+| 项 | 做法 | 权衡 |
+|---|---|---|
+| A. agent_sft 内部继续 dict 嗅探 | 跨 agent_engine §14 兼容 | typed union 优势失效；schema 改动两处都要追 |
+| **B. 直接吃 typed entry**（选择） | `extractor / synthesize` 内部 `isinstance(e, SpeakerEntry/...)` 派发；`formatter` 落盘 dict 形态保持不变（`metadata["context"]` 是 JSON 序列化后的 dict），但 speaker 判断走 `entry.get("type") == "speaker"`（§14 已强制写入）| typed dispatch + JSON 形态都靠 `type` 字段单源；dict 嗅探彻底退场 |
+| C. 给 agent_sft 写自己的 typed view | 双 SoT，与 §7 "schema 单源" 决策矛盾 | 否决 |
+
+### Decision
+
+**B**——extractor / synthesize 走 typed dispatch；formatter 走 `type` 字段判断；shim cleanup + 历史 envelope 一次性迁移：
+
+| 动点 | 做法 |
+|---|---|
+| [`data/extractor.py`] | 形参 `events: list[ToolCallEntry \| ArtifactEventEntry]`；`_attempt_called_required` 用 `e.tool / e.caller`；`extract_triples` 内 `isinstance(e, SpeakerEntry) and e.speaker == ...` + `e.content` 直接访问；`Triple.context: list[TranscriptEntry]` |
+| [`data/extractor.py`] shim 删除 | §7 留下的 `_split_turns_indexed` / `_index_steps_by_turn` 共 2 个 shim 退役（`Result.turns()[i].start_offset` 已直接给 turn-indexed 全局 offset，shim 无存在意义）；对应 [`tests/test_extractor.py`] 2 条 shim 单测一并删除 |
+| [`data/synthesize.py`] | 同 extractor 切 typed access；`from agent_engine import SpeakerEntry, ...` |
+| [`data/formatter.py::_render_recent_context`] | `entry.get("type") == "speaker"` 派发；落盘 metadata 仍是 dict 形态（JSON 序列化 typed dataclass 后只剩 dict + `type` 字段，但 typed → dict 转换由 `engine.py` 写盘前 `dataclasses.asdict` 完成）|
+| [`data/triples/runs_1k_fast_7b_r0_124/*.json`] × 500 | 一次性迁移脚本注入 `type:"speaker"` 到 speaker entry + `usage: []` 到 envelope；与 agent_engine §14 forward-only 选择一致 |
+| 跨项目 import 加项 | `from agent_engine import TokenUsage, ArtifactEventEntry, SpeakerEntry, ToolCallEntry, TranscriptEntry`（typed dispatch 需要） |
+
+### Consequences
+
+| 影响 | 结果 |
+|---|---|
+| schema 单源 | agent_engine §14 改 entry / 加字段 → agent_sft 改一处即可（typed dispatch 自动接到）|
+| 测试规模 | 87 测试全绿（PR-1 删 2 条 shim 单测后；§7 时 89 → §14 时 87 = -2 等价覆盖移到 agent_engine 38 测试）|
+| import 边界 | agent_sft 与 agent_engine 直连面扩到 typed entry / `TokenUsage`；与 evals 公开面依赖仍仅 `classify_failure_mode`（vs §7 时已收敛到 1 项）|
+| 历史 mined 数据 | 500 envelope 一次性迁移；不留 `try_legacy_from_dict()` 长期 shim；后续重跑 mining 自动产 §14 schema |
+| 演化友好 | 加新 entry 类型时 agent_sft 仅需补 `isinstance` 分支（如未匹配 fallthrough，对训练数据 mining 无副作用）|
+| §7 关系 | §7 立"直连 agent_engine 公开面"是 dict 边界的；§8 把这条边界向内推到"directly typed entry"，是同一原则的递进收紧 |
+
+### 后续可滑性
+
+- `Result.usage` 当前 agent_sft mining 阶段不消费（mining 关心"做对什么"而非"花多少 token"）；后续训练数据筛选若需要"仅保留 cost ≤ X 的 envelope"，从 `result.usage` 直接聚合即可，无需新视图。
+- 若历史 mined envelope 量级再次膨胀（>5K）使一次性迁移脚本压力变大，可考虑给 mining 加 `--allow-legacy-envelope` flag 临时降级 reader——本期 500 量级人工迁移可控，不做这个开关。

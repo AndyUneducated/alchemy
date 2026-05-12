@@ -30,7 +30,8 @@
     {
       "speaker": "执行者",
       "content": "核心要点：项目代号ZX-7492，服务器SRV-8831，负责人E-2055，启动日期2026年3月14日。",
-      "ts": 1778409004.804331
+      "ts": 1778409004.804331,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -53,7 +54,8 @@
     {
       "speaker": "执行者",
       "content": "",
-      "ts": 1778409014.372648
+      "ts": 1778409014.372648,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -74,7 +76,8 @@
     {
       "speaker": "协调者",
       "content": "投票已提出，vote_id: v1。请执行者投票。",
-      "ts": 1778409018.0006201
+      "ts": 1778409018.0006201,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -98,7 +101,8 @@
     {
       "speaker": "执行者",
       "content": "投票成功记录。",
-      "ts": 1778409021.259469
+      "ts": 1778409021.259469,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -133,7 +137,8 @@
     {
       "speaker": "执行者",
       "content": "补充了项目历史信息。",
-      "ts": 1778409027.110368
+      "ts": 1778409027.110368,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -156,7 +161,8 @@
     {
       "speaker": "执行者",
       "content": "获取了相关文档。",
-      "ts": 1778409033.759451
+      "ts": 1778409033.759451,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -171,5 +177,6 @@
     }
   ],
   "success": true,
-  "warnings": []
+  "warnings": [],
+  "usage": []
 }

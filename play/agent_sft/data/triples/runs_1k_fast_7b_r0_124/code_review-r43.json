@@ -32,7 +32,8 @@
     {
       "speaker": "工程师A",
       "content": "评审意见区域就绪，可提交见解。请开始您的审查。",
-      "ts": 1778412710.0176032
+      "ts": 1778412710.0176032,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -66,7 +67,8 @@
     {
       "speaker": "工程师B",
       "content": "检索结果与接口契约/测试用例无关，继续基于现有信息评审。\n\n## review_b\n建议合入，短期牺牲测试覆盖换取长期维护性。",
-      "ts": 1778412718.238306
+      "ts": 1778412718.238306,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -76,7 +78,8 @@
     {
       "speaker": "工程师A",
       "content": "portun\n{\"name\": \"write_section\", \"arguments\": {\"content\": \"- 合并合理，接受测试覆盖率略降。\", \"name\": \"review_a\"}}\n</tool_call>",
-      "ts": 1778412724.511737
+      "ts": 1778412724.511737,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -108,7 +111,8 @@
     {
       "speaker": "工程师B",
       "content": "评审完成。\n\n## review_b\n- 认同A，短期牺牲小代价换取长期维护性提升。\n\n## review_c\n- 综合A/B，合入PR，关注后续测试覆盖补充。",
-      "ts": 1778412732.131787
+      "ts": 1778412732.131787,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -140,7 +144,8 @@
     {
       "speaker": "工程师C",
       "content": "看来我需要使用 `write_section` 而不是 `append_section` 来更新 `review_c` 部分。让我来修改它。\n\n## review_c\n- 综合A/B，合入PR，关注后续测试覆盖补充。\n- 综合A/B，合入PR。关注测试覆盖后续补充。\n\n现在我将使用 `write_section` 更新",
-      "ts": 1778412737.782096
+      "ts": 1778412737.782096,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -150,7 +155,8 @@
     {
       "speaker": "主审",
       "content": "已提出投票，选项为“合入”和“退回”。请各位评审员投下您宝贵的一票。\n\n## 决策\n_(empty)_\n## 投票\n- 合入 (0 票)\n- 退回 (0 票)",
-      "ts": 1778412743.38061
+      "ts": 1778412743.38061,
+      "type": "speaker"
     },
     {
       "type": "artifact_event",
@@ -174,7 +180,8 @@
     {
       "speaker": "工程师A",
       "content": "看起来投票ID生成出现了问题。让我直接投合入的一票，并期待主审手动创建投票。\n\n## review_a\n- 合并合理，接受测试覆盖率略降。\n\n## review_b\n- 认同A，短期牺牲小代价换取长期维护性提升。\n\n## review_c\n- 综合A/B，合入PR，关注后续测试覆盖补充。\n\n##",
-      "ts": 1778412749.396437
+      "ts": 1778412749.396437,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -184,7 +191,8 @@
     {
       "speaker": "工程师B",
       "content": "看来投票尚未生成。我将直接投合入的一票，期待主审手动创建投票。\n\n## review_a\n- 合并合理，接受测试覆盖率略降。\n\n## review_b\n- 认同A，短期牺牲小代价换取长期维护性提升。\n\n## review_c\n- 综合A/B，合入PR，关注后续测试覆盖补充。\n\n## ",
-      "ts": 1778412755.492498
+      "ts": 1778412755.492498,
+      "type": "speaker"
     },
     {
       "type": "turn",
@@ -194,7 +202,8 @@
     {
       "speaker": "工程师C",
       "content": "看来投票尚未生成。我将直接投合入的一票。\n\n## review_a\n- 合并合理，接受测试覆盖率略降。\n- 认同A，短期牺牲小代价换取长期维护性提升。\n- 综合A/B，合入PR，关注后续测试覆盖补充。\n\n## review_b\n- 认同A，短期牺牲小代价换取长期维护",
-      "ts": 1778412761.804323
+      "ts": 1778412761.804323,
+      "type": "speaker"
     }
   ],
   "success": false,
@@ -205,5 +214,6 @@
     "工程师A skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师B skipped required tool 'cast_vote' after 1 attempt(s)",
     "工程师C skipped required tool 'cast_vote' after 1 attempt(s)"
-  ]
+  ],
+  "usage": []
 }
