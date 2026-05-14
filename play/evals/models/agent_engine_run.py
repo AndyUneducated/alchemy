@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,7 @@ def make_run_fn(
     动 resolve，与 cwd 无关.
     """
     root = Path(scenarios_root).resolve() if scenarios_root else PLAY_DIR
+    timeout = float(os.environ.get("AGENT_ENGINE_RUN_TIMEOUT", timeout))
 
     def _run(scenario_path: str) -> dict[str, Any]:
         sp = Path(scenario_path)

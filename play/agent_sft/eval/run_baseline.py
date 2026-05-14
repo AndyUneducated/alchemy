@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -81,14 +82,17 @@ def main(argv: list[str] | None = None) -> int:
     start = time.time()
     for i, (m, s, t) in enumerate(combos, start=1):
         spec = f"ollama:{m}@seed={s}"
-        cmd = ["python", "-m", "evals", "run", "--task", t, "--model", spec, "--seed", str(s)]
+        cmd = [sys.executable, "-m", "evals", "run", "--task", t, "--model", spec, "--seed", str(s)]
         print(f"\n[{i}/{total}] task={t} model={m} seed={s}")
         if args.dry_run:
             print("  would run:", " ".join(cmd))
             ok += 1
             continue
         try:
-            result = subprocess.run(cmd, cwd=PLAY_DIR, check=False)
+            env = os.environ.copy()
+            if t in {"nudge_fire_rate", "agent_traj"}:
+                env["AGENT_ENGINE_MODEL"] = m
+            result = subprocess.run(cmd, cwd=PLAY_DIR, check=False, env=env)
             if result.returncode == 0:
                 ok += 1
             else:
