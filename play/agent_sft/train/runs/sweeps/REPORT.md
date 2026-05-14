@@ -4,6 +4,23 @@
 
 训练数据 `train_7b_1k.jsonl` (766 sample / 196 val)，schema 见 [`DECISIONS §4`](../../../DECISIONS.md)；底座 `mlx-community/Qwen2.5-7B-Instruct-4bit` (QLoRA)；评估走 [`eval_smoke.py`](../../eval_smoke.py)，解析模型输出里 `<tool_call>` 块与 ground-truth 比对.
 
+## sweep 覆盖范围（v1 实际值）
+
+v1 计划过 4 dim 但只跑 2 dim — 见下表与下方"为什么只跑 2 dim"：
+
+|dim|状态|值|备注|
+|---|---|---|---|
+|`iters`|已跑|50 / **200** / 600|baseline 即 100% 4 项指标，多 epoch 无收益|
+|`learning_rate`|已跑|1e-5 / **1e-4** / 5e-4|1e-4 甜点；5e-4 发散；1e-5 步太小|
+|`num_layers`|**未跑**|—|推迟至 Phase 5 触发条件（[`DECISIONS §5`](../../../DECISIONS.md)）|
+|`rank`|**未跑**|—|同上|
+
+### 为什么只跑 2 dim
+
+iters / lr 跑完即在 baseline 配置上拿到 fast proxy 4 项 100%（emit / name / arg_set / arg_value）——任务结构性强（学 `<tool_call>{...}</tool_call>` 形态 + 字面值搬运），train 集 766 样本已足以学透 schema. 此时继续扫 layers / rank 在本指标上不会有信号，决定推迟到 **Phase 5 端到端 gap 关闭率 < 50%** 时再回头扫（[`DECISIONS §5`](../../../DECISIONS.md)）。
+
+Phase 5 实测 nudge gap 关闭 57.3%，三阈值全过，**未触发** layers/rank sweep 条件，正式不扫（[`DECISIONS §9`](../../../DECISIONS.md)）。
+
 ## 基线配置（baseline）
 
 |参数|值|
@@ -54,10 +71,10 @@
 - **`0.0001`** — **基线**：train_loss 0.28→0.00，val_loss_last 0.00，emit 100% / name 100% / arg_value 100%。
 - **`0.0005`** — **激进 / 易发散**：train_loss 3.65→0.04，val_loss_last 0.12，emit 95% / name 94% / arg_value 76%。
 
-## 通用结论速查
+## 通用结论速查（仅本次 sweep 实测覆盖的部分）
 
-- **学习率最容易训坏**——先把它钉对，再调其他。判据：loss 单调降 = 合适；震荡 = 偏大；NaN = 远超.
-- **iters × batch_size = 实际学习量**——同 epoch 数下两者可换算.
-- **rank 16 是 tool-call SFT 实战起步**——4 试下限，32 测是否真需要更高表达力.
-- **挂 16 层是经济 + 学得到位的折中**——全挂 (28) 易破坏底层能力，仅 4 层装不下 schema.
-- **emit_rate 比 val_loss 更对位下游 nudge-fire-rate**——loss 低未必 emit 真的对，tool_name_match / arg_value_match 才是结构性指标.
+- **学习率最容易训坏**——先把它钉对，再调其他。判据：loss 单调降 = 合适；震荡 = 偏大；NaN = 远超。本次实测 1e-4 甜点、5e-4 发散到 emit 95% / arg_value 76%、1e-5 首 loss 显著高但仍能收敛.
+- **iters × batch_size = 实际学习量**——同 epoch 数下两者可换算；本次 iters 50 / 200 / 600 在 fast proxy 上不分胜负，证明 schema 学习对样本曝光次数不敏感（task 结构性强）.
+- **emit_rate 比 val_loss 更对位下游 nudge-fire-rate**——loss 低未必 emit 真的对，`tool_name_match` / `arg_value_match` 才是结构性指标；本次 5e-4 一行就是反例（val_loss 0.12 看似还行，arg_value 已掉到 76%）.
+
+> `rank` / `num_layers` **未扫**，故无对应"结论"。`lora_config.yaml` 取业界主流起步值（rank=16，q/k/v/o 全挂，layers=16）见 [`README.md` §行业对位](../../README.md)；改这两个旋钮的触发条件留在 [`DECISIONS §5`](../../../DECISIONS.md)。

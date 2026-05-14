@@ -6,8 +6,10 @@ QLoRA 微调 Qwen2.5-7B-Instruct 4-bit，用 [`data/triples/train_*_1k.jsonl`](.
 
 ```mermaid
 flowchart LR
-    smoke[smoke run<br/>~15min] --> sweep[控制变量 sweep<br/>4 dim × 4 val<br/>~12-15h overnight] --> report[REPORT.md] --> main[选最佳配置主跑<br/>~2-3h]
+    smoke[smoke run<br/>~15min] --> sweep[控制变量 sweep<br/>iters / lr 2 dim × 3 val<br/>~6h] --> report[REPORT.md] --> main[BASE 配置主跑<br/>~1h]
 ```
+
+> 计划过 4 dim（iters / lr / **layers / rank**），实际只跑了前 2 dim：fast proxy 4 项指标在 baseline 配置上即 100%（[`runs/sweeps/REPORT.md`](runs/sweeps/REPORT.md)），任务过简单，layers/rank sweep 推迟到"Phase 5 真测 gap 关闭率 < 50%"触发——见 [`DECISIONS §5`](../DECISIONS.md)。Phase 5 实测 gap 关闭 57.3% 未触发，sweep 不再扩（[`DECISIONS §9`](../DECISIONS.md)）。
 
 ## 文件清单
 
@@ -16,8 +18,9 @@ flowchart LR
 |`lora_config.yaml`|LoRA 结构定义（rank / scale / dropout / target keys）；CLI flag 不能传的字段|
 |`train.py`|单次训练 thin wrapper：`mlx_lm.lora --train --mask-prompt ...` + log 解析 + `train_metrics.json`|
 |`eval_smoke.py`|训完轻量验证：val set 生成 → 解析 `<tool_call>` 块 → 4 项指标 → `eval_smoke.json`|
-|`sweep.py`|控制变量法 sweep：克隆 [`play/sft_hello/sweep.py`](../../sft_hello/sweep.py) 骨架，4 dim × 3-4 值，产 `runs/sweeps/REPORT.md`|
-|`runs/`|每次 train run 的 adapter + log + metrics（默认 gitignored）|
+|`sweep.py`|控制变量法 sweep：克隆 [`play/sft_hello/sweep.py`](../../sft_hello/sweep.py) 骨架，最多 4 dim × 3-4 值（v1 仅跑 iters / lr），产 `runs/sweeps/REPORT.md`|
+|`runs/sweeps/`|v1 sweep 实验证据（tracked，~150 KB metadata + `iters/200/adapters.safetensors` 22 MB 即 v1 上线 adapter 本体，[`deploy/build.sh`](../deploy/build.sh) 引用）|
+|`runs/<其他>`|一次性 / smoke / overnight 主跑产物（gitignored，未来 v2 用）|
 
 ## 行业对位
 
@@ -43,8 +46,8 @@ python train.py \
 
 python eval_smoke.py --adapter-path runs/smoke --valid-file ../data/triples/val_7b_1k.jsonl
 
-# 2. overnight sweep：4 dim × 3-4 值（iters / lr / layers / rank）
-python sweep.py all
+# 2. sweep：v1 实际只跑 iters / lr（layers / rank 推迟，触发条件见 DECISIONS §5 / §9）
+python sweep.py iters lr
 
 # 3. 看报告
 $EDITOR runs/sweeps/REPORT.md

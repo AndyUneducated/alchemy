@@ -115,7 +115,7 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema + §5 推荐 adapter + §6 Phase 4 量化锁定）
+├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema + §5 推荐 adapter + §6 Phase 4 量化锁定 + §7 直连 agent_engine + §8 typed schema 升级 + §9 v1 结案）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
 ├── requirements.txt         # mlx-lm[train] + huggingface-hub
 ├── data/                    # Phase 2 已落地：mine / extract / synthesize / split / formatter + 1k×2 数据集
@@ -123,7 +123,7 @@ play/agent_sft/
 ├── eval/                    # Phase 1 已落地：run_baseline.py + aggregate_seeds.py + baselines/
 │                            #  task 实现归 evals/
 ├── deploy/                  # Phase 4 已落地：Modelfile（1:1 复刻 qwen2.5:7b template）+ build.sh / deploy.sh / smoke_test.py + README
-└── tests/                   # 89 单元测试（70 数据流水线 + 17 aggregate_seeds + 32 formatter schema 升级）
+└── tests/                   # 111 pytest（87 schema 单测 + 24 e2e 流水线 / subprocess runner / golden snapshot / scenario YAML invariant；全 0.5s 跑完，0 flaky，conftest 统一 sys.path）
 ```
 
 具体文件按 phase 推进时补齐——README 不预创空文件夹。
