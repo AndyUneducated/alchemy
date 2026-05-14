@@ -128,15 +128,58 @@ play/agent_sft/
 
 具体文件按 phase 推进时补齐——README 不预创空文件夹。
 
-## 面试叙事脚本（草稿，随项目推进迭代）
+## Lessons learned（v1 结案）
 
-> "我自己写了一个 agent engine，里面有一个 `require_tool` 机制：当某一步必须调用某个工具但 LLM 漏调时，引擎会发 nudge 让它重试。这个 nudge 信号就是免费的监督——本来意味着模型该调没调。我把它当作 SFT 的 target，挖了约 N 条 (failed turn, nudge, corrected turn) 三元组，在 M4 Pro 48GB 上用 MLX-LM QLoRA 微调 Qwen2.5-7B。
->
-> 怎么知道有效？我用自己写的 evals harness（lm-eval-harness 风格，有 phase-5 trajectory eval）跑了三组对比：原 Qwen 7B / 我微调后的 7B / Qwen2.5-32B 原版（同家族跨规模 ceiling reference）。在 in-dist 上 nudge-fire rate 从 X% 降到 Y%，**追到与 32B 原版同档**；BFCL 公开切片上没有显著回归。微调后的权重 fuse 成 GGUF，`ollama create` 注册成本地 tag，agent engine 改一行 BACKEND 配置就跑起来了。
->
-> 这个项目最值得讲的不是数字本身，而是 supervision 信号只能由我自己的 agent stack 产生，**且整条链路全本地、零闭源依赖**——这事儿没有别的 portfolio 可以复现。"
+v1 七阶段全部跑通，120 runs（3 model × 4 task × 10 seed）端到端复测，**[`DECISIONS §9`](DECISIONS.md#9-v1-结案phase-5-数字三阈值命中--v2v3-候选取舍) 三阈值全过** → 中心问题 [`§1`](DECISIONS.md#1-nudge-grounded-sft-作为项目中心问题) "把自有 `require_tool` nudge 当 supervision，能让 7B 在自己 trajectory 上把 nudge-fire rate 显著降下来且不在 OOD 回归吗？"的答案是**"能，但条件清楚地写在数字背面"**。最值得讲的不是 57.3% gap closure 这个数字本身，而是三件 surprise：① nudge SFT 把 `missed`（漏调）错误**转化**为 `wrong_tool`（错调）错误而非全数消除——教会了模型"该调"但还没教会"调对"；② `agent_traj.task_success` SFT (1.00) **反超** 32B ceiling (0.93)，但 `trajectory_match` 退化 31%——SFT 模型靠"多走岔路歪打正着"赢了端到端结果，trajectory 偏离 gold；③ `by_tool.retrieve_docs` SFT 100% 都需要 nudge，是 [`§4`](DECISIONS.md#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native) drop 250 retrieve_docs no-template 样本的回旋镖。这三件事整齐地给 v2-B（on-policy）/ v2-C（hard sample mining）画好了第一批靶子。
 
-完整三段式（项目背景 / 技术决策 / 反思）会在 Phase 6 收尾时定稿。
+方法学层面收两个 lesson：① **fast proxy 在 schema 学习上必然饱和**——[`§5`](DECISIONS.md#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 已锁的"`eval_smoke` 4 项指标全 100% 不证明 SFT 起效"在 Phase 5 端到端复测时被反证：proxy 全 100% 的同时，端到端 `nudge_fire_rate` 才差出 9.4 个百分点 gap。`evals` 跑 ~50 min/run × 32B × agent-path 的成本不能省。② **评测 harness 本身的脆弱性是 Phase 5 副产品**——`qwen2.5:7b seed=3` 自发输出 `tool=cast_vote(...)` 非法 kwarg → `agent_engine` 直接 `TypeError` 让整条 batch run 挂掉。1/120 数据点损失虽小，但暴露 evals/agent_engine 在 LLM "异常输出" 面前的防御性不足；写进 [`agent_engine`] backlog，不进本项目修。
+
+### Phase 5 数字一览
+
+|task / metric|base 7B (n)|SFT 7B (n)|32B (n)|(SFT-base)/(32B-base)|判定|
+|---|---|---|---|---|---|
+|`nudge_fire_rate`（越低越好）|0.7389 ± 0.111 (9)|**0.6450 ± 0.037** (10)|0.5750 ± 0.054 (10)|**57.3% 关闭** ≥50%|✅ 阈值 1|
+|`bfcl_slice.arg_value_match`|0.9683 (10)|**0.9567** (10)|0.9783 (10)|回归 **1.16%** ≤5%|✅ 阈值 2|
+|`mmlu_slice.accuracy`|0.7188 (10)|**0.6979** (10)|0.8021 (10)|回归 **2.09%** ≤3%|✅ 阈值 3|
+|`agent_traj.task_success`|0.700 (10)|**1.000** (10)|0.933 (10)|SFT > 32B|惊喜|
+|`agent_traj.tool_call_set_f1`|0.737 (10)|**0.534** (10)|0.886 (10)|🔻 -27%|代价|
+|`agent_traj.trajectory_match`|0.658 (10)|**0.454** (10)|0.812 (10)|🔻 -31%|代价|
+|`nudge.by_failure_mode.missed`|13.89 (9)|**10.10** (10)|8.60 (10)|↓ 改善|—|
+|`nudge.by_failure_mode.wrong_tool`|0.89 (9)|**2.80** (10)|2.90 (10)|🔻 ↑ 转化|wrong_tool 与 32B 持平，"missed → wrong_tool" 路径|
+|`nudge.by_scenario.panel`|0.778 (9)|**0.975** (10)|0.450 (10)|🔻 反向回归|supervision 在 panel 场景偏|
+|`nudge.by_tool.retrieve_docs`|0.944 (9)|**1.000** (10)|0.925 (10)|🔻 完全靠 nudge|drop 250 no-template 样本的代价|
+
+完整 dot-path breakdown（4 task × 3 model × N 指标）见 [`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md)。
+
+### 三个回答
+
+|问题|答|
+|---|---|
+|nudge-grounded SFT 是否有效？|✅ 是。三阈值（gap ≥50%、BFCL ≤5%、MMLU ≤3%）全部命中，gap closure 57.3% 接近 32B ceiling 的 60% mark|
+|是否有 OOD / 通用回归？|✅ 在阈值内。BFCL 回归 1.16%，MMLU 回归 2.09%；但 `agent_traj.tool_call_set_f1 / trajectory_match` 各退化 27-31%（不在 OOD 公开赛道，但是本项目自有 trajectory eval 的代价信号，必须诚实标注）|
+|supervision 信号差异化是否成立？|✅ 成立但带条件。"自有 require_tool nudge"在 v1 上让 7B 追到 ceiling 60% mark，但暴露三个明确的 supervision 质量短板（panel 反向 / retrieve_docs 100% / missed→wrong_tool 转化），这些就是 v2-B/v2-C 的入口|
+
+### v2/v3 候选取舍（[`DECISIONS §9`](DECISIONS.md#9-v1-结案phase-5-数字三阈值命中--v2v3-候选取舍) 详细决断）
+
+|候选|决断|依据|
+|---|---|---|
+|v2-A DPO|⏸ 暂留|`wrong_tool` 是分类问题不是偏好问题，DPO 不正面解决|
+|v2-B on-policy 迭代 SFT|✅ 可启动|"trajectory 偏离 gold" + "wrong_tool ↑" 根因是 training set 没有"SFT 模型自己产的 trace"，on-policy 直接对症|
+|v2-C 失败模式 taxonomy + hard sample mining|✅ 启动|`by_failure_mode / by_scenario / by_tool` 三轴已暴露 4 个明确死角（wrong_tool ↑、panel 反向、retrieve_docs 100%、tool_call_set_f1 退化），全是 hard sample 的入口|
+|v3-A 14B 升级|⏸ 暂留|7B 没显示饱和——SFT 在 task_success 上反超 32B；先让 v2 把现有信号榨干|
+|v3-B 公开 HF artifact|✅ 可启动|v1 三阈值全过 + 干净的"硬币背面"叙事 = Model Card 内容已成型；可在 v2 启动前先 ship adapter|
+|v3-C 技术报告 / blog|⏸ v3-B 之前|内容依赖 v3-B + v2 进度|
+|v3-D 多 supervision 信号 superset|🚫 摘牌|v1 瓶颈是 supervision **质量**（panel 反向 / retrieve_docs 100%），不是数量；加新信号桶前先把 require_tool 信号在 panel 场景的偏诊清楚——v2-C 自然涵盖|
+
+## 面试叙事脚本（v1 结案版）
+
+> "我自己写了一个 agent engine，里面有一个 `require_tool` 机制：当某一步必须调用某个工具但 LLM 漏调时，引擎会发 nudge 让它重试。这个 nudge 信号就是免费的监督——本来意味着模型该调没调。我把它当作 SFT 的 target，挖了约 1k 条 (failed turn, nudge, corrected turn) 三元组，在 M4 Pro 48GB 上用 MLX-LM QLoRA 微调 Qwen2.5-7B。
+>
+> 怎么知道有效？我用自己写的 evals harness（lm-eval-harness 风格，有 phase-5 trajectory eval）跑了 3 model × 4 task × 10 seed = 120 runs 三组对比：原 Qwen 7B / 我微调后的 7B / Qwen2.5-32B 原版（同家族跨规模 ceiling reference）。**nudge-fire rate 从 0.739 降到 0.645，关闭了与 32B 同族 ceiling (0.575) 的 57% gap**；BFCL 公开切片回归 1.2%、MMLU 子集回归 2.1%，都在事先锁定的阈值内。微调后的权重 fuse 成 GGUF，`ollama create` 注册成本地 tag，agent engine 改一行 BACKEND 配置就跑起来了。
+>
+> 但比数字更有意思的是数字背后的'硬币背面'：SFT **没**把'漏调'错误全数消除，而是**转化**成了'错调'——模型学到了'该调'但还没学到'调对'。而且 SFT 在端到端 task success 上反超 32B（1.00 vs 0.93），但 trajectory 与 gold 序列的对齐反而退化 31%——模型靠'多走岔路歪打正着'赢了。这两件事整齐地把 v2 的两个候选——on-policy 迭代 SFT 和失败模式 hard sample mining——给画好了靶子。
+>
+> 这个项目最值得讲的不是 57% gap 这个数字，而是 supervision 信号只能由我自己的 agent stack 产生，**整条链路全本地、零闭源依赖**——这事儿没有别的 portfolio 可以复现；而且每一个'硬币背面'都能反链到具体一条 ADR（[`DECISIONS §9`](DECISIONS.md#9-v1-结案phase-5-数字三阈值命中--v2v3-候选取舍)），不是写完就忘的 negative finding。"
 
 ## 参考
 

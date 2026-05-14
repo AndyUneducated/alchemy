@@ -339,3 +339,85 @@ from evals.metrics.nudge import (
 
 - `Result.usage` 当前 agent_sft mining 阶段不消费（mining 关心"做对什么"而非"花多少 token"）；后续训练数据筛选若需要"仅保留 cost ≤ X 的 envelope"，从 `result.usage` 直接聚合即可，无需新视图。
 - 若历史 mined envelope 量级再次膨胀（>5K）使一次性迁移脚本压力变大，可考虑给 mining 加 `--allow-legacy-envelope` flag 临时降级 reader——本期 500 量级人工迁移可控，不做这个开关。
+
+## 9. v1 结案：Phase 5 数字三阈值命中 + v2/v3 候选取舍
+
+- **Status**: accepted (v1 closing)
+- **Date**: 2026-05-13
+- **Cross-refs**: 与 [`§5`](#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 的"layers/rank sweep 推迟"触发条件呼应；与 [`§1`](#1-nudge-grounded-sft-作为项目中心问题) 的中心问题"nudge-fire rate 能不能降+不在 OOD 回归"形成 v1 闭环
+
+### Context
+
+Phase 5.A 跑完 3 model × 10 seed × 4 task = 120 runs（119 successful，1 排除：[`JOURNAL.md`](JOURNAL.md) 2026-05-12 → 05-13 milestone）。聚合产物 [`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md) 把 4 个 task × 3 个模型 × N 个嵌套指标钉在一张报告里。v1 结案两件事必须同步落 ADR：① **中心问题**（[`§1`](#1-nudge-grounded-sft-作为项目中心问题) "nudge-fire rate 能不能降+不在 OOD 回归"）按数字给定答；② [`README.md`](README.md) v2/v3 候选清单 7 项根据数字标"启动 / 摘牌 / 暂留"，不再悬空。
+
+### Options considered
+
+预设三种数字 → 决策路径，[`README.md`](README.md) §"v2/v3 演化路径" + plan §6.3 已铺垫：
+
+|选项|数字特征|对应路径|
+|---|---|---|
+|A. SFT **显著有效**|三阈值全过：nudge gap 关闭 ≥50%、BFCL `arg_value_match` 回归 ≤5%、MMLU accuracy 回归 ≤3%|v1 达预期 → v2-B / v2-C 任一启动；v3-A 暂留；v3-B 可启动|
+|B. SFT **部分有效但有回归**|nudge gap 关闭达标但 BFCL / MMLU 回归超阈|v2-C 优先（失败模式 taxonomy + hard sample mining），v3-A / v3-B 摘牌|
+|C. SFT **无效**|nudge gap 关闭 < 50%|v1 终止；DPO 不解决根因；记录 negative finding；回到数据层（synthesize 模板 → 真 recovery）|
+
+### Decision
+
+**A 命中。** 三阈值实测数字（[`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md)，n=10 except 7B nudge n=9）：
+
+|维度|base 7B|SFT 7B|32B|判定|
+|---|---|---|---|---|
+|`nudge_fire_rate`（越低越好）|0.7389 ± 0.1112|**0.6450 ± 0.0369**|0.5750 ± 0.0540|gap 关闭 **57.3%** ≥ 50% ✅|
+|`bfcl_slice.arg_value_match`（越高越好）|0.9683|**0.9567**|0.9783|回归 **1.16%** ≤ 5% ✅|
+|`mmlu_slice.accuracy`（越高越好）|0.7188|**0.6979**|0.8021|回归 **2.09%** ≤ 3% ✅|
+
+二阶证据（非阈值，但写进 §Lessons 必须诚实标注）：
+
+|维度|发现|含义|
+|---|---|---|
+|`agent_traj.task_success`|0.7000 → **1.0000** > 0.9333 (32B)|SFT 在端到端任务完成率上**超越 32B**——nudge supervision 不仅追到 ceiling，还在它擅长的子任务上反超|
+|`agent_traj.tool_call_set_f1`|0.7373 → **0.5338** ↓|🔻 SFT 退化 27%。模型变得更 eager 调用工具，但调出的工具集合偏离 gold|
+|`agent_traj.trajectory_match`|0.6583 → **0.4544** ↓|🔻 同上，序列对齐变差。"task success 上去 + trajectory 偏离" = 走多步岔路也能歪打正着|
+|`nudge_fire_rate.by_failure_mode.missed`|13.89 → **10.10** ↓|SFT 减少 "漏调"|
+|`nudge_fire_rate.by_failure_mode.wrong_tool`|0.89 → **2.80** ↑|🔻 SFT 增加 "错调"。教会了"该调"，没教会"调对"——v2-C 的明确入口|
+|`nudge_fire_rate.by_scenario.panel`|0.78 → **0.975** ↑|🔻 panel 场景 SFT 反向回归（32B 0.45 反而最好）。supervision 信号在 panel 场景上偏；v2-C / v2-D 候选输入|
+|`nudge_fire_rate.by_tool.retrieve_docs`|0.94 → **1.00** ↑|🔻 SFT 完全不自发调 retrieve_docs（100% 需 nudge）。`§4` schema drop 250 retrieve_docs no-template 样本的代价显现——training set 缺 retrieve_docs 自发示例|
+
+### Consequences
+
+**中心问题答**（[`§1`](#1-nudge-grounded-sft-作为项目中心问题)）：
+
+- "把 `agent_engine` 不得不发 nudge 这一自有 supervision 信号作为微调目标，能不能让 7B 在自己 trajectory 上把 nudge-fire rate 显著降下来，且不在 OOD 上回归？" → **能。** nudge gap 关闭 57.3%（接近 32B ceiling 的 60% mark），OOD（BFCL）回归 1.16%，通用（MMLU）回归 2.09%。
+- 但答案带条件：SFT 学到了"emit tool_call"的 schema 信号（[`§4`](#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native) 落地正确）+ "知道该调工具"（missed ↓），但未完全学到"调对工具"（wrong_tool ↑）+ "不调多余工具"（trajectory 偏离 ↑）。这是 nudge-grounded SFT 在 v1 supervision 仅 `require_tool` 一种信号下的天花板。
+
+**§5 触发条件**：
+
+- §5 锁的"`layers / rank sweep` 推迟到 Phase 5 真测 `(SFT 7B − base 7B) < (32B − base 7B) × 0.5` 才回头扫"——实测 gap 关闭 57.3% **未触发**该条件 → §5 status 维持 accepted，layers/rank sweep 不启动；推荐 adapter 仍是 [`train/runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/)。
+
+**v2/v3 候选清单更新**（[`README.md`](README.md) §"v1 / v2 / v3 演化路径"）：
+
+|候选|新 status|依据|
+|---|---|---|
+|v2-A DPO|⏸ **暂留**|Phase 5 没暴露"prefer pair 学得不好"的证据；wrong_tool 是分类问题不是偏好问题，DPO 不正面解决|
+|v2-B on-policy 迭代 SFT|✅ **可启动**|"trajectory 偏离" + "wrong_tool 上升"的根因是 training set 没有"SFT 模型自己产的 trajectory"；on-policy 回灌挖新 nudge 是直接对症|
+|v2-C 失败模式 taxonomy + hard sample mining|✅ **启动**|by_failure_mode / by_scenario / by_tool 三轴已暴露 4 个明确死角（wrong_tool ↑、panel 反向、retrieve_docs 100%、tool_call_set_f1 退化），全是 hard sample mining 的入口|
+|v3-A 14B 升级|⏸ **暂留**|7B 没显示饱和——SFT 在 task_success 上反超 32B，14B 的额外信息收益不明；先让 v2-B/v2-C 把现有信号榨干|
+|v3-B 公开 HF artifact|✅ **可启动**|v1 三阈值全过 + 有干净的"硬币背面"叙事 = Model Card 的内容已成型；可在 v2-B/v2-C 启动前先 ship adapter + Model Card|
+|v3-C 技术报告 / blog|⏸ **v3-B 之前**|内容依赖 v3-B + v2 任一进度|
+|v3-D 多 supervision 信号 superset|🚫 **摘牌**|本期发现 v1 v2 的瓶颈是 supervision 质量（panel 反向 / retrieve_docs 100%）而非数量；加新信号桶（artifact ACL / 投票失败）前应先把 require_tool 信号在 panel 场景的偏诊清楚——v2-C 自然涵盖|
+
+**工程补丁状态**（与 Phase 5 跑成绑死）：
+
+- [`eval/run_baseline.py`](eval/run_baseline.py) 两处改动（`"python"` → `sys.executable`、`AGENT_ENGINE_MODEL` env 注入）+ [`evals/models/agent_engine_run.py`](../evals/models/agent_engine_run.py) 一处改动（`AGENT_ENGINE_RUN_TIMEOUT` env override），**全部保留并随本 ADR 一起 commit**。这三处不是 QoL：前两处是脚本能跑+三模型对比正确性的前提；第三处让 32B agent-path 不再 timeout、且对默认行为零副作用（env 不设走原 600s 默认）。
+- 跨项目副作用：`evals/models/agent_engine_run.py` 的 timeout override 是 evals 公开行为变更（虽默认值不变）；后续 evals 自己的 ADR 体系应反向引用本 §9 的 motivation。
+
+**评测脆弱性 followup**（不在本 ADR 范围内做，但记录交接）：
+
+- `qwen2.5:7b nudge_fire_rate seed=3` 因模型生成 `tool=cast_vote(...)` 当 kwarg 让 `agent_engine` artifact handler 直接 `TypeError`. 这是 `agent_engine` 端工具 dispatch 防御性问题（应拒绝 unknown kwarg 返回 `{ok:false}` event 而非崩 caller）。v1 范围内的影响仅 1/120 数据点损失（已在 Phase 5.A 取舍节写明）；修复推荐归 `agent_engine` 自己的 backlog，不进 agent_sft。
+
+**永久禁区不变**（[`§1`](#1-nudge-grounded-sft-作为项目中心问题)）：
+
+- v1 结案不引入第三方教师 / 公开 tool-call 数据集污染 training；v3-B 走的是"ship 已训好的 adapter 到 HF"，不是反向把 HF 数据集吃进来。
+
+### v1 收尾里程碑式陈述（面试用一句话锚点）
+
+> "在 M4 Pro 48GB 单机上用自有 agent stack 产生的 require_tool nudge 作 supervision，QLoRA 微调 Qwen2.5-7B，在自己 trajectory 上把 nudge-fire rate 从 0.739 降到 0.645（关闭与 32B 同族 ceiling 0.575 的 57% gap），同时 BFCL 公开切片回归 1.2%、MMLU 子集回归 2.1%——全本地零闭源依赖、可一行命令复现部署。"
