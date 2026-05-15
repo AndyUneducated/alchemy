@@ -1,0 +1,7 @@
+# Linux CI bundle: all play/ test dependencies except mlx-lm (Apple Silicon only).
+-r play/workflow/requirements.txt
+-r play/agent_engine/requirements.txt
+-r play/rag/requirements.txt
+-r play/evals/requirements.txt
+-r play/qa_assets/requirements.txt
+pytest>=8.3

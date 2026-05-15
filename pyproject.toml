@@ -1,0 +1,17 @@
+[project]
+name = "ai-workshops"
+version = "0.0.0"
+description = "Personal LLM engineering sandbox (play/ experiments)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+
+[tool.pytest.ini_options]
+testpaths = [
+    "play/workflow/tests",
+    "play/agent_engine/tests",
+    "play/rag/tests",
+    "play/evals/tests",
+    "play/agent_sft/tests",
+]
+pythonpath = ["play"]
