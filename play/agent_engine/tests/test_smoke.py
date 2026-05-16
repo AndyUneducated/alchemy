@@ -34,10 +34,11 @@ PLAY_DIR = REPO_ROOT / "play"
 _BACKENDS = [
     # (module_name, sdk_module, key_config_attr)
     # key_config_attr: 若 SDK 在 client 构造期校验 key，需配 config.* 非空才能 import；
-    # 留 None 表示无 key 或 SDK 允许空 key（OpenAI / anthropic 当前都允许）
+    # 留 None 表示无 key 或 SDK 允许空 key（anthropic 当前允许；OpenAI SDK 2.x
+    # 起在 `OpenAI(api_key="")` 时硬性 raise OpenAIError，所以也需要 key skip）。
     ("ollama_client", None, None),
     ("anthropic_client", "anthropic", None),
-    ("openai_client", "openai", None),
+    ("openai_client", "openai", "OPENAI_API_KEY"),
     ("gemini_client", "google.genai", "GEMINI_API_KEY"),
 ]
 
