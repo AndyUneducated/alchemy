@@ -18,6 +18,8 @@ jobs:
     env:
       EVALS_OLLAMA_BASE_URL: http://127.0.0.1:11434
       OLLAMA_HOST: http://127.0.0.1:11434
+      # Store blobs on the workspace volume (larger + cacheable) instead of ~/.ollama.
+      OLLAMA_MODELS: ${{ github.workspace }}/.cache/ollama/models
       # GHA runners lack RAM for 32b; 7b keeps live judge / traj tests runnable.
       EVALS_TEST_OLLAMA_MODEL: qwen2.5:7b
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
@@ -25,6 +27,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # ubuntu-latest has ~14GB free; two Ollama pulls + torch + HF cache exceed it without cleanup.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - uses: actions/setup-python@v5
         with:
@@ -40,16 +54,27 @@ jobs:
           restore-keys: |
             hf-${{ runner.os }}-
 
+      - name: Cache Ollama models
+        uses: actions/cache@v4
+        with:
+          path: .cache/ollama/models
+          key: ollama-${{ runner.os }}-qwen2.5-7b-qwen3-embedding-8b-v1
+          restore-keys: |
+            ollama-${{ runner.os }}-
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-ci.txt
+          pip install --no-cache-dir -r requirements-ci.txt
 
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
 
       - name: Start Ollama and pull models
         run: |
+          set -euo pipefail
+          mkdir -p "$OLLAMA_MODELS"
+          df -h
           ollama serve &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:11434/api/tags >/dev/null; then
@@ -58,8 +83,13 @@ jobs:
             sleep 2
           done
           curl -sf http://127.0.0.1:11434/api/tags
+          echo "Pulling qwen2.5:7b (~5GB)..."
           ollama pull qwen2.5:7b
+          df -h
+          echo "Pulling qwen3-embedding:8b (~5GB)..."
           ollama pull qwen3-embedding:8b
+          df -h
+          ollama list
 
       - name: Build RAG VDB fixtures
         working-directory: play/rag

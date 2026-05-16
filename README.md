@@ -1,7 +1,12 @@
 # ai-workshops
 
 [![CI](https://github.com/AndyUneducated/ai-workshops/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyUneducated/ai-workshops/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![Ollama](https://img.shields.io/badge/inference-Ollama-000000?logo=ollama&logoColor=white)](https://ollama.com/)
+[![PyTorch](https://img.shields.io/badge/tensors-PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![ChromaDB](https://img.shields.io/badge/vector_store-ChromaDB-FF6F61)](https://www.trychroma.com/)
+[![Hugging Face](https://img.shields.io/badge/models-Hugging%20Face-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![repo size](https://img.shields.io/github/repo-size/AndyUneducated/ai-workshops)](https://github.com/AndyUneducated/ai-workshops)
 
