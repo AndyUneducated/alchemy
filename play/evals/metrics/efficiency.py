@@ -65,8 +65,11 @@ FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO = True
 # (https://github.com/AgentOps-AI/tokencost)
 _PRICE_PER_1M_TOKENS: dict[str, tuple[float, float]] = {
     # ollama 本地推理：用 Together AI / Fireworks 公开报价做 "如果在 cloud 跑会花多少" 类比
-    # 仅保留 conftest.py DEFAULT_TEST_MODEL；其它 qwen2.5 tag 通过 EVALS_TEST_OLLAMA_MODEL
-    # override 时未命中 → 走 0 分支（无伤；用户按需自加）
+    # 保留 conftest.py 历史 DEFAULT_TEST_MODEL + 当前 qwen3.x 默认对（plan A：env-driven default
+    # 切换到 qwen3.5:9b / qwen3.6:27b，旧 qwen2.5:32b 保留兼容 agent_sft v1 历史 result.json）；
+    # 其它本地 tag 通过 EVALS_TEST_OLLAMA_MODEL override 时未命中 → 走 0 分支（无伤；按需自加）
+    "ollama:qwen3.6:27b": (0.80, 0.80),
+    "ollama:qwen3.5:9b": (0.80, 0.80),
     "ollama:qwen2.5:32b": (0.80, 0.80),
     # 外部 provider 各留一个调试用 SKU（最便宜 SKU；phase 3 NotImplementedError 暂跑不到，
     # 但 entry 在不破坏，phase 3+ 启用时即用；cli.py::EXTERNAL_PROVIDERS 三家全覆盖）

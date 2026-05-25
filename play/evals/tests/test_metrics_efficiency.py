@@ -44,8 +44,10 @@ def test_price_table_entries_are_in_out_tuple():
 
 
 def test_price_table_includes_canonical_models():
-    """phase 6 立的 4 个调试 SKU 永远在表里（cli.py EXTERNAL_PROVIDERS 三家全覆盖 + 默认 ollama）."""
-    assert "ollama:qwen2.5:32b" in _PRICE_PER_1M_TOKENS
+    """phase 6 立的 4 个调试 SKU + plan A 切换后的 qwen3.x 默认对永远在表里
+    （cli.py EXTERNAL_PROVIDERS 三家全覆盖 + 当前 default ollama tag）."""
+    assert "ollama:qwen3.6:27b" in _PRICE_PER_1M_TOKENS
+    assert "ollama:qwen3.5:9b" in _PRICE_PER_1M_TOKENS
     assert "openai:gpt-4o-mini" in _PRICE_PER_1M_TOKENS
     assert "anthropic:claude-3-5-haiku-20241022" in _PRICE_PER_1M_TOKENS
     assert "gemini:gemini-1.5-flash" in _PRICE_PER_1M_TOKENS
@@ -55,9 +57,9 @@ def test_price_table_includes_canonical_models():
 
 def test_compute_cost_returns_none_for_missing_tokens():
     """tokens_in 或 tokens_out 任一 None → cost None（保持非 None 收集协议）."""
-    assert compute_cost_usd("ollama:qwen2.5:32b", None, 100) is None
-    assert compute_cost_usd("ollama:qwen2.5:32b", 100, None) is None
-    assert compute_cost_usd("ollama:qwen2.5:32b", None, None) is None
+    assert compute_cost_usd("ollama:qwen3.6:27b", None, 100) is None
+    assert compute_cost_usd("ollama:qwen3.6:27b", 100, None) is None
+    assert compute_cost_usd("ollama:qwen3.6:27b", None, None) is None
 
 
 def test_compute_cost_returns_zero_for_unknown_model():
@@ -88,7 +90,7 @@ def test_compute_cost_known_model_no_warning():
     _warn_unknown_pricing_model.cache_clear()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        compute_cost_usd("ollama:qwen2.5:32b", 100, 50)
+        compute_cost_usd("ollama:qwen3.6:27b", 100, 50)
     assert len(caught) == 0, f"unexpected warnings: {[str(w.message) for w in caught]}"
 
 
@@ -105,8 +107,8 @@ def test_compute_cost_handles_distinct_in_out_prices():
 
 
 def test_compute_cost_small_call_scales_correctly():
-    """ollama:qwen2.5:32b = (0.80, 0.80) per 1M → 100 in + 200 out = (100*0.8 + 200*0.8)/1e6."""
-    cost = compute_cost_usd("ollama:qwen2.5:32b", 100, 200)
+    """ollama:qwen3.6:27b = (0.80, 0.80) per 1M → 100 in + 200 out = (100*0.8 + 200*0.8)/1e6."""
+    cost = compute_cost_usd("ollama:qwen3.6:27b", 100, 200)
     expected = (100 * 0.80 + 200 * 0.80) / 1_000_000.0
     assert cost == expected
 
@@ -258,7 +260,7 @@ def test_inject_per_sample_efficiency_writes_nested_subgroup():
         latency_ms=123.0,
         usage=Usage(tokens_in=10, tokens_out=5),
     )
-    [out] = inject_per_sample_efficiency([sr], [resp], "ollama:qwen2.5:32b")
+    [out] = inject_per_sample_efficiency([sr], [resp], "ollama:qwen3.6:27b")
 
     # task-specific 顶层未受影响
     assert out.metrics["acc"] == 1.0

@@ -20,8 +20,8 @@ jobs:
       OLLAMA_HOST: http://127.0.0.1:11434
       # Store blobs on the workspace volume (larger + cacheable) instead of ~/.ollama.
       OLLAMA_MODELS: ${{ github.workspace }}/.cache/ollama/models
-      # GHA runners lack RAM for 32b; 7b keeps live judge / traj tests runnable.
-      EVALS_TEST_OLLAMA_MODEL: qwen2.5:7b
+      # GHA runners lack RAM for 27b; 9b keeps live judge / traj tests runnable.
+      EVALS_TEST_OLLAMA_MODEL: qwen3.5:9b
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
 
@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache/ollama/models
-          key: ollama-${{ runner.os }}-qwen2.5-7b-qwen3-embedding-8b-v1
+          key: ollama-${{ runner.os }}-qwen3.5-9b-qwen3-embedding-8b-v1
           restore-keys: |
             ollama-${{ runner.os }}-
 
@@ -83,8 +83,8 @@ jobs:
             sleep 2
           done
           curl -sf http://127.0.0.1:11434/api/tags
-          echo "Pulling qwen2.5:7b (~5GB)..."
-          ollama pull qwen2.5:7b
+          echo "Pulling qwen3.5:9b (~6GB)..."
+          ollama pull qwen3.5:9b
           df -h
           echo "Pulling qwen3-embedding:8b (~5GB)..."
           ollama pull qwen3-embedding:8b

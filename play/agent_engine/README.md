@@ -175,7 +175,7 @@ History 只有一份；每个 agent 在 `Memory.build_messages(history, owner)` 
 
 ```bash
 # 本地 ollama（默认）
-ollama pull qwen2.5:32b
+ollama pull qwen3.6:27b
 # 或者改 config.py 的 BACKEND，并填上对应 *_API_KEY
 ```
 
@@ -267,7 +267,7 @@ for entry in result.transcript:
 
 # token usage：逐次 LLM 调用的 raw 列表（cost / efficiency 聚合在 evals/metrics/efficiency.py）
 for u in result.usage:
-    u.model            # "qwen2.5:7b" / "claude-3-5-sonnet-20241022" / ...
+    u.model            # "qwen3.5:9b" / "claude-3-5-sonnet-20241022" / ...
     u.caller           # 调用方 agent 名（含 SummaryMemory 内部 summarizer 的隐性调用）
     u.input_tokens
     u.output_tokens

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -12,6 +13,11 @@ from .config import MAX_TOKENS, OLLAMA_BASE_URL, TEMPERATURE
 from .result import TokenUsage
 
 MAX_TOOL_ROUNDS = 5
+
+# qwen3.x and other reasoning models emit content into `message.thinking`
+# instead of `message.content` unless we explicitly disable thinking.
+# Override via env: AGENT_ENGINE_OLLAMA_THINK=true/1 to keep reasoning trace.
+_THINK = os.environ.get("AGENT_ENGINE_OLLAMA_THINK", "").lower() in {"1", "true", "yes"}
 
 
 def _call(
@@ -28,6 +34,7 @@ def _call(
         "model": model,
         "messages": messages,
         "stream": stream,
+        "think": _THINK,
         "options": {"temperature": temperature, "num_predict": max_tokens},
     }
     if tools:

@@ -38,16 +38,16 @@ def test_parse_spec_mock_still_works(task):
 
 def test_parse_spec_ollama_returns_ollama_lm(task):
     """ollama:<model> 解析为 OllamaLM；name 落 `ollama:<model>` 入 EvalResult.model."""
-    lm = parse_model_spec("ollama:qwen2.5:32b", task)
+    lm = parse_model_spec("ollama:qwen3.6:27b", task)
     assert isinstance(lm, OllamaLM)
-    assert lm.name == "ollama:qwen2.5:32b"
-    assert lm.model == "qwen2.5:32b"
+    assert lm.name == "ollama:qwen3.6:27b"
+    assert lm.model == "qwen3.6:27b"
 
 
 def test_parse_spec_ollama_with_base_url_override(task, monkeypatch):
     """EVALS_OLLAMA_BASE_URL env 可覆盖默认 base_url（无需改 spec 语法）."""
     monkeypatch.setenv("EVALS_OLLAMA_BASE_URL", "http://other:11434")
-    lm = parse_model_spec("ollama:qwen2.5:32b", task)
+    lm = parse_model_spec("ollama:qwen3.6:27b", task)
     assert isinstance(lm, OllamaLM)
     assert lm.base_url == "http://other:11434"
 
@@ -56,32 +56,32 @@ def test_parse_spec_ollama_with_base_url_override(task, monkeypatch):
 
 def test_parse_spec_ollama_with_seed_suffix(task):
     """`ollama:<model>@seed=K` → OllamaLM(seed=K)；name 保留 @seed=K 后缀供 EvalResult.model 区分."""
-    lm = parse_model_spec("ollama:qwen2.5:7b-instruct@seed=42", task)
+    lm = parse_model_spec("ollama:qwen3.5:9b-instruct@seed=42", task)
     assert isinstance(lm, OllamaLM)
-    assert lm.model == "qwen2.5:7b-instruct"  # @seed= 后缀已剥离
+    assert lm.model == "qwen3.5:9b-instruct"  # @seed= 后缀已剥离
     assert lm.seed == 42
-    assert lm.name == "ollama:qwen2.5:7b-instruct@seed=42"  # 但 model_label 保留
+    assert lm.name == "ollama:qwen3.5:9b-instruct@seed=42"  # 但 model_label 保留
 
 
 def test_parse_spec_ollama_without_seed_keeps_default_zero(task):
     """无 @seed= 后缀 → OllamaLM 默认 seed=0，name 不含后缀（裸 spec 默认形态）."""
-    lm = parse_model_spec("ollama:qwen2.5:7b-instruct", task)
+    lm = parse_model_spec("ollama:qwen3.5:9b-instruct", task)
     assert lm.seed == 0
-    assert lm.name == "ollama:qwen2.5:7b-instruct"
+    assert lm.name == "ollama:qwen3.5:9b-instruct"
     assert "@seed=" not in lm.name
 
 
 def test_parse_spec_ollama_with_seed_zero_explicit(task):
     """显式 `@seed=0` 也写入 name（让 multi-seed bash 循环 seed=0 仍能与裸 spec 区分）."""
-    lm = parse_model_spec("ollama:qwen2.5:7b-instruct@seed=0", task)
+    lm = parse_model_spec("ollama:qwen3.5:9b-instruct@seed=0", task)
     assert lm.seed == 0
-    assert lm.name == "ollama:qwen2.5:7b-instruct@seed=0"
+    assert lm.name == "ollama:qwen3.5:9b-instruct@seed=0"
 
 
 def test_parse_spec_invalid_seed_raises(task):
     """`@seed=abc` 非整数 → ValueError（与未知 provider 同 fail-fast 路径）."""
     with pytest.raises(ValueError, match="invalid seed"):
-        parse_model_spec("ollama:qwen2.5:7b@seed=abc", task)
+        parse_model_spec("ollama:qwen3.5:9b@seed=abc", task)
 
 
 def test_parse_spec_seed_suffix_on_mock_raises(task):

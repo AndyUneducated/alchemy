@@ -10,7 +10,7 @@ model spec（run 的 --model / --judge-model 与 score 的 --judge-model 共用�
   mock:noisy:0.3
   mock:constant:neutral
   mock:rule
-  ollama:qwen2.5:32b      [phase 3]
+  ollama:qwen3.6:27b      [phase 3]
   openai:gpt-4o-mini      [phase 3+ scaffold; not yet runnable]
   anthropic:claude-...    [phase 3+ scaffold; not yet runnable]
 
@@ -463,7 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument(
         "--judge-model",
         default=None,
-        help="judge LM spec（仅 qa_open 接 judge_pointwise，e.g. ollama:qwen2.5:32b）；不传则只跑 lexical baseline",
+        help="judge LM spec（仅 qa_open 接 judge_pointwise，e.g. ollama:qwen3.6:27b）；不传则只跑 lexical baseline",
     )
     p_score.add_argument("--limit", type=int, default=None, help="只跑前 N 条")
     p_score.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR, help="run 结果落盘目录")
@@ -475,7 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default=None,
         help=(
-            "model spec，如 mock:gold / mock:noisy:0.3 / ollama:qwen2.5:32b. "
+            "model spec，如 mock:gold / mock:noisy:0.3 / ollama:qwen3.6:27b. "
             "task.output_type='none'（rag_retrieval）时可省，由 --vdb 自动派生 retriever 标签."
         ),
     )
@@ -483,7 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--judge-model",
         default=None,
         help=(
-            "judge LM spec（qa_open / rag_qa 接，e.g. ollama:qwen2.5:32b）；"
+            "judge LM spec（qa_open / rag_qa 接，e.g. ollama:qwen3.6:27b）；"
             "不传则跑 lexical baseline（rag_qa 仅 em + rouge_l）"
         ),
     )

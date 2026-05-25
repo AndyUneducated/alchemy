@@ -138,7 +138,7 @@ python -m evals score --task <name> --predictions path/to/preds.jsonl
 
 ### 在本地跑测试
 
-需要 **Python 3.12+**、安装了 `qwen2.5:7b`（或设 `EVALS_TEST_OLLAMA_MODEL`）和 `qwen3-embedding:8b` 的 [Ollama](https://ollama.com/)、
+需要 **Python 3.12+**、安装了 `qwen3.5:9b`（或设 `EVALS_TEST_OLLAMA_MODEL`）和 `qwen3-embedding:8b` 的 [Ollama](https://ollama.com/)、
 以及在 `play/rag/vdb/` 下 ingest 好的 VDB（步骤见 [CI workflow](.github/workflows/ci.yml) 中的 ingest 步骤）。
 
 ```bash

@@ -1,12 +1,12 @@
 """Phase 3 起 live LM 测试落地，需要在 conftest 做两层 probe：
 
   ① 服务可达：GET /api/tags 通 → ollama 守护进程在跑
-  ② 模型已拉：返回的 model 列表里有 EVALS_TEST_OLLAMA_MODEL（默认 qwen2.5:32b）
+  ② 模型已拉：返回的 model 列表里有 EVALS_TEST_OLLAMA_MODEL（默认 qwen3.6:27b）
 
 任一不满足 → 整文件 skip + 友好提示（告诉用户怎么 `ollama pull` 或换 env）。
 auto-probe 的好处是 CI 干净（默认无 ollama 自动 skip）+ 本地 dev 起了 ollama 自然就跑。
 
-测试默认模型选 qwen2.5:32b 的理由：本地已有避免额外 pull / judge 质量更稳让 `>=3.5` 阈值不 flake / 完整 live suite 实测 ~24s（M-series Mac），可接受；EVALS_TEST_OLLAMA_MODEL 可降档到 qwen2.5:3b 提速（CI 友好）或升档到 72b。
+测试默认模型选 qwen3.6:27b 的理由：本地已有避免额外 pull / judge 质量更稳让 `>=3.5` 阈值不 flake；EVALS_TEST_OLLAMA_MODEL 可降档到 qwen3.5:9b 提速（CI 友好）或升档到更大模型。
 
 phase 4 起加 VDB probe（rag_retrieval / rag_qa live e2e 用）：
   ③ vdb 目录存在：`play/rag/vdb/<name>/{chroma.sqlite3, bm25.pkl}` 都齐
@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 OLLAMA_BASE = os.environ.get("EVALS_OLLAMA_BASE_URL", "http://localhost:11434")
-DEFAULT_TEST_MODEL = "qwen2.5:32b"
+DEFAULT_TEST_MODEL = "qwen3.6:27b"
 
 # play/evals/tests/conftest.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]

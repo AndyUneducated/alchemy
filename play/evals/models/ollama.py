@@ -26,10 +26,15 @@ from .base import LM
 
 
 class OllamaLM(LM):
-    """`OllamaLM(model="qwen2.5:32b")` → 走本地 ollama HTTP，名字落 `ollama:<model>`.
+    """`OllamaLM(model="qwen3.6:27b")` → 走本地 ollama HTTP，名字落 `ollama:<model>`.
 
     `base_url` 优先级：构造参数 > env `EVALS_OLLAMA_BASE_URL` > 默认 `localhost:11434`.
     `temperature=0.0` + `seed=0` 默认让测试更确定（ollama options.seed 透传）.
+
+    `think=False` 默认让 qwen3.x 等 reasoning model 走 chat 模式（不输出 thinking trace）；
+    否则 response 字段为空、内容全塞进 thinking 字段，generate_until 会拿到空 text. 由
+    env `EVALS_OLLAMA_THINK=true/1` 显式 opt-in. Ollama < 0.4 忽略该字段，对 qwen2.5
+    等非 reasoning model 也无害（key 未识别即丢弃）.
     """
 
     DEFAULT_BASE_URL: ClassVar[str] = "http://localhost:11434"
@@ -42,6 +47,7 @@ class OllamaLM(LM):
         temperature: float = 0.0,
         seed: int | None = 0,
         request_timeout: float = 120.0,
+        think: bool | None = None,
     ) -> None:
         self.model = model
         env_url = os.environ.get("EVALS_OLLAMA_BASE_URL")
@@ -49,6 +55,9 @@ class OllamaLM(LM):
         self.temperature = temperature
         self.seed = seed
         self.request_timeout = request_timeout
+        if think is None:
+            think = os.environ.get("EVALS_OLLAMA_THINK", "").lower() in {"1", "true", "yes"}
+        self.think = think
         self.name = f"ollama:{model}"
 
     def generate_until(self, requests: list[Request]) -> list[Response]:
@@ -77,6 +86,7 @@ class OllamaLM(LM):
                 "model": self.model,
                 "prompt": req.prompt,
                 "stream": False,
+                "think": self.think,
                 "options": options,
             }
             payload = json.dumps(body).encode("utf-8")

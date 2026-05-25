@@ -221,7 +221,7 @@ class EvalResult:
 例子：
 
 ```json
-{"task": "sentiment_clf", "model": "ollama:qwen2.5:32b", "mode": "run", "n": 30,
+{"task": "sentiment_clf", "model": "ollama:qwen3.6:27b", "mode": "run", "n": 30,
  "aggregated": {
    "accuracy": 1.0, "f1_macro": 0.667, "cohens_kappa": 1.0,
    "efficiency": {
@@ -367,16 +367,16 @@ python -m evals run --task mt --model mock:gold
 
 ```bash
 # 起本地 ollama（默认 localhost:11434），拉一个中文能力可用的模型
-ollama pull qwen2.5:32b   # 或 :3b / :7b 任意 tag
+ollama pull qwen3.6:27b   # 或 qwen3.5:9b 等任意 tag
 
 # run + judge：ollama 既答 qa_open 又当 judge（self-grading），3 个指标全出
 python -m evals run --task qa_open \
-    --model ollama:qwen2.5:32b \
-    --judge-model ollama:qwen2.5:32b \
+    --model ollama:qwen3.6:27b \
+    --judge-model ollama:qwen3.6:27b \
     --limit 5
 
 # 不传 --judge-model 则只跑 lexical baseline（exact_match + rouge_l）
-python -m evals run --task qa_open --model ollama:qwen2.5:32b --limit 5
+python -m evals run --task qa_open --model ollama:qwen3.6:27b --limit 5
 
 # score（lexical only）：演示 lexical 指标在 4 份 stub 上的分歧
 for p in perfect paraphrase wrong_fact garbage; do
@@ -388,7 +388,7 @@ done
 for p in perfect paraphrase wrong_fact garbage; do
   python -m evals score --task qa_open \
       --predictions evals/data/qa_open/predictions/$p.jsonl \
-      --judge-model ollama:qwen2.5:32b
+      --judge-model ollama:qwen3.6:27b
 done
 ```
 
@@ -403,7 +403,7 @@ done
 
 `paraphrase` 与 `wrong_fact` 在**对称的两个方向**展示了 judge 优于纯 lexical 的价值：前者 lexical 失明而 judge 救场，后者 lexical 误判而 judge 抓住。
 
-> live 测试 (`tests/test_ollama_lm.py` / `tests/test_qa_open_live.py`) auto-probe `localhost:11434` + 默认测试模型 `qwen2.5:32b`，不可达 / 模型未拉时整文件 skip。`EVALS_TEST_OLLAMA_MODEL` env 可降档提速（如 `qwen2.5:3b`，CI 友好）或升档（`qwen2.5:72b`）；`EVALS_OLLAMA_BASE_URL` 改 endpoint。完整 live suite 实测 24s（M-series Mac, 32b）。
+> live 测试 (`tests/test_ollama_lm.py` / `tests/test_qa_open_live.py`) auto-probe `localhost:11434` + 默认测试模型 `qwen3.6:27b`，不可达 / 模型未拉时整文件 skip。`EVALS_TEST_OLLAMA_MODEL` env 可降档提速（如 `qwen3.5:9b`，CI 友好）或升档（更大模型）；`EVALS_OLLAMA_BASE_URL` 改 endpoint。
 >
 > 外部 provider（`openai:` / `anthropic:` / `gemini:`）在 `parse_model_spec` 抛 `NotImplementedError`：架构留口，phase 3 仅 ollama 启用。
 
@@ -433,7 +433,7 @@ done
 for p in perfect paraphrase wrong_fact garbage; do
   python -m evals score --task rag_qa \
       --predictions evals/data/rag_qa/predictions/$p.jsonl \
-      --judge-model ollama:qwen2.5:32b
+      --judge-model ollama:qwen3.6:27b
 done
 
 # run：rag_retrieval e2e（VDB 检索 → 5 个 IR 指标；output_type='none' 跳过 LM 调用）
@@ -444,8 +444,8 @@ python -m evals run --task rag_retrieval \
 # run：rag_qa e2e（VDB 检索 → ollama 答 → 5 个 grounding 维度，judge 也是 ollama）
 python -m evals run --task rag_qa \
     --vdb rag/vdb/panel --retrieve-top-k 3 \
-    --model ollama:qwen2.5:32b \
-    --judge-model ollama:qwen2.5:32b \
+    --model ollama:qwen3.6:27b \
+    --judge-model ollama:qwen3.6:27b \
     --limit 2
 
 # rerank（首次加载 ~1.2GB cross-encoder；显著提升 precision@k / mrr）
@@ -488,12 +488,12 @@ done
 for p in perfect partial wrong_decision garbage; do
   python -m evals score --task agent_traj \
       --predictions evals/data/agent_traj/predictions/$p.jsonl \
-      --judge-model ollama:qwen2.5:32b
+      --judge-model ollama:qwen3.6:27b
 done
 
 # run：单 doc 真跑 agent_engine subprocess（耗时 ~分钟级；建议 --limit 1）
 python -m evals run --task agent_traj --limit 1
-python -m evals run --task agent_traj --limit 1 --judge-model ollama:qwen2.5:32b
+python -m evals run --task agent_traj --limit 1 --judge-model ollama:qwen3.6:27b
 ```
 
 教学叙事（4 份 stub × 5 metric，aggregated 跨 3 docs）：
@@ -519,7 +519,7 @@ python -m evals run --task agent_traj --limit 1 --judge-model ollama:qwen2.5:32b
 
 `plan_quality` 直接复用 `judge_core.g_eval`（三维度 plan_structure / tool_choice / completeness 取 mean），不在 `metrics/trajectory.py` 重复实现 G-Eval（避免 metric 模块互引）。
 
-> live 测试 (`tests/test_agent_traj_run_live.py`) 走 ollama-probe + agent_engine-probe 双 gate：缺任一即 skip + 提示。`brainstorm.md` 实测 ~20s（M-series Mac + qwen2.5:32b），CI 友好；`panel.md` ~分钟级仅手动跑。
+> live 测试 (`tests/test_agent_traj_run_live.py`) 走 ollama-probe + agent_engine-probe 双 gate：缺任一即 skip + 提示。`brainstorm.md` 实测 ~20s（M-series Mac + qwen3.6:27b），CI 友好；`panel.md` ~分钟级仅手动跑。
 >
 > phase 5 显式让步：`output_type='none'` 让 evals 层无 LM 可 mock，run-path 不实现 `--replay-envelope`（同源 phase 4 RAG 缺口；详见 `DECISIONS §5`）。
 
@@ -529,7 +529,7 @@ python -m evals run --task agent_traj --limit 1 --judge-model ollama:qwen2.5:32b
 
 ```bash
 # real LM run：OllamaLM 解析 /api/generate → 13 行 dot-path 展开
-python -m evals run --task sentiment_clf --model ollama:qwen2.5:32b --limit 3
+python -m evals run --task sentiment_clf --model ollama:qwen3.6:27b --limit 3
 # mock / score：CLI 折叠为单行 `efficiency: <not measured (no LM signal)>`
 python -m evals run --task sentiment_clf --model mock:gold
 python -m evals score --task sentiment_clf --predictions evals/data/sentiment/predictions/perfect.jsonl
@@ -571,7 +571,7 @@ done
 # hybrid：judge 调真 ollama 看"heuristic 失明 / judge 救场"
 python -m evals score --task safety \
     --predictions evals/data/safety/predictions/evasive.jsonl \
-    --judge-model ollama:qwen2.5:32b
+    --judge-model ollama:qwen3.6:27b
 ```
 
 15 条 stub fixture（6 harmful + 5 jailbreak + 4 benign）× 5 份 prediction，heuristic 实测矩阵：

@@ -5,7 +5,7 @@ metric"端到端跑一遍 brainstorm.md（最小 scenario，无 artifact，3 age
 
 为什么用 brainstorm 而不是 panel：
   - panel 有 4 名 member + moderator + 11 个 step + tool 链——单跑 ~分钟级
-  - brainstorm 仅 2 step，~10-30s（qwen2.5:32b 在 M-series Mac 上）；CI 友好
+  - brainstorm 仅 2 step，~10-30s（qwen3.6:27b 在 M-series Mac 上）；CI 友好
   - phase 5 在线路径主要是 envelope contract + run_fn 通了；行为细节由 score 矩阵覆盖
 
 被 gate 跳过时（无 ollama / 模型未拉）conftest 会清晰提示用户怎么 ollama pull.

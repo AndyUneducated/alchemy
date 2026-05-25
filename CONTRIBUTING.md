@@ -40,7 +40,7 @@ python -m pytest -v
 依赖：
 
 - Python 3.12+
-- [Ollama](https://ollama.com/) 拉好 `qwen2.5:7b`（或设 `EVALS_TEST_OLLAMA_MODEL`）+ `qwen3-embedding:8b`。
+- [Ollama](https://ollama.com/) 拉好 `qwen3.5:9b`（或设 `EVALS_TEST_OLLAMA_MODEL`）+ `qwen3-embedding:8b`。
 - `play/rag/vdb/` 下 ingest 好的 VDB（具体步骤见 [CI workflow](.github/workflows/ci.yml)）。
 
 `requirements-ci.txt` 不装 `mlx-lm`（只跑 Apple Silicon）；`play/agent_sft` 的测试不依赖它。
