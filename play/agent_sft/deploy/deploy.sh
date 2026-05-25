@@ -6,9 +6,9 @@
 set -euo pipefail
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TAG="${TAG:-agent-sft-qwen}"
+TAG="${TAG:-agent-sft-qwen-3}"
 MODELFILE="${MODELFILE:-$HERE/Modelfile}"
-GGUF="$HERE/build/agent-sft-qwen-q4.gguf"
+GGUF="$HERE/build/agent-sft-qwen-3-q4.gguf"
 
 [[ -f "$GGUF" ]] || { echo "[deploy] missing $GGUF — run bash build.sh first" >&2; exit 1; }
 [[ -f "$MODELFILE" ]] || { echo "[deploy] missing $MODELFILE" >&2; exit 1; }

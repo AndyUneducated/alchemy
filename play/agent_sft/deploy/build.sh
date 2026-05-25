@@ -2,11 +2,11 @@
 # Phase 4 build pipeline: LoRA adapter -> fused MLX fp16 -> F16 GGUF -> Q4_K_M GGUF
 #
 # 三步串起来，每步可单独跑（已存在则跳过；--force 覆盖）。最终产物：
-#   build/agent-sft-qwen-q4.gguf  ~4 GB    <- ollama create 的 FROM 指向这个
+#   build/agent-sft-qwen-3-q4.gguf  ~5 GB    <- ollama create 的 FROM 指向这个
 #
 # 中间产物（gitignored）：
-#   build/fused-mlx-fp16/         ~14 GB   fp16 MLX 目录，可 mlx_lm.generate 直接验
-#   build/agent-sft-qwen-f16.gguf ~14 GB   未量化 GGUF，可 llama-cli 直接验
+#   build/fused-mlx-fp16/           ~18 GB   fp16 MLX 目录，可 mlx_lm.generate 直接验
+#   build/agent-sft-qwen-3-f16.gguf ~18 GB   未量化 GGUF，可 llama-cli 直接验
 #
 # 依赖：
 #   - mlx_lm.fuse        (pip install mlx-lm[train])
@@ -19,7 +19,7 @@ HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 BUILD_DIR="$HERE/build"
 ADAPTER="${ADAPTER:-$REPO_ROOT/play/agent_sft/train/runs/sweeps/iters/200}"
-BASE_MODEL="${BASE_MODEL:-mlx-community/Qwen2.5-7B-Instruct-4bit}"
+BASE_MODEL="${BASE_MODEL:-mlx-community/Qwen3.5-9B-4bit}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-$HOME/Tools/llama.cpp}"
 QUANT="${QUANT:-Q4_K_M}"
 
@@ -29,8 +29,8 @@ FORCE=0
 mkdir -p "$BUILD_DIR"
 
 FUSED_DIR="$BUILD_DIR/fused-mlx-fp16"
-GGUF_F16="$BUILD_DIR/agent-sft-qwen-f16.gguf"
-GGUF_Q4="$BUILD_DIR/agent-sft-qwen-q4.gguf"
+GGUF_F16="$BUILD_DIR/agent-sft-qwen-3-f16.gguf"
+GGUF_Q4="$BUILD_DIR/agent-sft-qwen-3-q4.gguf"
 
 CONVERT_PY="$LLAMA_CPP_DIR/convert_hf_to_gguf.py"
 QUANTIZE_BIN="$LLAMA_CPP_DIR/build/bin/llama-quantize"

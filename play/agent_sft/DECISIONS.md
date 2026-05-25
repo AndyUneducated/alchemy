@@ -160,7 +160,7 @@ Phase 3 6-run sweep（[`runs/sweeps/REPORT.md`](train/runs/sweeps/REPORT.md)）�
 
 ## 6. Phase 4 量化等级锁 Q4_K_M + Modelfile 1:1 复刻 qwen2.5:7b template
 
-- **Status**: accepted
+- **Status**: superseded by §10 (qwen3.5:9b base + RENDERER/PARSER directive；GGUF deploy 路径已知 broken)
 - **Date**: 2026-05-11
 
 ### Context
@@ -323,3 +323,97 @@ Phase 5.A 跑完 3 model × 10 seed × 4 task = 120 runs（119 successful，1 �
 **工程补丁状态**：[`eval/run_baseline.py`](eval/run_baseline.py) 2 处（`sys.executable` + `AGENT_ENGINE_MODEL` env 注入）+ [`evals/models/agent_engine_run.py`](../evals/models/agent_engine_run.py) 1 处（`AGENT_ENGINE_RUN_TIMEOUT` env override，零副作用），全部随本 ADR 一起 commit——是 Phase 5 跑成的 prerequisite 而非 QoL。
 
 **跨项目 followup**（归对应 backlog）：① evals harness 应隔离异常 LLM 输出（`tool=cast_vote(...)` 非法 kwarg → handler `TypeError` 崩 caller，1/120 损失）；② agent_engine artifact handler 应拒绝 unknown kwarg 返回 `{ok:false}` event。面试一句话锚点参见 [`README.md` §"面试叙事脚本（v1 结案版）"](README.md)。
+
+## 10. v1.5: qwen3.5:9b base 重训 + 9-run 极简复测 + GGUF deploy 暂缓
+
+- **Status**: accepted
+- **Date**: 2026-05-25
+
+### Context
+
+仓库默认底座从 qwen2.5 切到 qwen3.x（详见根 `a5ad0f9` commit + Phase 1/2/3 envelope/RAG 升级）；agent_sft v1（Qwen2.5-7B base + 1k 数据 + 120-run baseline）与新栈脱节——CLI 默认指向 v1 已删的 model tag、evals harness 调用 `qwen3.5:9b` 时拿不到 SFT adapter 做对照。**选择重训而非维护两套**。
+
+数据策略上一开始按 plan 想 7 run_id × 2 scenario 单跑 `qwen3.5:9b` 出 500+100；实际 `qwen3.5:9b` 比 `qwen2.5:7b` 强很多——14 envelope 只产 49 nudge triples（v1 同等 envelope 产 2000+）。**改为合并历史 v1 7B/32B triples + 新 9B triples，给三来源分配 disjoint run_id offset 保 scenario 分组完整性**，凑到 train 588 / val 155（接近 plan 500/100 目标）。
+
+### Options considered
+
+|选项|GGUF deploy|训练数据|备注|
+|---|---|---|---|
+|A. 严格按 plan：纯 9B mine 500+100|按 §6 路径走 Q4_K_M GGUF + 1:1 复刻 modelfile|纯 9B|9B 强 → 49 nudge triples，数据量远不够|
+|B. 9B mine + 历史 7B/32B 拼接|同上|混源 588/155|数据可凑齐；GGUF 路径暴露下面 hybrid 兼容性 bug|
+|**C. (选) 同 B 数据 + RENDERER/PARSER directive Modelfile + GGUF deploy 降级 placeholder**|fp16 fused mlx 归档 + ollama tag `agent-sft-qwen-3` 暂 FROM base `qwen3.5:9b`|混源 588/155|承认 mlx→GGUF Qwen3.5 hybrid 转换缺陷，把"训练效果"与"deploy 形态"解耦|
+
+### Decision
+
+**采纳 C。**
+
+- **Base**: `mlx-community/Qwen3.5-9B-4bit`（HF：`mlx-community/Qwen3.5-9B-Instruct-4bit` 不存在，实际可用的是非-Instruct 4bit 量化）
+- **数据**: 训 588 / 验 155 三元组，混合源 `v1_7b` + `v1_32b` + `v15_9b`，三来源 run_id 分配 disjoint offset 保 scenario 分组（[`data/triples/train_qwen3.jsonl`](data/triples/train_qwen3.jsonl)）
+- **训练超参**：`iters=600` / `batch_size=1` / `num_layers=4` / `lr=1e-4` / `--grad-checkpoint` / `--clear-cache-threshold 1` / `max_seq_length=1500`；OOM-driven 缩参——9B + Qwen3.5 hybrid (attention+SSM) 即便 4bit 也在 M4 Pro 48GB 上比 7B 紧得多，batch=1 + 4 层 LoRA 是唯一稳跑下来的组合（[`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)）。
+- **Modelfile**：从 v1 ~50 行 TEMPLATE 的 Go-template DSL，改为 ollama 0.20+ 的 `TEMPLATE {{ .Prompt }}` + `RENDERER qwen3.5` + `PARSER qwen3.5` 三行 directive；这是 ollama 内部已 1:1 复刻 `qwen3.5:9b` chat & tool_call 解析的 short-hand。
+- **GGUF deploy 暂缓**：mlx_lm.fuse --dequantize 输出的 fp16 safetensors → `convert_hf_to_gguf.py` → `llama-quantize` Q4_K_M 路径，对 Qwen3.5 hybrid 架构（含 SSM 算子 / `ssm_alpha`/`ssm_beta`/`ssm_conv1d` tensors）weight 重建不正确：F16 GGUF 与 Q4 GGUF 在 ollama 端均输出乱码（"ã加 广_MMjv 滑… \uF!安 Cornas $yn"），但 fp16 mlx fused 目录直接用 `mlx_lm.generate` 推理正常。**结论：训练成功，部署路径 broken**。Modelfile 改为 `FROM qwen3.5:9b` placeholder（继承 base 推理能力，PARAMETER 沿用），同时把 broken 版备份为 [`deploy/Modelfile.gguf-broken`](deploy/Modelfile.gguf-broken)、把 fused fp16 模型留在 [`deploy/build/fused-mlx-fp16/`](deploy/build/fused-mlx-fp16/) 作为待修复时的输入 artifact。
+- **评测**：plan §S9 9 runs 极简复测（3 model × 3 seed × 1 task `nudge_fire_rate`）替代 v1 120 runs baseline；评测落在 [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)（来自 evals/runs/index.jsonl 末 9 行复制），具体数字见末尾"数字快照"。
+- **真正反映 SFT 训练效果的指标**：`train/eval_smoke.py` 在 50 val sample 上跑 4bit base + LoRA adapter 直接推理（绕过 ollama / GGUF），数字见末尾。**这条路径才能客观判断 SFT 训练有没有学到东西**——9 runs eval 因 `agent-sft-qwen-3 ≡ base qwen3.5:9b` 而退化为重复数据，不反映 SFT 信号。
+
+### Consequences
+
+**§6 supersede**：Q4_K_M + Modelfile 1:1 复刻 qwen2.5:7b 整体过时——base 换了 / TEMPLATE 改 directive / GGUF 路径 broken。§6 Status 已改 `superseded by §10`。
+
+**§9 v1 三阈值（57.3% gap closure 等）作为历史快照保留**，不再对齐——新底座 + 数据混源 + 训练超参全变。
+
+**Eval_smoke parser 兼容修正**：[`train/eval_smoke.py`](train/eval_smoke.py) 增加 Qwen3.5 native tool-call 渲染形态识别（XML 嵌套 `<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`）。v1 (Qwen2.5) 用 JSON 内嵌 `<tool_call>{...}</tool_call>`；不加补丁 emit_rate=0% 误判训练失败。
+
+**Formatter `arguments` 类型修正**：[`data/formatter.py`](data/formatter.py) 把 OpenAI tool_calls 的 `arguments` 从 JSON 字符串改成 Python dict——Qwen3.5 chat template 的 `.arguments | items()` jinja 滤镜要求 mapping，传字符串会报 `TypeError: Can only get item pairs from a mapping`。v1 (Qwen2.5) 模板里 `.arguments | tojson` 不要求类型，所以 v1 没暴露这个 bug。
+
+**GGUF deploy 修复 backlog**（不在 v1.5 范围）：
+
+|选项|路径|难度|
+|---|---|---|
+|A. 等 mlx_lm.fuse 修 hybrid dequantize|上游补丁|低工作量但等|
+|B. 改走 transformers + PEFT 路径|HF bf16 base + 手动 LoRA 命名映射|中工作量，可控|
+|C. 等 ollama 0.21+ 原生支持 mlx adapter|上游路线|未知 ETA|
+|D. 自写 mlx_lm /api/generate wrapper 替代 ollama|本地实现|工作量大，但 deploy 独立性最强|
+
+短期 placeholder（FROM base）让 evals harness / agent_engine 可以无感知地走 `ollama:agent-sft-qwen-3` tag，等修复落地后 deploy.sh 一行换 Modelfile 重 create 即生效。
+
+**面试叙事可用性**：v1 数字（57% gap closure / 0.739→0.645）仍是 portfolio 主线（§9 + README §Lessons learned）；v1.5 是"新栈适配 + 训练验证"，不为 portfolio 出新数字，是工程基础设施保养。
+
+### 数字快照
+
+**训练**（[`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)）：
+
+|item|value|
+|---|---|
+|iters / batch / num_layers / lr|600 / 1 / 4 / 1e-4|
+|wall|4368 s ≈ 73 min|
+|train_loss_first / train_loss_last|0.225 / 0.000|
+|val_loss_last / val_loss_min|0.000 / 0.000|
+|peak GPU mem|8.15 GB|
+|nan_seen / diverged / returncode|false / false / 0|
+
+train loss 在 iter 40 跌到 0.010、iter 60 跌到 0.001、iter 80+ 长期 0.000（log 摘录），符合 [`§5`](#5-lora-超参与-iters)（v1 sweep 选定 lr=1e-4 + num-layers）下"足量 iter 即收敛"的预期；val_loss=0 不是 perfect 而是 4bit 量化 + 短答案 token + `mask_prompt=true` 共同制造的伪 0（实际 eval_smoke 显示 64% arg_value 准确率）。
+
+**eval_smoke**（n=50, mlx_lm 4bit + LoRA adapter, [`train/runs/main_qwen3/eval_smoke.json`](train/runs/main_qwen3/eval_smoke.json)）：
+
+|指标|值|
+|---|---|
+|`tool_call_emit_rate`|0.86|
+|`tool_name_match_rate`|0.64|
+|`arg_set_match_rate`|0.64|
+|`arg_value_match_rate`|0.64|
+|by_tool n|append_section 25 / retrieve_docs 19 / cast_vote 6|
+
+**9-run nudge_fire_rate**（3 model × 3 seed × 1 task, [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)）。实际 6 successful + 3 failed（27B `subprocess.TimeoutExpired` after 600s × 3 seeds——M4 Pro 48GB 上 qwen3.6:27b 单 multi-turn scenario LM wall 已超 default `AGENT_ENGINE_RUN_TIMEOUT=600s`；plan §S9 容错路径"单 run 失败不影响其它"覆盖，不重跑——拉长 timeout 到 1800s 跑齐需额外 ~5h，不在 v1.5 预算）：
+
+|model|seed 0|seed 1|seed 2|mean|
+|---|---|---|---|---|
+|`qwen3.5:9b`|0.30|0.40|0.50|**0.400**|
+|`agent-sft-qwen-3` (≡ base placeholder)|0.35|0.60|0.55|**0.500**|
+|`qwen3.6:27b`|failed|failed|failed|n/a|
+
+`agent-sft-qwen-3` vs `qwen3.5:9b` 数字差异（0.500 vs 0.400）**不是 SFT 信号**——两者都 FROM 同 base GGUF 同 PARAMETER；差异来自 ollama nondeterminism（temperature=1, top_k=20, top_p=0.95 默认 sampling）+ 不同 spec hash 导致 seed-derived state 分歧。把它当 "同模型双跑的方差下限" 读：1-task × 7 scenario × ~20 require_tool case = 20 sample size 下，nudge_fire_rate 真实方差 ±0.1 以上。**SFT 真实信号见 eval_smoke 的 64% arg_value_match**（绕过 ollama / GGUF 直接 mlx 推理 LoRA），那条才是这次重训的可信指标。
+
+**本批次评测落地价值**：
+1. 管线跑通——`run_baseline.py` + `evals` framework + `agent-sft-qwen-3` ollama tag 三件套在 v1.5 栈端到端工作（v1 后整库切换没把链路弄坏）。
+2. 7 scenarios × require_tool ≈ 20 个 case/run，4 个有数（example/panel/tool_chain/code_review），3 个 nan（brainstorm/debate/roundtable 没有 require_tool step）——与 v1 `eval/baselines/phase5-*` 数据形态一致，未来重做 full baseline 时直接 drop-in。
+3. 27B timeout 暴露 evals harness 的 timeout 配置应该按 model 区分——记到根 [`AGENTS.md`](../../AGENTS.md) 提到的 evals followup（v2 起处理；本 v1.5 不修）。

@@ -3,7 +3,7 @@
 覆盖：
   - 顶层 `messages` + `tools` 字段；3-message (system/user/assistant) 结构
   - assistant.content == "" + tool_calls 含 OpenAI 形态
-  - arguments 是 JSON-string，反解为含正确 prop 名的 dict
+  - arguments 是 dict（v1.5+ 切 dict 因 Qwen3.5 chat_template strict items）
   - tools 数组复用 agent_engine `_resolve_tool_defs` + `ArtifactStore.build_tool_defs`
     （per-agent role filter）
   - drop 规则：no_template (retrieve_docs fallback wrapper) + unparseable args
@@ -150,14 +150,15 @@ def test_tool_call_uses_openai_function_envelope(tmp_path):
     assert tc["function"]["name"] == "retrieve_docs"
 
 
-def test_tool_call_arguments_is_json_string_with_correct_keys(tmp_path):
+def test_tool_call_arguments_is_dict_with_correct_keys(tmp_path):
+    """v1.5+ arguments 必须是 dict —— Qwen3.5 chat_template 用
+    `tool_call.arguments|items` 严格要求 mapping。
+    """
     scen = write_scenario(tmp_path)
     tc = format_triple(make_triple(), scen)["messages"][2]["tool_calls"][0]
-    args_str = tc["function"]["arguments"]
-    assert isinstance(args_str, str)  # OpenAI/Mistral 习惯 — JSON-string
-    parsed = json.loads(args_str)
-    assert isinstance(parsed, dict)
-    assert parsed["query"] == "foo"
+    args = tc["function"]["arguments"]
+    assert isinstance(args, dict), f"arguments must be dict, got {type(args)}"
+    assert args["query"] == "foo"
 
 
 # --- tools field ----------------------------------------------------------

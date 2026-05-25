@@ -217,3 +217,27 @@ orchestrator 用 `caffeinate` + `nohup` + `set -euo pipefail`，mining 脚本天
 - v3-B HF Hub release 提前——Model Card 内容已成型，社区拿到 "7B SFT closing 57% of 32B gap" 可下载产物，portfolio 信号最强。
 - v3-A 14B 暂留——SFT 7B 已在 task_success 反超 32B，先 scale to 14B 是回避当下信号。
 - 不在本里程碑补 v2/v3 具体 plan——本期只完成 v1 收尾。
+
+## 2026-05-25 — v1.5: qwen3.5:9b 重训 + 9-run 极简复测 + GGUF deploy 暂缓
+
+### 功能
+
+- 仓库默认底座切到 qwen3.x 后，agent_sft 整套（train / eval_smoke / sweep / run_baseline / Modelfile / 6 个 fixture test）默认指向 `qwen3.5:9b` + `qwen3.6:27b`；`agent-sft-qwen-3` ollama tag 上线（v1.5 阶段为 base 复刻 placeholder）。
+- 数据：清掉 v1 全套 artifacts，新一轮 train 588 / val 155 三元组合并源（[`§10`](DECISIONS.md) 数字快照），三来源 run_id disjoint offset 保 scenario 分组完整。
+- 训练完成 600 iters；`train/runs/main_qwen3/` adapter 落盘；eval_smoke（绕过 ollama 路径直走 4bit base + LoRA mlx 推理）n=50 显示 emit=86% / arg_value_match=64%，确认 SFT 训练真实有效。
+- 9-run nudge_fire_rate baseline 跑完 6 OK + 3 failed（qwen3.6:27b 单 scenario 超 600s default timeout × 3 seeds），数字落 [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)；GGUF deploy 路径暴露 mlx→hybrid 转换缺陷，placeholder 兜底详见 [`§10`](DECISIONS.md)。
+
+### 技术
+
+- **Modelfile 简化**：`TEMPLATE` Go-template DSL（v1 ~50 行）→ ollama 0.20+ 的 `TEMPLATE {{ .Prompt }}` + `RENDERER qwen3.5` + `PARSER qwen3.5` 三行 directive（base `ollama show --modelfile qwen3.5:9b` 已确认这是 1:1 复刻的合法 short-hand）。
+- **GGUF deploy 路径 broken**：mlx_lm.fuse --dequantize → fp16 safetensors → `convert_hf_to_gguf.py` → Q4 GGUF，加载到 ollama 后 F16 和 Q4 均输出乱码（"ã加 广_MMjv 滑…"）；fp16 fused mlx 目录直接用 `mlx_lm.generate` 推理 OK。归因 mlx 对 Qwen3.5 hybrid (attention+SSM) 架构的 SSM 层 4bit→fp16 重建不一致（`ssm_alpha`/`ssm_beta`/`ssm_conv1d` 命名 / weight 重建路径有缺陷）。修复 backlog 见 [`§10`](DECISIONS.md)；短期 Modelfile 改 `FROM qwen3.5:9b` 让 evals harness 无感继续。
+- **eval_smoke parser 兼容**：`<tool_call>` 块内 Qwen2.5 是 JSON、Qwen3.5 是嵌套 XML（`<function=NAME><parameter=KEY>VALUE</parameter></function>`），需双正则；不补 emit_rate=0% 误判训练失败。
+- **formatter `arguments` 类型修正**：OpenAI tool_calls `arguments` 必须是 Python dict 不是 JSON 字符串——Qwen3.5 chat template `.arguments | items()` jinja 滤镜要求 mapping，传字符串报 `TypeError: Can only get item pairs from a mapping`。v1 (Qwen2.5) 用 `| tojson` 不要求类型，所以 v1 没暴露此 bug。
+- **OOM-driven 训练超参**：plan 估计 num_layers=16 + batch=4 装得下，实测 M4 Pro 48GB 在 Qwen3.5-9B + hybrid 算子上 fwd+bwd 装不下（即便 4bit base + grad checkpoint），最终配 batch=1 / num_layers=4 / max_seq_length=1500 / `--clear-cache-threshold 1`，单 iter ~7s，全程 73 min；train.py 增 `--max-seq-length` + `--clear-cache-threshold` CLI 透传。
+- **混源 run_id offset**：合并 v1 7B / v1 32B / v1.5 9B 三批 triples 时给每批分配 disjoint run_id offset，保 `split.py` scenario-level train/val 分组不串号。
+
+### 取舍
+
+- 数据策略偏离 plan：plan 估算 7 envelope × 60 triples 出 500+100 是用 `qwen2.5:7b` mining 系数；`qwen3.5:9b` 强 → 14 envelope 才出 49 nudge triples（强模型本身少触发 require_tool）。**没有再加 envelope 量 + 不切回 7B mining**，而合并历史三批 triples 凑 588/155——保证训练样本质量与多样性，代价是 supervision 来源混源（详见 [`§10`](DECISIONS.md)），9 runs 评测对比因 placeholder 退化为重复对照；SFT 真实信号交给 eval_smoke 验。
+- GGUF deploy 暂缓而非死磕：mlx→GGUF Qwen3.5 hybrid 兼容性问题非 1-2h 能调通，强行调会侵占 plan 总预算；改为"训练 artifact + fused fp16 mlx 模型 + placeholder ollama tag"三件套归档，把 deploy 修复独立成 backlog。
+- DECISIONS §6 被 §10 supersede 而非删除——保留历史"7B Q4_K_M + ~50 行 TEMPLATE 复刻"作为 v1 deploy 文献。

@@ -22,8 +22,10 @@ Output schema (MLX-LM `tools` data format,
       ]
     }
 
-`arguments` 用 OpenAI/Mistral 习惯的 JSON-string（[LORA.md 明示](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)
-两种都接受；Qwen2.5 chat template `arguments | tojson` dict / str 都能渲染）.
+`arguments` 用 dict（[LORA.md 两种都接受](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)；
+v1 用 JSON-string 是为兼容 Qwen2.5 chat_template，**v1.5 起换 dict**因为 Qwen3.5
+chat_template 用 `tool_call.arguments|items` 严格要求 mapping，string 会触发
+`TypeError: Can only get item pairs from a mapping.`）.
 
 `tools` 来源：scenario YAML 的 `tools:` 块（resolve via `agent_engine.scenario._resolve_tool_defs`）
 + `artifact.enabled` 时 `ArtifactStore.build_tool_defs(caller=agent_name)`（按 role 过滤
@@ -118,7 +120,7 @@ def format_triple(
                 "type": "function",
                 "function": {
                     "name": required_tool,
-                    "arguments": json.dumps(args, ensure_ascii=False),
+                    "arguments": args,
                 },
             }
         ],

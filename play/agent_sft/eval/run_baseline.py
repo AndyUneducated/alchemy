@@ -5,7 +5,7 @@
 
 用法：
     python play/agent_sft/eval/run_baseline.py                             # 全跑
-    python play/agent_sft/eval/run_baseline.py --models qwen2.5:7b         # 只跑 7b
+    python play/agent_sft/eval/run_baseline.py --models qwen3.5:9b         # 只跑 9b
     python play/agent_sft/eval/run_baseline.py --seeds 0 1 2               # 只跑 3 seed
     python play/agent_sft/eval/run_baseline.py --tasks mmlu_slice          # 只跑一个 task
     python play/agent_sft/eval/run_baseline.py --seeds 0 --tasks mmlu_slice --dry-run  # 只打印不执行
@@ -26,7 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PLAY_DIR = HERE.parent.parent
 
-DEFAULT_MODELS = ["qwen2.5:7b", "qwen2.5:32b"]  # ollama 上 qwen2.5:Nb 即 instruct（无 -instruct 后缀）
+DEFAULT_MODELS = ["qwen3.5:9b", "qwen3.6:27b"]  # v1.5 起切到 qwen3.x（DECISIONS §10）
 DEFAULT_SEEDS = list(range(10))
 DEFAULT_TASKS = ["nudge_fire_rate", "agent_traj", "bfcl_slice", "mmlu_slice"]
 

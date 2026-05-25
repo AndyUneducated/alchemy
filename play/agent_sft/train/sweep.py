@@ -3,8 +3,8 @@
 复用 [`play/sft_hello/sweep.py`](../../sft_hello/sweep.py) 的"每个 sweep 只动一个旋钮、
 跑完出含浅显解读的 markdown 表"模具，但：
 
-  - 数据：[`data/triples/train_7b_1k.jsonl`](../data/triples/) (DECISIONS §4 schema)
-  - 底座：mlx-community/Qwen2.5-7B-Instruct-4bit（QLoRA）
+  - 数据：[`data/triples/train_qwen3.jsonl`](../data/triples/) (DECISIONS §4 schema; v1.5 起切到 qwen3 三元组)
+  - 底座：mlx-community/Qwen3.5-9B-4bit（QLoRA; v1.5 起底座切到 qwen3.x，详见 DECISIONS §10）
   - 训练：subprocess 调 [`train.py`](train.py)（封装好 mlx_lm.lora）
   - eval：[`eval_smoke.py`](eval_smoke.py) 4 项 tool-call 指标，nudge-fire-rate 的 fast proxy
   - sweep 维度（4 dim × 3-4 值 = 16 runs）：
@@ -32,11 +32,11 @@ PLAY_DIR = HERE.parent.parent
 SWEEPS_DIR = HERE / "runs" / "sweeps"
 DEFAULT_CONFIG = HERE / "lora_config.yaml"
 
-MODEL_ID = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-TRAIN_FILE = "train_7b_1k.jsonl"   # 766 train sample
-VALID_FILE = "val_7b_1k.jsonl"     # 196 val sample
+MODEL_ID = "mlx-community/Qwen3.5-9B-4bit"
+TRAIN_FILE = "train_qwen3.jsonl"   # v1.5: 500 train sample (v1 用 train_7b_1k.jsonl 766)
+VALID_FILE = "val_qwen3.jsonl"     # v1.5: 100 val sample (v1 用 val_7b_1k.jsonl 196)
 
-# 766 sample / batch 4 ≈ 192 iter/epoch；BASE iters=200 ≈ 1 epoch
+# 500 sample / batch 4 = 125 iter/epoch；v1.5 BASE iters=400 ≈ 3.2 epoch (与 v1 sweep iters=600 同强度)
 # （实测 iters=200 已让 train_loss 0.28→0.000——schema 信号高度可压缩；更长 iters
 # 主要是 overfit 观察用）。
 BASE = {
@@ -283,8 +283,8 @@ def write_report(all_results: dict[str, list[dict]]) -> None:
         "其余保持基线值不变（控制变量法 controlled-variable）。\n"
     )
     lines.append(
-        "训练数据 `train_7b_1k.jsonl` (766 sample / 196 val)，schema 见 [`DECISIONS §4`](../../../DECISIONS.md)；"
-        "底座 `mlx-community/Qwen2.5-7B-Instruct-4bit` (QLoRA)；评估走 [`eval_smoke.py`](../../eval_smoke.py)，"
+        f"训练数据 `{TRAIN_FILE}` / `{VALID_FILE}`，schema 见 [`DECISIONS §4`](../../../DECISIONS.md)；"
+        f"底座 `{MODEL_ID}` (QLoRA)；评估走 [`eval_smoke.py`](../../eval_smoke.py)，"
         "解析模型输出里 `<tool_call>` 块与 ground-truth 比对.\n"
     )
 

@@ -7,7 +7,7 @@ format 漂移（重命名 key / 改嵌套 / 调 role 顺序 / arguments 形态�
 
 本测把 1 个 deterministic triple → format_triple → 完整 `==` 比对 inline golden.
 覆盖 [DECISIONS §4](../DECISIONS.md) 的 schema 决策 (`messages` + `tools` + 顶层
-`assistant.tool_calls` + `arguments` 是 JSON-string).
+`assistant.tool_calls` + `arguments` 是 dict, v1.5 起为 Qwen3.5 chat_template strict items 而切).
 
 不依赖真 scenarios/，inline 一份最小 YAML 控制 tools[] 输出确定性.
 """
@@ -85,9 +85,11 @@ EXPECTED_MESSAGES = [
                 "type": "function",
                 "function": {
                     "name": "append_section",
-                    # arguments JSON-string，prop 名 = ArtifactStore.append_section schema:
+                    # v1.5+: arguments 是 dict（v1 是 JSON-string，Qwen3.5 chat_template
+                    # 改用 `tool_call.arguments|items` 严格 mapping 故切）；
+                    # prop 名 = ArtifactStore.append_section schema:
                     # `name` + `entry`（不是 `section_name` / `content`，那是 write_section）
-                    "arguments": '{"name": "调研笔记", "entry": "- 一句话要点"}',
+                    "arguments": {"name": "调研笔记", "entry": "- 一句话要点"},
                 },
             }
         ],
@@ -143,15 +145,15 @@ def test_formatter_chat_sample_golden_snapshot(tmp_path):
     )
 
 
-def test_formatter_arguments_is_json_string_not_dict(tmp_path):
-    """钉死 [DECISIONS §4](../DECISIONS.md)：arguments 必须是 JSON-encoded string，
-    不是 dict—— OpenAI/Mistral 路径要 str；Qwen2.5 chat template 两者都 ok 但
-    train data 形态约定走 str."""
+def test_formatter_arguments_is_dict_not_json_string(tmp_path):
+    """v1.5+: arguments 必须是 dict（不是 JSON-string）—— Qwen3.5 chat_template
+    用 `tool_call.arguments|items` 严格要求 mapping；string 触发
+    `TypeError: Can only get item pairs from a mapping.`。详见 [DECISIONS §11](../DECISIONS.md)。
+    v1 时代是 JSON-string（兼容 Qwen2.5），supersede 为 dict at v1.5."""
     scen = _write_scenario(tmp_path)
     sample = format_triple(_golden_triple(), scen)
     args = sample["messages"][-1]["tool_calls"][0]["function"]["arguments"]
-    assert isinstance(args, str), f"arguments must be JSON-string, got {type(args)}"
-    assert isinstance(json.loads(args), dict)
+    assert isinstance(args, dict), f"arguments must be dict, got {type(args)}"
 
 
 def test_formatter_assistant_content_is_empty_string_not_none(tmp_path):

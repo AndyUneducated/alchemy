@@ -78,7 +78,7 @@ def test_pipeline_envelope_to_chat_samples(envelope):
     tc = asst["tool_calls"][0]
     assert tc["type"] == "function"
     assert tc["function"]["name"]  # required_tool not empty
-    args = json.loads(tc["function"]["arguments"])  # 必须是 valid JSON
+    args = tc["function"]["arguments"]  # v1.5+ 是 dict (Qwen3.5 chat_template strict items)
     assert isinstance(args, dict)
 
     assert s["tools"], "tools list must not be empty (agent visibility)"

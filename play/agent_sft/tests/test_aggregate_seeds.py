@@ -30,11 +30,11 @@ from aggregate_seeds import (
 # ---------- _strip_seed_suffix ----------
 
 def test_strip_seed_suffix_with_seed():
-    assert _strip_seed_suffix("ollama:qwen2.5:7b@seed=42") == "ollama:qwen2.5:7b"
+    assert _strip_seed_suffix("ollama:qwen3.5:9b@seed=42") == "ollama:qwen3.5:9b"
 
 
 def test_strip_seed_suffix_without_seed_unchanged():
-    assert _strip_seed_suffix("ollama:qwen2.5:7b") == "ollama:qwen2.5:7b"
+    assert _strip_seed_suffix("ollama:qwen3.5:9b") == "ollama:qwen3.5:9b"
 
 
 def test_strip_seed_suffix_with_zero_seed():

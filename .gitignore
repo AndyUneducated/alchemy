@@ -18,11 +18,15 @@ play/qa_assets/vdb/
 # Evaluation run artifacts (per-run result/samples + cross-run index) — regenerable from `python -m evals score/run`.
 play/evals/runs/
 
-# agent_sft Phase 2 mined data — local smoke / scratch artifacts only; final 1k batches are committed below.
+# agent_sft Phase 2 mined data — local smoke / scratch artifacts only; final 1k / v1.5 batches committed below.
 play/agent_sft/data/triples/runs/
 play/agent_sft/data/triples/*.jsonl
-# But keep the final Phase 2 deliverables in repo (250 envelopes per model + derived jsonl):
+# Keep final Phase 2 (v1) deliverables: 250 envelopes per model + derived jsonl
 !play/agent_sft/data/triples/*_1k.jsonl
+# Keep v1.5 (qwen3.5:9b base, DECISIONS §10) train / val / merged triples
+!play/agent_sft/data/triples/train_qwen3.jsonl
+!play/agent_sft/data/triples/val_qwen3.jsonl
+!play/agent_sft/data/triples/triples_qwen3.jsonl
 
 # agent_sft Phase 3 training artifacts policy (DECISIONS §5):
 # - Smoke run (throwaway): ignored entirely.
@@ -41,6 +45,18 @@ play/agent_sft/train/runs/sweeps/**/*.safetensors
 # useful for post-mortem of train + eval timing / per-iter loss curve / divergence checks.
 !play/agent_sft/train/runs/sweeps/sweep.log
 !play/agent_sft/train/runs/sweeps/**/*.log
+
+# agent_sft v1.5 (qwen3.5:9b base; DECISIONS §10) training artifacts:
+# - smoke_qwen3/ (throwaway 10-iter probe): ignore entirely.
+# - main_qwen3/.data/ (mlx_lm internal format cache): ignore.
+# - main_qwen3/0000NNN_adapters.safetensors (intermediate checkpoints every 100 iter): ignore.
+# - main_qwen3/adapters.safetensors (final adapter): committed — Phase 4 fuse entry point on fresh checkout.
+# - main_qwen3/{adapter_config.json,train_metrics.json,eval_smoke.json,eval_smoke_samples.jsonl,train.log}: committed.
+play/agent_sft/train/runs/smoke_qwen3/
+play/agent_sft/train/runs/main_qwen3/.data/
+play/agent_sft/train/runs/main_qwen3/0000*_adapters.safetensors
+!play/agent_sft/train/runs/main_qwen3/adapters.safetensors
+!play/agent_sft/train/runs/main_qwen3/train.log
 
 # agent_sft Phase 4 deploy artifacts: ~18 GB intermediates (fused-mlx-fp16 + f16 gguf + q4 gguf)
 # already covered by the top-level `build/` rule, listed explicitly for grep-ability.

@@ -10,7 +10,7 @@
 
 行业对位（详见 [`README.md`](README.md)）：
   - `--mask-prompt` 默认开（assistant-only loss），与 [TRL Qwen2.5 训练 template](https://github.com/huggingface/trl/pull/5522) 同思想；
-  - 4-bit 底座 (mlx-community/Qwen2.5-7B-Instruct-4bit) → 自动走 QLoRA；
+  - 4-bit 底座 (mlx-community/Qwen3.5-9B-4bit) → 自动走 QLoRA；
   - tools schema (DECISIONS §4) 由 mlx_lm.lora 内部 `apply_chat_template` 渲染.
 
 用法：
@@ -36,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 PLAY_DIR = HERE.parent.parent
 DEFAULT_DATA_DIR = HERE.parent / "data" / "triples"
 DEFAULT_CONFIG = HERE / "lora_config.yaml"
-DEFAULT_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+DEFAULT_MODEL = "mlx-community/Qwen3.5-9B-4bit"
 
 # 与 sft_hello/sweep.py 保持同样 regex（mlx_lm.lora log 格式稳定）.
 _LOSS_RE = re.compile(r"Iter\s+(\d+):\s+Train loss\s+([\d.]+)")
@@ -96,6 +96,10 @@ def build_cmd(args: argparse.Namespace, data_dir: Path) -> list[str]:
         cmd.extend(["--steps-per-report", str(args.steps_per_report)])
     if args.val_batches:
         cmd.extend(["--val-batches", str(args.val_batches)])
+    if args.max_seq_length:
+        cmd.extend(["--max-seq-length", str(args.max_seq_length)])
+    if args.clear_cache_threshold is not None:
+        cmd.extend(["--clear-cache-threshold", str(args.clear_cache_threshold)])
     return cmd
 
 
@@ -126,10 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"HF / local model path (default: {DEFAULT_MODEL})")
     p.add_argument("--data", type=Path, default=DEFAULT_DATA_DIR,
                    help=f"directory containing train/val jsonl (default: {DEFAULT_DATA_DIR})")
-    p.add_argument("--train-file", default="train_7b_1k.jsonl",
-                   help="train jsonl filename inside --data (default: train_7b_1k.jsonl)")
-    p.add_argument("--valid-file", default="val_7b_1k.jsonl",
-                   help="valid jsonl filename inside --data (default: val_7b_1k.jsonl)")
+    p.add_argument("--train-file", default="train_qwen3.jsonl",
+                   help="train jsonl filename inside --data (default: train_qwen3.jsonl; v1 用 train_7b_1k.jsonl)")
+    p.add_argument("--valid-file", default="val_qwen3.jsonl",
+                   help="valid jsonl filename inside --data (default: val_qwen3.jsonl; v1 用 val_7b_1k.jsonl)")
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
                    help=f"lora YAML config (default: {DEFAULT_CONFIG})")
     p.add_argument("--adapter-path", type=Path, required=True,
@@ -138,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="total optimizer steps (766 sample / batch 4 ≈ 192 step/epoch; default 600 ≈ 3 epoch)")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--num-layers", type=int, default=16,
-                   help="number of top transformer blocks to attach LoRA on (Qwen2.5-7B 共 28 层；default 16)")
+                   help="number of top transformer blocks to attach LoRA on (Qwen3.5-9B 共 36 层；default 16)")
     p.add_argument("--learning-rate", type=float, default=1e-4)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--no-mask-prompt", dest="mask_prompt", action="store_false",
@@ -152,6 +156,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="print train loss every N steps (default 20)")
     p.add_argument("--val-batches", type=int, default=25,
                    help="number of val batches per eval (default 25)")
+    p.add_argument("--max-seq-length", type=int, default=None,
+                   help="max sequence length for samples; longer get truncated. "
+                        "v1.5+ qwen3.5:9b on M4 Pro 48GB 强烈建议 1500 (sample mean ~1100 token), "
+                        "否则 KV cache 撑爆 mlx metal buffer")
+    p.add_argument("--clear-cache-threshold", type=int, default=None,
+                   help="mlx allocator cache clear threshold (MB)；激进 =1 (每 step 清) "
+                        "可缓解 9B QLoRA val→train 切换间 OOM (mlx 默认 ~1000 MB 太大)")
     p.add_argument("--dry-run", action="store_true",
                    help="print the command and exit")
     return p

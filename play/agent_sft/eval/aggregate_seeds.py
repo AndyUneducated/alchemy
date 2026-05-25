@@ -34,7 +34,7 @@ N_RUNS_COL = ("__n_runs__", "")
 
 
 def _strip_seed_suffix(model_label: str) -> str:
-    """`ollama:qwen2.5:7b@seed=42` → `ollama:qwen2.5:7b`（group key）."""
+    """`ollama:qwen3.5:9b@seed=42` → `ollama:qwen3.5:9b`（group key）."""
     return SEED_SUFFIX_RE.sub("", model_label)
 
 

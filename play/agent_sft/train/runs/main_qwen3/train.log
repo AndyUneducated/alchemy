@@ -1,0 +1,135 @@
+Loading configuration file /Users/anning/Documents/ai-workshops/play/agent_sft/train/lora_config.yaml
+Loading pretrained model
+Loading datasets
+Training
+Trainable parameters: 0.005% (0.492M/8953.802M)
+Starting training..., iters: 600
+Iter 1: Val loss 0.633, Val took 11.549s
+Iter 20: Train loss 0.225, Learning Rate 1.000e-04, It/sec 0.097, Tokens/sec 4.189, Trained Tokens 865, Peak mem 8.009 GB
+Iter 40: Train loss 0.010, Learning Rate 1.000e-04, It/sec 0.131, Tokens/sec 6.125, Trained Tokens 1798, Peak mem 8.078 GB
+Iter 60: Val loss 0.000, Val took 11.565s
+Iter 60: Train loss 0.001, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.390, Trained Tokens 2679, Peak mem 8.078 GB
+Iter 80: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 7.063, Trained Tokens 3651, Peak mem 8.078 GB
+Iter 100: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.147, Tokens/sec 6.714, Trained Tokens 4566, Peak mem 8.078 GB
+Iter 100: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000100_adapters.safetensors.
+Iter 120: Val loss 0.000, Val took 11.486s
+Iter 120: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.822, Trained Tokens 5509, Peak mem 8.080 GB
+Iter 140: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.656, Trained Tokens 6427, Peak mem 8.080 GB
+Iter 160: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.868, Trained Tokens 7376, Peak mem 8.080 GB
+Iter 180: Val loss 0.000, Val took 11.317s
+Iter 180: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 7.408, Trained Tokens 8399, Peak mem 8.080 GB
+Iter 200: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.144, Tokens/sec 6.754, Trained Tokens 9337, Peak mem 8.080 GB
+Iter 200: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000200_adapters.safetensors.
+Iter 220: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.130, Tokens/sec 5.981, Trained Tokens 10254, Peak mem 8.150 GB
+Iter 240: Val loss 0.001, Val took 11.512s
+Iter 240: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.144, Tokens/sec 6.721, Trained Tokens 11190, Peak mem 8.150 GB
+Iter 260: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.049, Trained Tokens 12024, Peak mem 8.150 GB
+Iter 280: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.146, Tokens/sec 6.453, Trained Tokens 12907, Peak mem 8.150 GB
+Iter 300: Val loss 0.000, Val took 11.514s
+Iter 300: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.146, Tokens/sec 6.022, Trained Tokens 13733, Peak mem 8.150 GB
+Iter 300: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000300_adapters.safetensors.
+Iter 320: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.601, Trained Tokens 14642, Peak mem 8.150 GB
+Iter 340: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.872, Trained Tokens 15591, Peak mem 8.150 GB
+Iter 360: Val loss 0.001, Val took 11.501s
+Iter 360: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.144, Tokens/sec 7.037, Trained Tokens 16571, Peak mem 8.150 GB
+Iter 380: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.146, Tokens/sec 6.422, Trained Tokens 17451, Peak mem 8.150 GB
+Iter 400: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.144, Tokens/sec 7.013, Trained Tokens 18424, Peak mem 8.150 GB
+Iter 400: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000400_adapters.safetensors.
+Iter 420: Val loss 0.000, Val took 11.508s
+Iter 420: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.921, Trained Tokens 19377, Peak mem 8.150 GB
+Iter 440: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.144, Tokens/sec 6.363, Trained Tokens 20258, Peak mem 8.150 GB
+Iter 460: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 7.152, Trained Tokens 21245, Peak mem 8.150 GB
+Iter 480: Val loss 0.000, Val took 11.506s
+Iter 480: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.146, Tokens/sec 6.536, Trained Tokens 22138, Peak mem 8.150 GB
+Iter 500: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.570, Trained Tokens 23045, Peak mem 8.150 GB
+Iter 500: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000500_adapters.safetensors.
+Iter 520: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.772, Trained Tokens 23976, Peak mem 8.150 GB
+Iter 540: Val loss 0.000, Val took 11.238s
+Iter 540: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.148, Tokens/sec 6.410, Trained Tokens 24845, Peak mem 8.150 GB
+Iter 560: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.147, Tokens/sec 6.738, Trained Tokens 25764, Peak mem 8.150 GB
+Iter 580: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.458, Trained Tokens 26655, Peak mem 8.150 GB
+Iter 600: Val loss 0.000, Val took 11.500s
+Iter 600: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.145, Tokens/sec 6.590, Trained Tokens 27564, Peak mem 8.150 GB
+Iter 600: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/0000600_adapters.safetensors.
+Saved final weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3/adapters.safetensors.
+
+
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]
+Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 18739.78it/s]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.95s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.87s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.88s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.98s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.93s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.87s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.81s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.86s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.87s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.87s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.81s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.81s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.85s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.83s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.83s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.90s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.85s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.91s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.87s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.81s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.87s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.88s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.90s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.84s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.83s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.87s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.90s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.90s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.90s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.86s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.81s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.86s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.88s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.89s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.88s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.79s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.79s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.79s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.82s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.81s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:08,  2.90s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.90s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.86s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.87s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.87s/it]

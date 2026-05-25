@@ -34,14 +34,27 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 PLAY_DIR = HERE.parent.parent
 DEFAULT_VALID_FILE = HERE.parent / "data" / "triples" / "val_7b_1k.jsonl"
-DEFAULT_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+DEFAULT_MODEL = "mlx-community/Qwen3.5-9B-4bit"
 
 # Qwen2.5 native tool-call 渲染形态（chat template `tool_call.arguments | tojson`）
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 
+# Qwen3.5 native tool-call 渲染形态（XML 嵌套，arguments 是 dict 而非 JSON 字符串）：
+#   <tool_call>
+#   <function=NAME>
+#   <parameter=KEY>VALUE</parameter>
+#   ...
+#   </function>
+#   </tool_call>
+_TOOL_CALL_XML_RE = re.compile(
+    r"<tool_call>\s*<function=([^>\s]+)>(.*?)</function>\s*</tool_call>",
+    re.DOTALL,
+)
+_PARAM_RE = re.compile(r"<parameter=([^>\s]+)>(.*?)</parameter>", re.DOTALL)
+
 
 def parse_tool_calls(text: str) -> list[dict[str, Any]]:
-    """从模型输出抽 `<tool_call>{...}</tool_call>` JSON list；失败的 block 跳过."""
+    """抽 tool_call list；兼容 Qwen2.5 JSON 形态与 Qwen3.5 XML 嵌套形态."""
     calls: list[dict[str, Any]] = []
     for m in _TOOL_CALL_RE.finditer(text):
         try:
@@ -51,6 +64,13 @@ def parse_tool_calls(text: str) -> list[dict[str, Any]]:
         if not isinstance(obj, dict) or "name" not in obj:
             continue
         calls.append(obj)
+    for m in _TOOL_CALL_XML_RE.finditer(text):
+        name = m.group(1)
+        body = m.group(2)
+        args: dict[str, Any] = {}
+        for pm in _PARAM_RE.finditer(body):
+            args[pm.group(1)] = pm.group(2).strip()
+        calls.append({"name": name, "arguments": args})
     return calls
 
 

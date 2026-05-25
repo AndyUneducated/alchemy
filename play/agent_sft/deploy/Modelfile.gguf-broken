@@ -1,0 +1,19 @@
+# Modelfile for agent-sft-qwen-3 (v1.5: qwen3.5:9b base)
+#
+# 与 `ollama show --modelfile qwen3.5:9b` 1:1 复刻，仅改 FROM 指向 v1.5 SFT 后的
+# Q4_K_M GGUF。ollama 0.20+ 用 RENDERER + PARSER directive 由 ollama 内部按 qwen3.5
+# family 渲染 chat & 解析 tool_call —— 无需手写 Go-template DSL（v1 的 ~50 行
+# TEMPLATE block 不再需要）。
+#
+# 量化等级 Q4_K_M 与 qwen3.5:9b 完全一致（详见 ../DECISIONS.md §10；§6 supersede）。
+# LICENSE 块由 base model 继承，不在此重写。
+
+FROM ./build/agent-sft-qwen-3-q4.gguf
+
+TEMPLATE {{ .Prompt }}
+RENDERER qwen3.5
+PARSER qwen3.5
+PARAMETER presence_penalty 1.5
+PARAMETER temperature 1
+PARAMETER top_k 20
+PARAMETER top_p 0.95
