@@ -1,0 +1,38 @@
+{
+  "model": "mlx-community/Qwen3.5-9B-bf16",
+  "adapter_path": "train/runs/main_qwen3_bf16_clean",
+  "base_only": false,
+  "valid_file": "data/triples/val_qwen3_clean.jsonl",
+  "n_samples": 50,
+  "max_tokens": 160,
+  "seed": 0,
+  "elapsed_s": 534.8,
+  "n": 50,
+  "tool_call_emit_rate": 0.56,
+  "tool_name_match_rate": 0.36,
+  "arg_set_match_rate": 0.36,
+  "arg_value_match_rate": 0.36,
+  "by_tool": {
+    "append_section": {
+      "tool_call_emit_rate": 0.39285714285714285,
+      "tool_name_match_rate": 0.2857142857142857,
+      "arg_set_match_rate": 0.2857142857142857,
+      "arg_value_match_rate": 0.2857142857142857,
+      "n": 28
+    },
+    "retrieve_docs": {
+      "tool_call_emit_rate": 1.0,
+      "tool_name_match_rate": 1.0,
+      "arg_set_match_rate": 1.0,
+      "arg_value_match_rate": 1.0,
+      "n": 7
+    },
+    "cast_vote": {
+      "tool_call_emit_rate": 0.6666666666666666,
+      "tool_name_match_rate": 0.2,
+      "arg_set_match_rate": 0.2,
+      "arg_value_match_rate": 0.2,
+      "n": 15
+    }
+  }
+}

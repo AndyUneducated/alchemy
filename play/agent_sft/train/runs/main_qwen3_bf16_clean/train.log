@@ -1,0 +1,179 @@
+Loading configuration file /Users/anning/Documents/ai-workshops/play/agent_sft/train/lora_config.yaml
+Loading pretrained model
+Loading datasets
+Training
+Trainable parameters: 0.005% (0.492M/8953.802M)
+Starting training..., iters: 600
+Iter 1: Val loss 0.678, Val took 22.258s
+Iter 20: Train loss 0.247, Learning Rate 1.000e-04, It/sec 0.099, Tokens/sec 4.895, Trained Tokens 991, Peak mem 21.216 GB
+Iter 40: Train loss 0.021, Learning Rate 1.000e-04, It/sec 0.141, Tokens/sec 6.813, Trained Tokens 1959, Peak mem 21.216 GB
+Iter 60: Val loss 0.002, Val took 21.326s
+Iter 60: Train loss 0.007, Learning Rate 1.000e-04, It/sec 0.146, Tokens/sec 7.121, Trained Tokens 2935, Peak mem 21.216 GB
+Iter 80: Train loss 0.002, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 7.795, Trained Tokens 3896, Peak mem 21.216 GB
+Iter 100: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.140, Tokens/sec 6.582, Trained Tokens 4835, Peak mem 21.287 GB
+Iter 100: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000100_adapters.safetensors.
+Iter 120: Val loss 0.000, Val took 20.593s
+Iter 120: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.166, Tokens/sec 8.186, Trained Tokens 5824, Peak mem 21.287 GB
+Iter 140: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.158, Tokens/sec 7.063, Trained Tokens 6717, Peak mem 21.287 GB
+Iter 160: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.165, Tokens/sec 7.945, Trained Tokens 7678, Peak mem 21.287 GB
+Iter 180: Val loss 0.000, Val took 21.779s
+Iter 180: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.163, Tokens/sec 8.121, Trained Tokens 8672, Peak mem 21.287 GB
+Iter 200: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 7.987, Trained Tokens 9660, Peak mem 21.287 GB
+Iter 200: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000200_adapters.safetensors.
+Iter 220: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.163, Tokens/sec 7.781, Trained Tokens 10613, Peak mem 21.289 GB
+Iter 240: Val loss 0.000, Val took 20.859s
+Iter 240: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.571, Trained Tokens 11552, Peak mem 21.289 GB
+Iter 260: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 7.926, Trained Tokens 12529, Peak mem 21.289 GB
+Iter 280: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.163, Tokens/sec 8.206, Trained Tokens 13536, Peak mem 21.289 GB
+Iter 300: Val loss 0.000, Val took 22.365s
+Iter 300: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.536, Trained Tokens 14474, Peak mem 21.289 GB
+Iter 300: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000300_adapters.safetensors.
+Iter 320: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 8.431, Trained Tokens 15516, Peak mem 21.289 GB
+Iter 340: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.159, Tokens/sec 7.672, Trained Tokens 16478, Peak mem 21.289 GB
+Iter 360: Val loss 0.000, Val took 21.449s
+Iter 360: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 8.227, Trained Tokens 17494, Peak mem 21.289 GB
+Iter 380: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.136, Tokens/sec 6.075, Trained Tokens 18386, Peak mem 21.362 GB
+Iter 400: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.158, Tokens/sec 7.570, Trained Tokens 19343, Peak mem 21.362 GB
+Iter 400: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000400_adapters.safetensors.
+Iter 420: Val loss 0.000, Val took 20.999s
+Iter 420: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.157, Tokens/sec 7.708, Trained Tokens 20325, Peak mem 21.362 GB
+Iter 440: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.160, Tokens/sec 7.384, Trained Tokens 21250, Peak mem 21.362 GB
+Iter 460: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.165, Tokens/sec 8.333, Trained Tokens 22263, Peak mem 21.362 GB
+Iter 480: Val loss 0.000, Val took 21.776s
+Iter 480: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.734, Trained Tokens 23225, Peak mem 21.362 GB
+Iter 500: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.874, Trained Tokens 24205, Peak mem 21.362 GB
+Iter 500: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000500_adapters.safetensors.
+Iter 520: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.162, Tokens/sec 7.210, Trained Tokens 25093, Peak mem 21.362 GB
+Iter 540: Val loss 0.000, Val took 21.660s
+Iter 540: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.453, Trained Tokens 26021, Peak mem 21.362 GB
+Iter 560: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.166, Tokens/sec 8.580, Trained Tokens 27055, Peak mem 21.362 GB
+Iter 580: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.165, Tokens/sec 7.654, Trained Tokens 27981, Peak mem 21.362 GB
+Iter 600: Val loss 0.000, Val took 22.381s
+Iter 600: Train loss 0.000, Learning Rate 1.000e-04, It/sec 0.161, Tokens/sec 7.640, Trained Tokens 28933, Peak mem 21.362 GB
+Iter 600: Saved adapter weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors and /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/0000600_adapters.safetensors.
+Saved final weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/main_qwen3_bf16_clean/adapters.safetensors.
+
+
+Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]
+Fetching 13 files: 100%|██████████| 13/13 [00:00<00:00, 36742.56it/s]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:03<00:22,  3.27s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:17,  2.92s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:14,  2.80s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:11<00:10,  2.69s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:08,  2.68s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.68s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:19<00:02,  2.82s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.77s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.78s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:17,  2.52s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.60s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:14,  2.90s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:11<00:11,  2.80s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:08,  2.70s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.64s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.65s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.61s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.67s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:17,  2.52s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.52s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:07<00:12,  2.52s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.58s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:12<00:07,  2.61s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:15<00:05,  2.58s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.61s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.58s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.57s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.66s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:17,  2.93s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:14,  2.80s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.69s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:07,  2.63s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.64s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.60s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.77s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.72s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.66s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.66s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:07<00:13,  2.66s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.66s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:07,  2.61s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:15<00:05,  2.58s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.61s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.58s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.61s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.66s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:17,  2.93s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:15,  3.01s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:11<00:11,  2.87s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:14<00:08,  2.75s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.67s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:19<00:02,  2.67s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.81s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.80s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.66s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.66s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:07<00:13,  2.66s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.60s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:07,  2.62s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:15<00:05,  2.59s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.76s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.73s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.68s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.66s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.66s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:07<00:13,  2.66s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.66s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:07,  2.66s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:15<00:05,  2.61s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:18<00:02,  2.58s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.61s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:20<00:00,  2.62s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:17,  2.52s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:15,  2.52s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:07<00:12,  2.52s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.57s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:08,  2.77s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.73s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:19<00:02,  2.86s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.79s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.72s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:02<00:18,  2.63s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:17,  2.97s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:14,  2.82s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.69s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:13<00:07,  2.62s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.82s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:19<00:02,  2.71s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.64s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:21<00:00,  2.71s/it]
+
+Calculating loss...:   0%|          | 0/8 [00:00<?, ?it/s]
+Calculating loss...:  12%|█▎        | 1/8 [00:03<00:21,  3.07s/it]
+Calculating loss...:  25%|██▌       | 2/8 [00:05<00:16,  2.81s/it]
+Calculating loss...:  38%|███▊      | 3/8 [00:08<00:13,  2.73s/it]
+Calculating loss...:  50%|█████     | 4/8 [00:10<00:10,  2.63s/it]
+Calculating loss...:  62%|██████▎   | 5/8 [00:14<00:08,  2.84s/it]
+Calculating loss...:  75%|███████▌  | 6/8 [00:16<00:05,  2.77s/it]
+Calculating loss...:  88%|████████▊ | 7/8 [00:19<00:02,  2.68s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.85s/it]
+Calculating loss...: 100%|██████████| 8/8 [00:22<00:00,  2.80s/it]

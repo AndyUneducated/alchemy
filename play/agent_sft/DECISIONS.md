@@ -326,7 +326,7 @@ Phase 5.A 跑完 3 model × 10 seed × 4 task = 120 runs（119 successful，1 �
 
 ## 10. v1.5: qwen3.5:9b base 重训 + 9-run 极简复测 + GGUF deploy 暂缓
 
-- **Status**: accepted
+- **Status**: superseded by §11 (clean-data + bf16 retrain + held-out story eval)
 - **Date**: 2026-05-25
 
 ### Context
@@ -417,3 +417,59 @@ train loss 在 iter 40 跌到 0.010、iter 60 跌到 0.001、iter 80+ 长期 0.0
 1. 管线跑通——`run_baseline.py` + `evals` framework + `agent-sft-qwen-3` ollama tag 三件套在 v1.5 栈端到端工作（v1 后整库切换没把链路弄坏）。
 2. 7 scenarios × require_tool ≈ 20 个 case/run，4 个有数（example/panel/tool_chain/code_review），3 个 nan（brainstorm/debate/roundtable 没有 require_tool step）——与 v1 `eval/baselines/phase5-*` 数据形态一致，未来重做 full baseline 时直接 drop-in。
 3. 27B timeout 暴露 evals harness 的 timeout 配置应该按 model 区分——记到根 [`AGENTS.md`](../../AGENTS.md) 提到的 evals followup（v2 起处理；本 v1.5 不修）。
+
+## 11. v1.6: clean-data + bf16 重训 + held-out story eval（GGUF 仍阻塞）
+
+- **Status**: accepted
+- **Date**: 2026-05-26
+
+### Context
+
+v1.5 虽然跑通了“训练 + 评测 + placeholder deploy”，但有两个硬缺口：
+
+|问题|v1.5 状态|影响|
+|---|---|---|
+|数据集质量|`train_qwen3/val_qwen3` 来自混源直拼，重复较多，且有小量 train/val overlap|故事不够“最终版干净”|
+|GGUF deploy|4bit base + `mlx_lm.fuse --dequantize` 路径输出乱码|`agent-sft-qwen-3` 只能是 base placeholder|
+
+因此 v1.6 目标拆成三件：①先把数据边界做干净；②用 bf16 base 重训验证“不是 4bit dequantize 的锅”；③用 in-distribution vs held-out 评测口径讲清泛化故事。
+
+### Options considered
+
+|选项|数据处理|训练底座|评测口径|预期|
+|---|---|---|---|---|
+|A. 直接沿用 v1.5 数据继续训|不清洗|4bit|单一 nudge_fire_rate|快，但“最终版”说服力弱|
+|B. clean 数据 + 4bit 重训|去重/去泄漏|4bit|in-dist vs held-out|数据故事变好，但 deploy 风险仍在|
+|**C.（选）clean 数据 + bf16 重训**|去重/去泄漏 + 场景边界|bf16|in-dist vs held-out|同时验证数据与 deploy 两条主线|
+
+### Decision
+
+采纳 C，具体落地如下：
+
+|模块|决策|结果|
+|---|---|---|
+|数据清洗|从 [`data/triples/triples_qwen3_merged.jsonl`](data/triples/triples_qwen3_merged.jsonl) 重建 clean 集；仅保留 `tool_chain`/`code_review` 进训练；按 supervision key 去重；按 scenario+run_id split；输出 [`triples_qwen3_clean.jsonl`](data/triples/triples_qwen3_clean.jsonl)、[`train_qwen3_clean.jsonl`](data/triples/train_qwen3_clean.jsonl)、[`val_qwen3_clean.jsonl`](data/triples/val_qwen3_clean.jsonl)、[`qwen3_clean_report.json`](data/triples/qwen3_clean_report.json)|clean=1547，train raw=1276，val raw=271，train/val overlap=0|
+|模板补全|clean raw 中 `retrieve_docs` 有 175/44 条 instruction 缺字面调用模板，按“最小可解析”补 `retrieve_docs(query=\"...\")` 后再 formatter|formatted train=1276，val=271，drop=0，`arguments` 100% dict|
+|训练底座|base 切 [`mlx-community/Qwen3.5-9B-bf16`](https://huggingface.co/mlx-community/Qwen3.5-9B-bf16)|绕开 4bit→fp16 dequantize 路径|
+|smoke/probe|smoke 首轮 `max_seq=1000` 出现 train tokens=0 + NaN；改 `max_seq=1500` 后稳定。40-iter probe 在 `num_layers=4` 稳定|确定主训可用 `batch=1,num_layers=4,max_seq=1500,grad_checkpoint,clear_cache=1`|
+|主训|[`train/runs/main_qwen3_bf16_clean`](train/runs/main_qwen3_bf16_clean)|600 iters，rc=0，nan=false，train 0.247→0.000，val_last=0.000，wall=4115s，peak mem≈21.36GB|
+|mlx 评估|[`train/runs/main_qwen3_bf16_clean/eval_smoke.json`](train/runs/main_qwen3_bf16_clean/eval_smoke.json)|n=50：emit=0.56，arg_value=0.36（显著低于 v1.5 的 0.64）|
+|GGUF deploy|[`deploy/build.sh`](deploy/build.sh) 新增 bf16 分支：base 名含 `bf16` 时不加 `--dequantize`|构建成功但 **F16/Q4 仍乱码**（`testf16` 与 `testq4` 均复现）|
+|评测故事|输出 [`eval/baselines/qwen3_bf16_clean/index.jsonl`](eval/baselines/qwen3_bf16_clean/index.jsonl) 与 [`story_report.md`](eval/baselines/qwen3_bf16_clean/story_report.md)|in-dist/held-out 分层完成；当前 `agent-sft-qwen-3` 仍 placeholder|
+
+### Consequences
+
+|结论|含义|
+|---|---|
+|GGUF 乱码在 bf16 路径仍复现|问题不只在 4bit dequantize，更可能在 `convert_hf_to_gguf.py` / ollama 对 Qwen3.5 hybrid 架构的 runtime 兼容层|
+|`agent-sft-qwen-3` 继续保留 placeholder（FROM qwen3.5:9b）|评测和工程链路可跑，但不能把其指标解读为新 adapter 效果|
+|clean 数据把“质量债”补上了，但模型效果变差（0.64→0.36）|下一步应优先做 hard-sample mining / `cast_vote` 针对增强，而非盲目增加 iters|
+|in-dist 与 held-out 口径正式成型|后续 ADR 可直接沿这套口径比较“训练分布收益 vs 泛化代价”|
+
+后续技术路线（按优先级）：
+
+|优先级|路线|说明|
+|---|---|---|
+|P0|`mlx_lm.server` 直连部署|绕开 GGUF runtime，先交付“可用且真 SFT”版本|
+|P1|transformers+PEFT merge 后再 GGUF|验证是否是 mlx fuse 路径特有问题|
+|P2|等待 llama.cpp / ollama 上游修 Qwen3.5 hybrid|成本最低但 ETA 不可控|

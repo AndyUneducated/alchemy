@@ -1,0 +1,55 @@
+Loading configuration file /Users/anning/Documents/ai-workshops/play/agent_sft/train/lora_config.yaml
+Loading pretrained model
+Loading datasets
+Training
+Trainable parameters: 0.005% (0.492M/8953.802M)
+Starting training..., iters: 40
+Iter 1: Val loss 0.667, Val took 11.111s
+Iter 10: Val loss 0.168, Val took 11.100s
+Iter 10: Train loss 0.433, Learning Rate 1.000e-04, It/sec 0.070, Tokens/sec 3.355, Trained Tokens 479, Peak mem 21.216 GB
+Iter 20: Val loss 0.010, Val took 10.228s
+Iter 20: Train loss 0.062, Learning Rate 1.000e-04, It/sec 0.164, Tokens/sec 8.376, Trained Tokens 991, Peak mem 21.216 GB
+Iter 30: Val loss 0.026, Val took 10.958s
+Iter 30: Train loss 0.038, Learning Rate 1.000e-04, It/sec 0.160, Tokens/sec 7.787, Trained Tokens 1477, Peak mem 21.216 GB
+Iter 40: Val loss 0.013, Val took 10.631s
+Iter 40: Train loss 0.004, Learning Rate 1.000e-04, It/sec 0.126, Tokens/sec 6.064, Trained Tokens 1959, Peak mem 21.216 GB
+Saved final weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/probe_qwen3_bf16_nl4/adapters.safetensors.
+
+
+Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]
+Fetching 13 files: 100%|██████████| 13/13 [00:00<00:00, 143112.73it/s]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:03<00:09,  3.27s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.91s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.79s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.69s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.78s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.53s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.60s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.90s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.81s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.77s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.52s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.52s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:07<00:02,  2.52s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.58s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.56s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.66s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.93s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.80s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.69s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.74s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.66s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.66s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:07<00:02,  2.66s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.66s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.66s/it]

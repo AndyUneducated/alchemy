@@ -49,17 +49,23 @@ print_size() {
   else echo "MISSING"; fi
 }
 
-# Step 1: fuse + dequantize ---------------------------------------------------
+# Step 1: fuse (4bit base requires --dequantize; bf16 base must NOT dequantize)-
 if [[ -d "$FUSED_DIR" && -f "$FUSED_DIR/model.safetensors" && $FORCE -eq 0 ]]; then
   echo "[step1] skip (exists): $FUSED_DIR ($(print_size "$FUSED_DIR"))"
 else
-  echo "[step1] mlx_lm.fuse --dequantize → $FUSED_DIR"
+  FUSE_ARGS=(
+    --model "$BASE_MODEL"
+    --adapter-path "$ADAPTER"
+    --save-path "$FUSED_DIR"
+  )
+  if [[ "$BASE_MODEL" != *"bf16"* ]]; then
+    FUSE_ARGS+=(--dequantize)
+    echo "[step1] mlx_lm.fuse --dequantize → $FUSED_DIR"
+  else
+    echo "[step1] mlx_lm.fuse (bf16 base; no --dequantize) → $FUSED_DIR"
+  fi
   rm -rf "$FUSED_DIR"
-  mlx_lm.fuse \
-    --model "$BASE_MODEL" \
-    --adapter-path "$ADAPTER" \
-    --save-path "$FUSED_DIR" \
-    --dequantize
+  mlx_lm.fuse "${FUSE_ARGS[@]}"
   echo "[step1] done; size = $(print_size "$FUSED_DIR")"
 fi
 

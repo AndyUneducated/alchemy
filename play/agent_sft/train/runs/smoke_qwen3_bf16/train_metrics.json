@@ -1,0 +1,22 @@
+{
+  "model": "mlx-community/Qwen3.5-9B-bf16",
+  "iters": 10,
+  "batch_size": 1,
+  "num_layers": 2,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "mask_prompt": true,
+  "train_file": "train_qwen3_clean.jsonl",
+  "valid_file": "val_qwen3_clean.jsonl",
+  "elapsed_s": 182.4,
+  "returncode": 0,
+  "diverged": false,
+  "train_loss_first": 0.613,
+  "train_loss_last": 0.252,
+  "train_loss_min": 0.252,
+  "val_loss_last": 0.185,
+  "val_loss_min": 0.185,
+  "n_train_iters": 10,
+  "n_val_points": 3,
+  "nan_seen": false
+}

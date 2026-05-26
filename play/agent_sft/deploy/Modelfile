@@ -1,11 +1,11 @@
-# Modelfile for agent-sft-qwen-3 (v1.5 placeholder)
+# Modelfile for agent-sft-qwen-3 (v1.6 placeholder)
 #
-# KNOWN ISSUE: mlx_lm.fuse --dequantize for Qwen3.5 hybrid (attention+SSM)
-# 生成的 fp16 safetensors → convert_hf_to_gguf.py → GGUF 路径输出乱码（F16 与
-# Q4 均乱）。SSM 层 weight 在 mlx 4bit→HF safetensors 往返中损坏。详见
-# ../DECISIONS.md §10。
+# KNOWN ISSUE: Qwen3.5 hybrid (attention+SSM) 的 GGUF runtime 兼容链路仍异常。
+# 在 v1.6 中已改走 bf16 base（不再使用 --dequantize），但
+# fused-mlx-fp16 -> convert_hf_to_gguf.py -> Ollama 仍出现 F16/Q4 乱码。
+# 详见 ../DECISIONS.md §11。
 #
-# v1.5 deploy placeholder：本 tag 直接 FROM base `qwen3.5:9b`，让 ollama 推理 +
+# v1.6 deploy placeholder：本 tag 直接 FROM base `qwen3.5:9b`，让 ollama 推理 +
 # 评测可跑；SFT 训练效果（LoRA adapter）以 build/fused-mlx-fp16/ 形式归档，
 # 待 mlx_lm 或 llama.cpp 修复 Qwen3.5 hybrid 转换后再行 GGUF deploy。
 #

@@ -27,6 +27,11 @@ play/agent_sft/data/triples/*.jsonl
 !play/agent_sft/data/triples/train_qwen3.jsonl
 !play/agent_sft/data/triples/val_qwen3.jsonl
 !play/agent_sft/data/triples/triples_qwen3.jsonl
+# Keep v1.6 clean-data artifacts (DECISIONS §11)
+!play/agent_sft/data/triples/train_qwen3_clean.jsonl
+!play/agent_sft/data/triples/val_qwen3_clean.jsonl
+!play/agent_sft/data/triples/triples_qwen3_clean.jsonl
+!play/agent_sft/data/triples/*_clean_raw.jsonl
 
 # agent_sft Phase 3 training artifacts policy (DECISIONS §5):
 # - Smoke run (throwaway): ignored entirely.
@@ -57,6 +62,16 @@ play/agent_sft/train/runs/main_qwen3/.data/
 play/agent_sft/train/runs/main_qwen3/0000*_adapters.safetensors
 !play/agent_sft/train/runs/main_qwen3/adapters.safetensors
 !play/agent_sft/train/runs/main_qwen3/train.log
+
+# agent_sft v1.6 (bf16 clean retrain; DECISIONS §11) training artifacts:
+# - ignore per-run `.data/` cache dirs and main intermediate checkpoints.
+play/agent_sft/train/runs/smoke_qwen3_bf16/.data/
+play/agent_sft/train/runs/probe_qwen3_bf16_nl4/.data/
+play/agent_sft/train/runs/main_qwen3_bf16_clean/.data/
+play/agent_sft/train/runs/main_qwen3_bf16_clean/0000*_adapters.safetensors
+!play/agent_sft/train/runs/smoke_qwen3_bf16/train.log
+!play/agent_sft/train/runs/probe_qwen3_bf16_nl4/train.log
+!play/agent_sft/train/runs/main_qwen3_bf16_clean/train.log
 
 # agent_sft Phase 4 deploy artifacts: ~18 GB intermediates (fused-mlx-fp16 + f16 gguf + q4 gguf)
 # already covered by the top-level `build/` rule, listed explicitly for grep-ability.

@@ -1,0 +1,37 @@
+Loading configuration file /Users/anning/Documents/ai-workshops/play/agent_sft/train/lora_config.yaml
+Loading pretrained model
+Loading datasets
+Training
+Trainable parameters: 0.005% (0.492M/8953.802M)
+Starting training..., iters: 10
+Iter 1: Val loss 0.667, Val took 11.313s
+Iter 5: Val loss 0.526, Val took 11.096s
+Iter 5: Train loss 0.613, Learning Rate 1.000e-04, It/sec 0.063, Tokens/sec 3.011, Trained Tokens 240, Peak mem 20.870 GB
+Iter 10: Val loss 0.185, Val took 10.232s
+Iter 10: Train loss 0.252, Learning Rate 1.000e-04, It/sec 0.085, Tokens/sec 4.070, Trained Tokens 479, Peak mem 21.216 GB
+Saved final weights to /Users/anning/Documents/ai-workshops/play/agent_sft/train/runs/smoke_qwen3_bf16/adapters.safetensors.
+
+
+Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]
+Fetching 13 files: 100%|██████████| 13/13 [00:00<00:00, 72604.46it/s]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:03<00:10,  3.45s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:06<00:05,  2.99s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.84s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.72s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.83s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.52s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.60s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:08<00:02,  2.90s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.80s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:11<00:00,  2.77s/it]
+
+Calculating loss...:   0%|          | 0/4 [00:00<?, ?it/s]
+Calculating loss...:  25%|██▌       | 1/4 [00:02<00:07,  2.53s/it]
+Calculating loss...:  50%|█████     | 2/4 [00:05<00:05,  2.52s/it]
+Calculating loss...:  75%|███████▌  | 3/4 [00:07<00:02,  2.52s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.58s/it]
+Calculating loss...: 100%|██████████| 4/4 [00:10<00:00,  2.56s/it]

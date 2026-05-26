@@ -241,3 +241,29 @@ orchestrator 用 `caffeinate` + `nohup` + `set -euo pipefail`，mining 脚本天
 - 数据策略偏离 plan：plan 估算 7 envelope × 60 triples 出 500+100 是用 `qwen2.5:7b` mining 系数；`qwen3.5:9b` 强 → 14 envelope 才出 49 nudge triples（强模型本身少触发 require_tool）。**没有再加 envelope 量 + 不切回 7B mining**，而合并历史三批 triples 凑 588/155——保证训练样本质量与多样性，代价是 supervision 来源混源（详见 [`§10`](DECISIONS.md)），9 runs 评测对比因 placeholder 退化为重复对照；SFT 真实信号交给 eval_smoke 验。
 - GGUF deploy 暂缓而非死磕：mlx→GGUF Qwen3.5 hybrid 兼容性问题非 1-2h 能调通，强行调会侵占 plan 总预算；改为"训练 artifact + fused fp16 mlx 模型 + placeholder ollama tag"三件套归档，把 deploy 修复独立成 backlog。
 - DECISIONS §6 被 §10 supersede 而非删除——保留历史"7B Q4_K_M + ~50 行 TEMPLATE 复刻"作为 v1 deploy 文献。
+
+## 2026-05-26 — v1.6 clean-data + bf16 重训（故事分层版）
+
+### 功能
+
+|项|里程碑|
+|---|---|
+|数据|从 `triples_qwen3_merged.jsonl` 重建 clean 数据：`triples_qwen3_clean.jsonl` 1547，`train_qwen3_clean.jsonl` 1276，`val_qwen3_clean.jsonl` 271；train/val overlap=0；`example`/`panel` 未混入训练。|
+|训练|完成 bf16 smoke(10) + probe(40) + main(600) 三段训练；主训产物落 `train/runs/main_qwen3_bf16_clean/`。|
+|评测|新增 `eval/baselines/qwen3_bf16_clean/index.jsonl` 与 `story_report.md`，按 in-distribution(`tool_chain`/`code_review`) vs held-out(`example`/`panel`) 分层读数。|
+|部署验证|完成 bf16 fuse + F16/Q4 GGUF 构建；保留 `agent-sft-qwen-3` placeholder 作为可用线上 tag。|
+
+### 技术
+
+|项|结果|
+|---|---|
+|smoke 稳定性|`max_seq_length=1000` 会出现 `Trained Tokens 0 + NaN`；升到 1500 后稳定（不是 OOM 问题）。|
+|主训健康度|`main_qwen3_bf16_clean`：rc=0，nan=false，train 0.247→0.000，val_last=0.000，wall=4115s，peak mem≈21.36GB。|
+|LoRA 学习效果|`eval_smoke`(n=50) 仅 emit=0.56 / arg_value=0.36，低于 v1.5 的 0.64 baseline。|
+|GGUF 结论|fused mlx-fp16 推理可读；但 F16 GGUF 与 Q4 GGUF 在 ollama 仍输出乱码（`testf16`/`testq4` 复现），说明兼容性问题仍在 runtime 转换链路。|
+|故事分层|6-run 结果中，`agent-sft-qwen-3` in-dist 均值 0.4872、held-out 均值 0.1905；`qwen3.5:9b` in-dist 0.4359、held-out 0.1905。当前 tag 为 placeholder，不能解读为新 adapter 真实收益。|
+
+### 取舍
+
+- 依 [`DECISIONS §11`](DECISIONS.md) 接受“GGUF 仍阻塞但训练与评测先闭环”的结果：不再强行替换线上 tag 为损坏 GGUF。
+- 这轮不继续盲加 iter；后续优先 hard-sample mining（尤其 `cast_vote` / 参数值精度）而非拉长训练时长。
