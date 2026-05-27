@@ -27,7 +27,6 @@ import sys
 from pathlib import Path
 from typing import Callable, Literal
 
-# play/evals/models/rag_retrieve.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RAG_DIR = REPO_ROOT / "play" / "rag"
 RAG_QUERY_SCRIPT = RAG_DIR / "query.py"

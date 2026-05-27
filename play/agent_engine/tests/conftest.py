@@ -10,7 +10,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# play/agent_engine/tests/conftest.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAY_DIR = REPO_ROOT / "play"
 if str(PLAY_DIR) not in sys.path:

@@ -1,5 +1,5 @@
 [project]
-name = "ai-workshops"
+name = "alchemy"
 version = "0.0.0"
 description = "Personal LLM engineering sandbox (play/ experiments)"
 readme = "README.md"

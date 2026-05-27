@@ -35,7 +35,7 @@ cmake --build build --config Release --target llama-quantize -j 8
 python3 -m venv .venv && .venv/bin/pip install -r requirements/requirements-convert_hf_to_gguf.txt
 
 # 装训练侧依赖（含 mlx_lm.fuse）
-cd /Users/anning/Documents/ai_workshops
+cd <repo-root>   # e.g. /Users/anning/Documents/alchemy
 pip install -r play/agent_sft/requirements.txt
 
 # 三步部署

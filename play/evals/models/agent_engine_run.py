@@ -31,7 +31,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
-# play/evals/models/agent_engine_run.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAY_DIR = REPO_ROOT / "play"
 AGENT_ENGINE_DIR = PLAY_DIR / "agent_engine"

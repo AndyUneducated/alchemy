@@ -1,9 +1,9 @@
-# ai-workshops
+# alchemy
 
-[![CI](https://github.com/AndyUneducated/ai-workshops/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyUneducated/ai-workshops/actions/workflows/ci.yml)
+[![CI](https://github.com/AndyUneducated/alchemy/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyUneducated/alchemy/actions/workflows/ci.yml)
 [![codecov](https://img.shields.io/badge/coverage-pending-lightgrey.svg)](https://codecov.io)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![repo size](https://img.shields.io/github/repo-size/AndyUneducated/ai-workshops)](https://github.com/AndyUneducated/ai-workshops)
+[![repo size](https://img.shields.io/github/repo-size/AndyUneducated/alchemy)](https://github.com/AndyUneducated/alchemy)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)

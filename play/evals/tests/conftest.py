@@ -27,7 +27,6 @@ import pytest
 OLLAMA_BASE = os.environ.get("EVALS_OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_TEST_MODEL = "qwen3.6:27b"
 
-# play/evals/tests/conftest.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RAG_VDB_DIR = REPO_ROOT / "play" / "rag" / "vdb"
 

@@ -18,7 +18,6 @@ import pytest
 from agent_engine import ExpandedTurn, Scenario
 from agent_engine.discussion import Discussion
 
-# play/agent_engine/tests/test_scenario_static.py → ai_workshops/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCENARIOS_DIR = REPO_ROOT / "play" / "agent_engine" / "scenarios"
 
