@@ -1,10 +1,10 @@
 # play/workflow
 
-声明式 pipeline runner——按 yaml 顺序串接**确定性 stage**（Python 函数）与 **agent stage**（调用 [play/agent_engine/](../agent_engine/) 的 `Engine.invoke()`）。workflow 自身**不内嵌 LLM 逻辑**；agent stage 通过 `executors/agent.py` 是它**唯一**的 LLM 耦合点（plan §2 关键边界）。
+声明式 pipeline runner——按 YAML 顺序串接**确定性 stage**（Python 函数）与 **agent stage**（调用 [play/agent_engine/](../agent_engine/) 的 `Engine.invoke()`）。workflow 自身**不内嵌 LLM 逻辑**；agent stage 通过 `executors/agent.py` 是它**唯一**的 LLM 耦合点（见 [`DECISIONS §2`](DECISIONS.md)）。
 
-## 边界（plan §9 / §12 显式不做项）
+## 边界（持续有效）
 
-> **有意为之**——本 play 不超过 ~350 行；要 retry / UI / durability 等成熟能力，直接迁 Prefect / Temporal / Argo（plan §9 论证迁移成本仅 ~3~4h）。
+> **有意为之**——本 play 保持几百行级别；要 retry / UI / durability 等成熟能力，直接迁 Prefect / Temporal / Argo（[`DECISIONS §1`](DECISIONS.md) 说明迁移策略）。
 
 |维度|不做什么|替代办法|
 |---|---|---|
@@ -14,9 +14,9 @@
 |模板|过滤器 / 表达式 / inline Python (`code:` 块)|`{{ x.y.z }}` 路径访问；数据转换写 hook（参考 kitchen_sink 的 `to_yaml` stage）|
 |插件|stdlib / 自动注册装饰器|显式 `import`，调试可见；只有 1 个真消费者前 YAGNI|
 |CLI|多子命令 (`validate` / `list` / `inspect`)|只 `run`，避免 scope creep|
-|trace_id|不实现|保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（plan §9.1）|
+|trace_id|不实现|保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（见 [`DECISIONS §1`](DECISIONS.md)）|
 
-报错哲学（plan §12）：必填字段缺失 → `sys.exit("Error: ...")`，**不**给"你大概想用 X"提示；引用不存在的 stage / 错误类型 → 模板插值期 `KeyError`，让 traceback 直说；runtime 错误（hook raise / scenario 装配失败）→ 直接传上去，不二次包装；没有"老用户引导"，没有"schema migration"。
+报错哲学（[`DECISIONS §3`](DECISIONS.md)）：必填字段缺失 → `sys.exit("Error: ...")`，**不**给"你大概想用 X"提示；引用不存在的 stage / 错误类型 → 模板插值期 `KeyError`，让 traceback 直说；runtime 错误（hook raise / scenario 装配失败）→ 直接传上去，不二次包装；没有"老用户引导"，没有"schema migration"。
 
 新需求出现时：先看是否能由 hook 函数内部解决（用 `tenacity` 包重试、用 `subprocess` 包外部调用、用 `Path.read_text()` 读文件…），再考虑改 workflow 库本身。
 
@@ -74,7 +74,7 @@ play/workflow/
 ## 运行时心智模型
 
 ```mermaid
-flowchart LR
+flowchart TB
     yaml["workflow.yaml"]
     cli["python -m workflow run"]
     wf["Workflow.from_yaml"]
@@ -86,4 +86,12 @@ flowchart LR
     det -->|"return value"| state
     agt -->|"Result.artifact"| state
 ```
+
+## 示例怎么选
+
+|示例|用途|何时看|
+|---|---|---|
+|`workflow/examples/kitchen_sink.yaml`|字段速查（schema reference）+ 心智模型|想写新 workflow 时先看它|
+|`workflow/examples/chat.yaml`|最小 agent stage|只想确认 workflow 能调用 agent_engine|
+|`qa_assets/workflows/qa_supervisor.yaml`|真实垂直切片|想看 deterministic hook + agent + render 输出如何串起来|
 

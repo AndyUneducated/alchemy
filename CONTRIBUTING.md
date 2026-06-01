@@ -8,7 +8,7 @@
 
 ## 1. 仓库布局规则
 
-- 新实验默认放到 [`play/`](play/) 下，每个子项目自带 README、`requirements.txt`、`tests/`。
+- 新实验默认放到 [`play/`](play/) 下；至少自带 README。`requirements.txt`、`tests/` 按项目复杂度添加。
 - 提拔到长期维护的小应用 → [`grow/`](grow/)。
 - 暂停的工作 → [`stash/`](stash/)。
 - 退役实验 → [`_archive/`](_archive/)。
@@ -39,17 +39,24 @@ python -m pytest -v
 
 依赖：
 
-- Python 3.12+
-- [Ollama](https://ollama.com/) 拉好 `qwen3.5:9b`（或设 `EVALS_TEST_OLLAMA_MODEL`）+ `qwen3-embedding:8b`。
-- `play/rag/vdb/` 下 ingest 好的 VDB（具体步骤见 [CI workflow](.github/workflows/ci.yml)）。
+|依赖|用途|备注|
+|---|---|---|
+|Python 3.12+|全仓测试运行时|与 GitHub Actions 对齐|
+|[Ollama](https://ollama.com/) `qwen3.5:9b`|默认 live LLM 测试|也可设 `EVALS_TEST_OLLAMA_MODEL` 覆盖|
+|Ollama `qwen3-embedding:8b`|RAG ingest / query|CI 与本地默认 embedding model|
+|`play/rag/vdb/`|RAG live 测试输入|具体 ingest 步骤见 [CI workflow](.github/workflows/ci.yml)|
 
 `requirements-ci.txt` 不装 `mlx-lm`（只跑 Apple Silicon）；`play/agent_sft` 的测试不依赖它。
 
 ## 4. 文档约定
 
-- **重要技术决策**写到子项目自己的 `DECISIONS.md`（append-only，ADR 风格）。
-- **阶段性进展**写到子项目自己的 `JOURNAL.md`（一段话 / 一个阶段）。
-- 仓库级写作约定见 [`AGENTS.md`](AGENTS.md) 和 [`.cursor/rules/workshops.mdc`](.cursor/rules/workshops.mdc)。
+|文档|何时更新|格式|
+|---|---|---|
+|`README.md`|读者入口、CLI、架构图、当前状态变化|尽量用表格、短段落和 Mermaid 图|
+|`DECISIONS.md`|重要技术决策、契约变化、依赖选择、显式 non-goal|append-only ADR（architecture decision record）|
+|`JOURNAL.md`|阶段性进展或工作日里程碑|必须含 **功能** / **技术**；必要时加 **取舍**|
+
+仓库级写作约定见 [`AGENTS.md`](AGENTS.md) 和 [`.cursor/rules/workshops.mdc`](.cursor/rules/workshops.mdc)。
 
 ## 5. Commit 信息
 

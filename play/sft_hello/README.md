@@ -7,15 +7,23 @@
 |维度|`play/sft_hello`（本项目）|[`play/agent_sft`](../agent_sft/)|
 |---|---|---|
 |目标|跑通流程|做出有差异化的训练成果|
-|底座|Qwen2.5-0.5B-Instruct|Qwen2.5-7B-Instruct|
-|数据|30 条 toy（每答必 🦊）|≥1k 三元组挖掘自 `agent_engine` trace|
+|底座|Qwen2.5-0.5B-Instruct|v1 用 Qwen2.5-7B；当前迁到 qwen3.5:9b|
+|数据|30 条 toy（每答必 🦊）|三元组挖掘自 `agent_engine` trace；当前推荐 qwen3 clean-data|
 |度量|肉眼判断 🦊 是否出现|nudge-fire rate / trajectory score / BFCL slice|
-|部署|无（adapter 即终点）|fuse → GGUF → `ollama create`|
+|部署|无（adapter 即终点）|v1 fuse → GGUF → `ollama create` 跑通；qwen3.5 GGUF 仍 blocked|
 |生命周期|一次性，跑完归档|多 phase 路线图，长期演进|
 
 刻意分开是为了不让"试一下"污染 `agent_sft` 的差异化承诺（详见其 README §"v1 non-goals"）。
 
 ## 四步走通
+
+```mermaid
+flowchart LR
+    env["1. 装环境"] --> before["2. baseline 推理"]
+    before --> train["3. MLX-LM LoRA 训练"]
+    train --> after["4. adapter 推理对比"]
+    after --> ok{"回答末尾出现 🦊 ?"}
+```
 
 |步|做什么|时间|
 |---|---|---|
@@ -101,7 +109,7 @@ play/sft_hello/
 
 ## 跑通后干嘛
 
-`play/sft_hello/` 走完即归档（不进入 `_archive/` 也行，留在 `play/` 当参考）。下一步去 [`play/agent_sft/`](../agent_sft/) Phase 1，那里的训练管线与本项目同栈（MLX-LM LoRA），但底座、数据、度量都升一级。
+`play/sft_hello/` 走完即归档（不进入 `_archive/` 也行，留在 `play/` 当参考）。下一步去 [`play/agent_sft/`](../agent_sft/)：那里的训练管线同样基于 MLX-LM LoRA，但底座、数据、评测和部署问题都升一级。
 
 ## 参考
 

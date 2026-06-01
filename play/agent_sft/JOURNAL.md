@@ -267,3 +267,21 @@ orchestrator 用 `caffeinate` + `nohup` + `set -euo pipefail`，mining 脚本天
 
 - 依 [`DECISIONS §11`](DECISIONS.md) 接受“GGUF 仍阻塞但训练与评测先闭环”的结果：不再强行替换线上 tag 为损坏 GGUF。
 - 这轮不继续盲加 iter；后续优先 hard-sample mining（尤其 `cast_vote` / 参数值精度）而非拉长训练时长。
+
+## 2026-05-31 — 文档校准：v1 历史结果与 qwen3 当前态分层
+
+### 功能
+
+|项|说明|
+|---|---|
+|README 当前状态表|把 v1、v1.5、v1.6 分开，读者先看到“qwen3.5 训练/评测已跑通，但 GGUF/Ollama 真部署仍 blocked”|
+|deploy 文档重写|用状态表、决策树、qwen3.5 数据流解释 placeholder tag 与损坏 GGUF 的区别|
+|子目录 README 校准|`train/`、`data/triples/`、`eval/baselines/` 改成 v1 历史与 qwen3 当前线并列说明|
+
+### 技术
+
+|项|说明|
+|---|---|
+|契约边界|明确 `agent-sft-qwen-3` 当前 `FROM qwen3.5:9b`，不能代表 LoRA adapter 效果|
+|证据链|README 反链 [`DECISIONS §9`](DECISIONS.md)、[`§10`](DECISIONS.md)、[`§11`](DECISIONS.md)，避免旧 Qwen2.5 数字被误读成 qwen3.5 结论|
+|部署路径|把短期 MLX fused artifact、placeholder tag、未来 GGUF 修复三条路径拆开，减少“能跑 tag = SFT 已上线”的误会|

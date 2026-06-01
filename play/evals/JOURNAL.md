@@ -476,3 +476,19 @@ phase 1 → phase 8 + wave 系列 + §13 / §14 / §16 / §17 一连串清理后
 |指标|指标族|说明|
 |---|---|---|
 |—|—|本轮为测试基础设施加固，公开度量集合 / 行为零变化；防的是别人改 `play/agent_engine` schema / `play/rag` 接口 / `evals/tasks/__init__.py` 副作用 import 时 evals 这边静默不知|
+
+## 2026-05-31 — README roadmap 状态校准
+
+### 功能
+
+|变更|目的|
+|---|---|
+|Roadmap 增加状态列与 phase flow 图|让 Phase 1-8 已完成、Phase 9-10 仍 planned 一眼可见|
+|Quickstart 增加模型选择表|区分 `qwen3.5:9b` 的本地/CI 友好路径、`qwen3.6:27b` 的慢速高质量路径、`mock:*` 的测试路径|
+
+### 技术
+
+|项|说明|
+|---|---|
+|行为|本轮只校准文档状态，不新增指标或改变评测行为|
+|验证口径|用文件清单确认 `tasks/` / `metrics/` 已覆盖 Phase 1-8，Phase 9-10 仍作为计划保留|

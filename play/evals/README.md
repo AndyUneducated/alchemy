@@ -302,20 +302,39 @@ cross-cutting 字段在三层契约里的形态完全同源（OpenAI / Anthropic
 
 ## Roadmap
 
-|Phase|内容|metric 归属|
-|---|---|---|
-|1|族 1 MVP slice（classification + agreement）|sklearn 直调|
-|2|族 2 lexical + 1 个 embedding 代表（BERTScore）；加 `num_fewshot`；MoverScore 与 learned tier (BLEURT/COMET/BARTScore) deferred|sacrebleu / rouge_score / nltk / bert-score 直调|
-|3|族 3 完全体（LLM-as-judge）；真 LM 适配层落地|**建 `metrics/judge_core.py`**（phase 4 由 `metrics/judge.py` 拆分；无库 + 跨 task 复用）|
-|4|族 4 完全体（RAG）；接 `play/rag/` subprocess 端到端 + 5 个 grounding 维度|`metrics/retrieval.py`（ranx 直调）+ **建 `metrics/judge_rag.py`**（5 个 RAG judge 维度，自实现以避 ragas 依赖膨胀）|
-|5|族 5 完全体（agent trajectory）；接 `play/agent_engine/` subprocess + JSON envelope|**建 `metrics/trajectory.py`**（无库；5 个 closure-factory metric + 手写 Levenshtein DP）+ 复用 `judge_core.g_eval` 装 plan_quality|
-|6|横切 Efficiency|**建 `metrics/efficiency.py`**（runner 自动采集 latency / tokens / cost；`Response.usage` 嵌套；`EvalResult.aggregated["efficiency"]` 子组）|
-|7|`safety` task（HELM toxicity 维度对标）；wave 3 后回归独立 task 而非 cross-cutting AOP（DECISIONS §7.2）|**建 `metrics/safety.py`**（refusal / jailbreak heuristic 自写 + judge 复用 `judge_core.judge_pointwise`）|
-|8|族 1 后半 + 族 1 ↔ 族 3 交叉（kappa paradox 章节）；双 task `iaa_nominal` + `iaa_ordinal`，~16 个新指标|sklearn / scipy.stats / statsmodels / krippendorff 直调（task 内）+ **建 `metrics/agreement.py`**（仅 4 个手算 `scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1` + 1 个共享 helper `build_rater_matrix`，~80 行；库直调全部下放 task aggregation，避免模块沦为 import 中转站）|
-|9|横切 Calibration|sklearn / netcal 直调|
-|10|`robustness` task（HELM robustness 维度对标）；同源 phase 7 §7.2 回归独立 task|**建 `metrics/robustness.py`**（`robustify(task, perturbation)` 装饰器）|
+```mermaid
+flowchart LR
+    P1["P1 classification"] --> P2["P2 lexical / embedding"]
+    P2 --> P3["P3 judge"]
+    P3 --> P4["P4 RAG"]
+    P4 --> P5["P5 agent trajectory"]
+    P5 --> P6["P6 efficiency"]
+    P6 --> P7["P7 safety"]
+    P7 --> P8["P8 IAA"]
+    P8 -. planned .-> P9["P9 calibration"]
+    P9 -. planned .-> P10["P10 robustness"]
+```
+
+|Phase|状态|内容|metric 归属|
+|---|---|---|---|
+|1|✅ done|族 1 MVP slice（classification + agreement）|sklearn 直调|
+|2|✅ done|族 2 lexical + 1 个 embedding 代表（BERTScore）；加 `num_fewshot`；MoverScore 与 learned tier deferred|sacrebleu / rouge_score / nltk / bert-score 直调|
+|3|✅ done|族 3 完全体（LLM-as-judge）；真 LM 适配层落地|`metrics/judge_core.py`|
+|4|✅ done|族 4 完全体（RAG）；接 `play/rag/` subprocess 端到端 + 5 个 grounding 维度|`metrics/retrieval.py` + `metrics/judge_rag.py`|
+|5|✅ done|族 5 完全体（agent trajectory）；接 `play/agent_engine/` subprocess + JSON envelope|`metrics/trajectory.py` + `judge_core.g_eval`|
+|6|✅ done|横切 Efficiency|`metrics/efficiency.py`；`Response.usage` 嵌套；`EvalResult.aggregated["efficiency"]` 子组|
+|7|✅ done|`safety` task（HELM toxicity 维度对标）；作为独立 task，而非 cross-cutting AOP|`metrics/safety.py` + `judge_core.judge_pointwise`|
+|8|✅ done|族 1 后半 + 族 1 ↔ 族 3 交叉（kappa paradox）；`iaa_nominal` + `iaa_ordinal`|sklearn / scipy.stats / statsmodels / krippendorff 直调 + `metrics/agreement.py`|
+|9|📝 planned|横切 Calibration|sklearn / netcal 直调|
+|10|📝 planned|`robustness` task（HELM robustness 维度对标）；与 safety 一样保持独立 task|计划建 `metrics/robustness.py`|
 
 ## Quickstart
+
+|模型写法|适合场景|说明|
+|---|---|---|
+|`ollama:qwen3.5:9b`|默认本地 / CI 友好 smoke|速度较稳；根 README 与 CI 默认偏向它|
+|`ollama:qwen3.6:27b`|质量更高的本地 judge / ceiling 参考|M4 Pro 上 agent path 可能很慢，必要时拉长 timeout|
+|`mock:gold` / `mock:<stub>`|无 LLM 的 parity / 单元测试|用于验证 `score` / `run` 同构，不代表模型能力|
 
 ```bash
 # 装依赖（每次 phase 升级 requirements.txt 都需重跑 — phase 8 起强制 statsmodels + krippendorff）

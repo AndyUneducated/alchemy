@@ -1,14 +1,22 @@
 # play/agent_sft
 
-**Nudge-grounded SFT**：把 [`play/agent_engine`](../agent_engine/) 的 `require_tool` 闭环作为监督信号，对 7B 本地模型做 LoRA 微调，让"被 nudge 才补调用"变成"自己就调对"。训练管线：mine traces → SFT on (failed turn, nudge, corrected turn) → merge LoRA → GGUF → `ollama create` → 回灌 `agent_engine`，由 [`play/evals`](../evals/) phase-5 trajectory 评估闭环效果。
+**Nudge-grounded SFT**：把 [`play/agent_engine`](../agent_engine/) 的 `require_tool` 闭环作为监督信号，对本地模型做 LoRA / QLoRA 微调，让"被 nudge 才补调用"尽量变成"第一次就调对"。训练管线是：mine traces → SFT on (failed turn, nudge, corrected turn) → 用 [`play/evals`](../evals/) 复测。历史 v1（Qwen2.5-7B）已跑通 GGUF + Ollama；当前 v1.6（qwen3.5:9b）训练与评测已跑通，但 GGUF / Ollama 真部署仍因 Qwen3.5 hybrid runtime 乱码阻塞。
+
+## 当前状态（先读这里）
+
+|版本|底座|状态|可相信的证据|不要误读|
+|---|---|---|---|---|
+|v1|Qwen2.5-7B / 32B ceiling|历史结案|120-run Phase 5 对比，nudge gap 关闭 57.3%，详见 [`DECISIONS §9`](DECISIONS.md)|这是旧底座的结果，不代表 qwen3.5|
+|v1.5|qwen3.5:9b 4-bit|重训 + placeholder deploy|`eval_smoke` 显示 LoRA 学到 tool-call schema，详见 [`DECISIONS §10`](DECISIONS.md)|`agent-sft-qwen-3` 当时只是 base placeholder|
+|v1.6|qwen3.5:9b bf16 clean-data|当前最新|clean 数据、bf16 重训、in-dist / held-out 评测口径成型，详见 [`DECISIONS §11`](DECISIONS.md)|GGUF F16/Q4 仍乱码；Ollama tag 仍不能代表 adapter 效果|
 
 ## 中心问题
 
-> 把"`agent_engine` 不得不发出 nudge"这一**自有 supervision 信号**作为微调目标，能不能让一个 7B-class 模型在自己产出的 trajectory 上，把 nudge-fire rate 显著降下来，且不在 OOD 工具调用上回归？
+> 把"`agent_engine` 不得不发出 nudge"这一**自有 supervision 信号**作为微调目标，能不能让一个 7B/9B-class 本地模型在自己产出的 trajectory 上，把 nudge-fire rate 显著降下来，且不在 OOD 工具调用上回归？
 
 这不是"再做一遍 BFCL fine-tune"——那条路走过的人太多。本项目的差异化在于：**supervision 信号只能由我自己的 agent 系统产生**，复现门槛即护城河。
 
-> **v1 工程约束**（不进入中心问题）：M4 Pro 48GB 单机 + QLoRA 4-bit on Qwen2.5-7B。v2/v3 演化时硬件约束可放宽（见下文 §"v1 / v2 / v3 演化路径"），中心问题不变——把硬件从中心问题剥离，是为了让"项目能否 scale 到更大底座 / 上云 GPU"成为可讨论的演化方向，而非要重写命题。
+> **工程约束**（不进入中心问题）：单机 M4 Pro 48GB。v1 用 Qwen2.5-7B QLoRA 证明方法有效；v1.5 / v1.6 跟随仓库默认底座迁到 qwen3.5:9b。中心问题不绑定某个具体模型，而是问："自有 nudge 信号能否稳定改善自有 agent trajectory？"
 
 ## 与现有 play/ 子项目的关系
 
@@ -19,15 +27,15 @@ flowchart LR
     end
     subgraph here["play/agent_sft (本项目)"]
         mine["trace mining<br/>(bad turn, nudge, corrected turn)"]
-        train["MLX-LM QLoRA<br/>Qwen2.5-7B-Instruct"]
-        ship["merge → GGUF<br/>→ ollama create"]
+        train["MLX-LM LoRA / QLoRA<br/>Qwen2.5 v1 / qwen3.5 current"]
+        ship["deployment check<br/>v1: GGUF OK<br/>v1.6: GGUF blocked"]
     end
     subgraph downstream["评估 / 部署下游 (已存在)"]
         ev["play/evals<br/>phase-5 trajectory eval<br/>+ OllamaLM adapter"]
         ae2["play/agent_engine<br/>BACKEND=ollama<br/>新模型替换"]
     end
     ae -- transcript JSON --> mine --> train --> ship
-    ship --> ae2
+    ship -.->|ollama tag<br/>(v1 real / v1.6 placeholder)| ae2
     ae2 -- 重新跑 scenario --> ev
     ev -- nudge-fire rate / trajectory score --> here
 ```
@@ -36,15 +44,15 @@ flowchart LR
 
 ## 七阶段路线图
 
-|Phase|目标|关键产出|
-|---|---|---|
-|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|本 README + [`DECISIONS §1`](DECISIONS.md) + [`§2`](DECISIONS.md)|
-|1 — Baseline|定义 nudge-fire rate 度量；测 Qwen2.5-7B (off-the-shelf, Ollama) 与 **Qwen2.5-32B-Instruct (Ollama)** 在现有 scenario 上的基线|`evals` 4 task：`nudge_fire_rate` / `agent_traj` / `bfcl_slice` / `mmlu_slice`；`agent_sft/eval/` 多 seed runner + aggregator + 报告|
-|2 — Data|从 `agent_engine` 跑批 + 历史 transcript 中挖掘 (bad, nudge, corrected) 三元组；公开 tool-call 数据集做 OOD 对照|≥1k 训练样本；held-out in-dist + OOD split|
-|3 — Train|MLX-LM QLoRA 在 Qwen2.5-7B-Instruct 上做 SFT；小规模超参 sweep|adapter checkpoint + train/eval loss 曲线|
-|4 — Deploy|merge LoRA → GGUF Q4_K_M → 自定义 Modelfile → `ollama create agent-sft-qwen`（详见 [`deploy/`](deploy/) + [`DECISIONS §6`](DECISIONS.md)）|可在 `agent_engine` 通过 `BACKEND=ollama` + `MODEL=agent-sft-qwen` 切换的本地模型 tag|
-|5 — Re-measure|用 Phase 1 同套 evals 跑 base 7B / SFT 7B / **Qwen2.5-32B 原版** 三组对比；附 OOD + 通用对话回归测试|对比报表 + 回归说明（**诚实标注哪里变差**）|
-|6 — Reflection|README 增补 lessons learned + 下一步（DPO / 更大底座 / on-policy distill）|README §"Lessons" + `DECISIONS` 追加结案条目|
+|Phase|目标|v1 状态|当前 qwen3.5 状态|关键产出|
+|---|---|---|---|---|
+|0 — Frame|确定中心问题、技术栈、约束、扩展性留口|done|沿用|本 README + [`DECISIONS §1`](DECISIONS.md) + [`§2`](DECISIONS.md)|
+|1 — Baseline|定义 nudge-fire rate；建立 base / ceiling 对照|done：Qwen2.5-7B vs 32B|done：默认切 qwen3.5:9b / qwen3.6:27b；27B 在本机易 timeout|`evals` 4 task + 多 seed runner|
+|2 — Data|从 `agent_engine` transcript 挖 (bad, nudge, corrected) 三元组|done：1k × 2 模型|done：clean-data 重建，train / val overlap=0|`data/triples/` JSONL 数据|
+|3 — Train|MLX-LM LoRA / QLoRA SFT|done：Qwen2.5-7B 4-bit|done：qwen3.5 4-bit 与 bf16 都跑过|adapter checkpoint + `eval_smoke.json`|
+|4 — Deploy|把 adapter 变成 `agent_engine` 可调用模型|done：Q4_K_M GGUF + `agent-sft-qwen`|blocked：F16/Q4 GGUF 乱码；`agent-sft-qwen-3` 仍是 placeholder|[`deploy/`](deploy/) + [`DECISIONS §10`](DECISIONS.md) / [`§11`](DECISIONS.md)|
+|5 — Re-measure|同一套 evals 复测 base / SFT / ceiling|done：120 runs，三阈值全过|partial：in-dist / held-out 口径成型，但真 SFT 需先修 deploy 或改走 MLX server|对比报表 + 回归说明|
+|6 — Reflection|记录 lessons learned 和下一步|done：v1 结案|ongoing：优先修部署路径 + hard-sample mining|README §"Lessons" + ADR|
 
 每完成一个 phase，`JOURNAL.md` 记一条里程碑（功能 / 技术），重要决策追加进 `DECISIONS.md`。
 
@@ -54,7 +62,7 @@ flowchart LR
 
 |版本|主题|候选增量|触发条件|
 |---|---|---|---|
-|**v1**|nudge-grounded SFT 主线打穿|本 README 的 7 阶段|当前进行中|
+|**v1**|nudge-grounded SFT 主线打穿|本 README 的 7 阶段|已结案，见 [`DECISIONS §9`](DECISIONS.md)|
 |v2-A|偏好对齐：nudge SFT + DPO|用 (failed, corrected) 当 prefer pair 做偏好学习|v1 数字稳定但 7B SFT 后仍有可见短板|
 |v2-B|on-policy 迭代 SFT|v1 模型回灌跑 scenario，挖新 nudge → 再训一轮|v1 数据规模 < 1k 但效果可观察|
 |v2-C|失败模式 taxonomy + 难样本挖掘|按错例分类（漏调 / 错调 / 参数错）做 hard sample mining|v1 复测时按 per-tool / per-scenario breakdown 发现明显短板|
@@ -91,10 +99,10 @@ flowchart LR
 
 |维度|选择|为何（详见 `DECISIONS`）|
 |---|---|---|
-|底座模型|Qwen2.5-7B-Instruct|强 tool-call 基线 + MLX 友好 + Ollama 同 tag 现成|
-|微调方式|QLoRA（4-bit base + LoRA adapters）|48GB 统一内存约束下 7B 唯一可行解|
-|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；`mlx_lm.lora` + `mlx_lm.fuse` + `mlx_lm.convert` 一条龙（详见 [`§2`](DECISIONS.md)）|
-|量化与部署|fuse → 转 GGUF → `ollama create`|与 `agent_engine` `BACKEND=ollama` 零成本对接|
+|底座模型|v1: Qwen2.5-7B；当前: qwen3.5:9b|v1 证明方法，当前跟随仓库默认底座|
+|微调方式|LoRA / QLoRA（4-bit base + LoRA adapters；bf16 clean-data 重训也已跑）|48GB 统一内存约束下可在本机完成|
+|训练框架|[MLX-LM](https://github.com/ml-explore/mlx-lm)|Apple Silicon 原生；训练成功产物是 HF safetensors / MLX fused 目录（详见 [`§2`](DECISIONS.md)）|
+|量化与部署|v1: fuse → GGUF → `ollama create`；当前: GGUF blocked，短期 placeholder / 待 MLX server|与 `agent_engine` `BACKEND=ollama` 对接仍是目标，但 qwen3.5 hybrid runtime 需先修|
 |评估框架|[`play/evals`](../evals/)|自有 harness 即护城河，phase-5 已支持 trajectory|
 |硬件|M4 Pro 48GB（v1 工程约束，不绑中心问题）|v1 所有结论的隐含上界；v2/v3 演化时可放宽，见上文 §"v1 / v2 / v3 演化路径"|
 
@@ -115,14 +123,14 @@ flowchart LR
 ```
 play/agent_sft/
 ├── README.md                # 本文件
-├── DECISIONS.md             # ADR 归档（§1 中心问题 + §2 训练框架 + §3 数据流水线 + §4 SFT schema + §5 推荐 adapter + §6 Phase 4 量化锁定 + §7 直连 agent_engine + §8 typed schema 升级 + §9 v1 结案）
+├── DECISIONS.md             # ADR 归档（§1-§9 v1；§10 qwen3.5 迁移；§11 clean-data + bf16 重训）
 ├── JOURNAL.md               # 每日里程碑（功能 + 技术，≤2/天）
 ├── requirements.txt         # mlx-lm[train] + huggingface-hub
-├── data/                    # Phase 2 已落地：mine / extract / synthesize / split / formatter + 1k×2 数据集
-├── train/                   # Phase 3 已落地：lora_config.yaml / train.py / eval_smoke.py / sweep.py
+├── data/                    # Phase 2+ 已落地：mine / extract / synthesize / split / formatter + v1 / qwen3 clean 数据
+├── train/                   # Phase 3+ 已落地：lora_config.yaml / train.py / eval_smoke.py / sweep.py
 ├── eval/                    # Phase 1 已落地：run_baseline.py + aggregate_seeds.py + baselines/
 │                            #  task 实现归 evals/
-├── deploy/                  # Phase 4 已落地：Modelfile（1:1 复刻 qwen2.5:7b template）+ build.sh / deploy.sh / smoke_test.py + README
+├── deploy/                  # Phase 4+：v1 GGUF 成功；qwen3.5 当前 Modelfile 是 placeholder，GGUF broken 见 README
 └── tests/                   # 111 pytest（87 schema 单测 + 24 e2e 流水线 / subprocess runner / golden snapshot / scenario YAML invariant；全 0.5s 跑完，0 flaky，conftest 统一 sys.path）
 ```
 
@@ -130,7 +138,7 @@ play/agent_sft/
 
 ## Lessons learned（v1 结案）
 
-v1 七阶段全部跑通，120 runs（3 model × 4 task × 10 seed）端到端复测，**[`DECISIONS §9`](DECISIONS.md#9-v1-结案phase-5-数字三阈值命中--v2v3-候选取舍) 三阈值全过** → 中心问题 [`§1`](DECISIONS.md#1-nudge-grounded-sft-作为项目中心问题) "把自有 `require_tool` nudge 当 supervision，能让 7B 在自己 trajectory 上把 nudge-fire rate 显著降下来且不在 OOD 回归吗？"的答案是**"能，但条件清楚地写在数字背面"**。最值得讲的不是 57.3% gap closure 这个数字本身，而是三件 surprise：① nudge SFT 把 `missed`（漏调）错误**转化**为 `wrong_tool`（错调）错误而非全数消除——教会了模型"该调"但还没教会"调对"；② `agent_traj.task_success` SFT (1.00) **反超** 32B ceiling (0.93)，但 `trajectory_match` 退化 31%——SFT 模型靠"多走岔路歪打正着"赢了端到端结果，trajectory 偏离 gold；③ `by_tool.retrieve_docs` SFT 100% 都需要 nudge，是 [`§4`](DECISIONS.md#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native) drop 250 retrieve_docs no-template 样本的回旋镖。这三件事整齐地给 v2-B（on-policy）/ v2-C（hard sample mining）画好了第一批靶子。
+v1 七阶段全部跑通，120 runs（3 model × 4 task × 10 seed）端到端复测，**[`DECISIONS §9`](DECISIONS.md#9-v1-结案phase-5-数字三阈值命中--v2v3-候选取舍) 三阈值全过** → 中心问题 [`§1`](DECISIONS.md#1-nudge-grounded-sft-作为项目中心问题) "把自有 `require_tool` nudge 当 supervision，能让 7B 在自己 trajectory 上把 nudge-fire rate 显著降下来且不在 OOD 回归吗？"的答案是**"能，但有边界"**。最值得讲的不是 57.3% gap closure 这个数字本身，而是三件事：① nudge SFT 把 `missed`（漏调）错误**转化**为 `wrong_tool`（错调）错误，而不是全部消除；② `agent_traj.task_success` SFT (1.00) **反超** 32B ceiling (0.93)，但 `trajectory_match` 退化 31%——任务做成了，路径却偏离 gold；③ `by_tool.retrieve_docs` SFT 100% 都需要 nudge，是 [`§4`](DECISIONS.md#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native) drop 250 retrieve_docs no-template 样本的代价。这三件事给 v2-B（on-policy）/ v2-C（hard sample mining）画好了第一批靶子。
 
 方法学层面收两个 lesson：① **fast proxy 在 schema 学习上必然饱和**——[`§5`](DECISIONS.md#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 已锁的"`eval_smoke` 4 项指标全 100% 不证明 SFT 起效"在 Phase 5 端到端复测时被反证：proxy 全 100% 的同时，端到端 `nudge_fire_rate` 才差出 9.4 个百分点 gap。`evals` 跑 ~50 min/run × 32B × agent-path 的成本不能省。② **评测 harness 本身的脆弱性是 Phase 5 副产品**——`qwen2.5:7b seed=3` 自发输出 `tool=cast_vote(...)` 非法 kwarg → `agent_engine` 直接 `TypeError` 让整条 batch run 挂掉。1/120 数据点损失虽小，但暴露 evals/agent_engine 在 LLM "异常输出" 面前的防御性不足；写进 [`agent_engine`] backlog，不进本项目修。
 
@@ -175,7 +183,7 @@ v1 七阶段全部跑通，120 runs（3 model × 4 task × 10 seed）端到端�
 
 > "我自己写了一个 agent engine，里面有一个 `require_tool` 机制：当某一步必须调用某个工具但 LLM 漏调时，引擎会发 nudge 让它重试。这个 nudge 信号就是免费的监督——本来意味着模型该调没调。我把它当作 SFT 的 target，挖了约 1k 条 (failed turn, nudge, corrected turn) 三元组，在 M4 Pro 48GB 上用 MLX-LM QLoRA 微调 Qwen2.5-7B。
 >
-> 怎么知道有效？我用自己写的 evals harness（lm-eval-harness 风格，有 phase-5 trajectory eval）跑了 3 model × 4 task × 10 seed = 120 runs 三组对比：原 Qwen 7B / 我微调后的 7B / Qwen2.5-32B 原版（同家族跨规模 ceiling reference）。**nudge-fire rate 从 0.739 降到 0.645，关闭了与 32B 同族 ceiling (0.575) 的 57% gap**；BFCL 公开切片回归 1.2%、MMLU 子集回归 2.1%，都在事先锁定的阈值内。微调后的权重 fuse 成 GGUF，`ollama create` 注册成本地 tag，agent engine 改一行 BACKEND 配置就跑起来了。
+> 怎么知道有效？我用自己写的 evals harness（lm-eval-harness 风格，有 phase-5 trajectory eval）跑了 3 model × 4 task × 10 seed = 120 runs 三组对比：原 Qwen 7B / 我微调后的 7B / Qwen2.5-32B 原版（同家族跨规模 ceiling reference）。**nudge-fire rate 从 0.739 降到 0.645，关闭了与 32B 同族 ceiling (0.575) 的 57% gap**；BFCL 公开切片回归 1.2%、MMLU 子集回归 2.1%，都在事先锁定的阈值内。v1 里微调权重还能 fuse 成 GGUF 并注册成本地 Ollama tag；qwen3.5 迁移后这步暂时阻塞，当前 `agent-sft-qwen-3` 是 placeholder，不能拿来代表 adapter 效果。
 >
 > 但比数字更有意思的是数字背后的'硬币背面'：SFT **没**把'漏调'错误全数消除，而是**转化**成了'错调'——模型学到了'该调'但还没学到'调对'。而且 SFT 在端到端 task success 上反超 32B（1.00 vs 0.93），但 trajectory 与 gold 序列的对齐反而退化 31%——模型靠'多走岔路歪打正着'赢了。这两件事整齐地把 v2 的两个候选——on-policy 迭代 SFT 和失败模式 hard sample mining——给画好了靶子。
 >
@@ -239,7 +247,7 @@ v1 七阶段全部跑通，120 runs（3 model × 4 task × 10 seed）端到端�
 |G. 模型合并 / 编辑|Model merging (TIES / DARE / SLERP)|2022-23|重组|多个微调权重，无新数据|多个微调模型权重算术平均|多个 LoRA 想合一|任务冲突 → 性能退化|远期：多 scenario 各训 LoRA 后合并|
 |G. 模型合并 / 编辑|Task arithmetic|2022|重组|多个微调权重|"微调向量"可加减|任务能力组合 / 抑制|不稳；结果不可预测|—|
 |G. 模型合并 / 编辑|Model editing (ROME / MEMIT)|2022|改 1-N 权重|(subject, relation, object) 三元组|外科手术改某事实，不影响其他知识|改一条事实，不重训|副作用范围难控|—|
-|H. 部署调优|**PTQ (post-training quant)**|2022-23|不变|校准集（small）|训完后量化为 4-bit（**GGUF / AWQ / GPTQ**）|部署本地|4bit 以下精度大跌|**Phase 4: fuse → GGUF → `ollama create`**|
+|H. 部署调优|**PTQ (post-training quant)**|2022-23|不变|校准集（small）|训完后量化为 4-bit（**GGUF / AWQ / GPTQ**）|部署本地|4bit 以下精度大跌|v1 Phase 4 跑通；qwen3.5 迁移后 GGUF 路径仍 blocked|
 |H. 部署调优|QAT|2018|训练时|同主任务|训练时模拟量化误差，精度更稳|量化精度敏感|训练管线复杂|—|
 |H. 部署调优|Pruning|2023 (LLM)|改部分权重|校准集 / 梯度数据|砍掉近 0 权重得稀疏模型|进一步压模型|稀疏推理引擎支持有限|—|
 |H. 部署调优|Distill to smaller model|2015+|全部|teacher 输出（无标注 prompt）|大模型当老师训一个更小的模型|部署小模型|容量瓶颈，有些能力学不下|—|

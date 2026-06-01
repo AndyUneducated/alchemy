@@ -25,9 +25,9 @@
 
 ## 为什么有这个仓库
 
-LLM 工程其实是五个戴着同一顶帽子的不同问题。每个问题都倾向于一种不同的工具，
-一刀切的框架要么过度抽象（LangChain），要么让你永远在写胶水（裸脚本）。
-这个沙盒把这些问题拆开做，但用稳定契约把它们串起来，所以一处的改动可以在下一处看到效果。
+LLM 工程在这里被拆成五类小问题：Agent、RAG、eval、workflow、SFT。
+每类问题都先用最小可读的本地实现解决；跨项目只在数据边界上立契约（contract），
+所以一处实验结果可以被下一处复用，而不需要引入一个全能大框架。
 
 | 现实里的工程需求 | `play/` 给出的实现 | 为什么单一现成工具不够 |
 |---|---|---|
@@ -35,20 +35,22 @@ LLM 工程其实是五个戴着同一顶帽子的不同问题。每个问题都�
 | *"在几百份本地文档里做 hybrid + rerank 检索，无云"* | [`rag`](play/rag/) —— Chroma + BM25 RRF + 可选 cross-encoder | 纯 dense 漏关键词命中；托管服务沙盒一上就要出网和信用卡。 |
 | *"跨任务、跨 adapter 一致地抓 eval 回归"* | [`evals`](play/evals/) —— task-declarative harness、JSONL 运行记录、IAA + Ragas + IR 指标 | `lm-eval` 对自定义任务太死板；notebook 打分不可复现也接不进 CI。 |
 | *"把确定性 hook 和 Agent 阶段拼到一条 pipeline 上"* | [`workflow`](play/workflow/) —— 线性 YAML runner | LangGraph 对线性计划太重；bash 胶水没法测试；Airflow 是另一个世界。 |
-| *"挖 trace → 微调 → 上线 → 再测一遍，端到端跑通"* | [`agent_sft`](play/agent_sft/) —— nudge 挖掘 + QLoRA + Ollama + eval 复跑 | 现成 SFT 配方往往跳过轨迹挖掘和闭环 eval delta —— 而后者才是唯一能证明这个闭环真的有用的部分。 |
+| *"挖 trace → 微调 → 部署验证 → 再测一遍"* | [`agent_sft`](play/agent_sft/) —— nudge 挖掘 + QLoRA + eval 复跑；当前 qwen3.5 GGUF/Ollama 部署仍阻塞 | 现成 SFT 配方常跳过轨迹挖掘和闭环 eval delta；这里把训练收益和部署问题分开记录。 |
 
 参考实现 [`qa_assets/`](play/qa_assets/) 是一条垂直切片，一次性练到上面五条里的四条，
 所以契约不是只在单测里被验证，而是在被使用时就在被验证。
 
 ## 它到底做什么
 
-一些有"上线感"的小尖端实验，组合在一起会变成一个故事：
+一些有"上线感"的小实验，组合成一条学习链路：
 
-1. **跑 Agent** —— 用 Markdown 场景驱动多轮对话，含工具、memory、产物（[`play/agent_engine/`](play/agent_engine/)）。
-2. **本地检索** —— hybrid dense + BM25 + 可选 rerank，跑在一个自描述的本地 VDB 上（[`play/rag/`](play/rag/)）。
-3. **评测** —— 任务声明式 harness，`score` / `run` 行为对齐，JSONL 运行记录，分阶段的指标族（[`play/evals/`](play/evals/)）。
-4. **编排** —— 线性 YAML pipeline，把确定性 hook 和 Agent 阶段串起来（[`play/workflow/`](play/workflow/)）。
-5. **闭环** —— 从 engine 挖 `require_tool` nudge 轨迹，QLoRA 微调一个 7B 模型，通过 Ollama 部署，再用 evals 复测（[`play/agent_sft/`](play/agent_sft/)）。
+|顺序|能力|子项目|读者应先看什么|
+|---|---|---|---|
+|1|跑 Agent（agent）|[`play/agent_engine/`](play/agent_engine/)|Markdown scenario、tool、memory、artifact|
+|2|本地检索（RAG）|[`play/rag/`](play/rag/)|hybrid dense + BM25 + optional rerank|
+|3|评测（eval）|[`play/evals/`](play/evals/)|`score` / `run` 同构、JSONL run 记录、phase roadmap|
+|4|编排（workflow）|[`play/workflow/`](play/workflow/)|线性 YAML pipeline：hook + agent stage|
+|5|闭环训练（SFT）|[`play/agent_sft/`](play/agent_sft/)|从 `require_tool` nudge 挖数据，QLoRA 微调，再复测|
 
 一条参考垂直切片把它们串起来：QA 测试计划生成（[`play/qa_assets/`](play/qa_assets/)）通过
 `qa_supervisor.yaml` 走 workflow → agent_engine → rag。
@@ -70,10 +72,20 @@ flowchart LR
   qa --> wf --> ae
   ae -->|retrieve_docs subprocess| rag
   ae -->|transcripts| sft
-  sft -->|ollama model| ae
+  sft -.->|qwen2.5 v1: ollama model| ae
+  sft -.->|qwen3.5 v1.6: GGUF blocked / placeholder tag| ae
   ae --> ev
   rag --> ev
 ```
+
+### 跨项目契约速查
+
+|生产方|消费方|契约（contract）|为什么重要|
+|---|---|---|---|
+|`rag/query.py --json`|`agent_engine` / `evals`|`{query, data, meta}` JSON envelope|RAG 可被 subprocess 调用，不需要 Python import 耦合|
+|`agent_engine --save-result-json`|`evals` / `agent_sft`|`Result` envelope：`transcript / artifact / warnings / success / usage`|评测和数据挖掘读同一个 typed schema，不反向猜 transcript|
+|`evals/api.py`|`evals` 内部各层|`Doc / Request / Response / SampleResult / EvalResult` dataclass|task、LM adapter、runner、storage 的词汇表统一|
+|`workflow` state|`qa_assets` hooks|`state["stages"][name]["output"]`|确定性 hook 与 Agent stage 通过显式 state 串接|
 
 ## 仓库结构
 
@@ -96,7 +108,7 @@ flowchart LR
 |[`play/rag/`](play/rag/)|本地优先的 hybrid RAG（Chroma + BM25 RRF，可选 cross-encoder rerank）|[README](play/rag/README.md)|
 |[`play/evals/`](play/evals/)|lm-eval 风格的评测 harness（tasks / adapters / JSONL runs）|[README](play/evals/README.md)|
 |[`play/workflow/`](play/workflow/)|声明式线性 pipeline runner（hooks + agent 阶段）|[README](play/workflow/README.md)|
-|[`play/agent_sft/`](play/agent_sft/)|基于 nudge 的 Agent 轨迹 SFT（挖掘 → QLoRA → Ollama → 复测）|[README](play/agent_sft/README.md)|
+|[`play/agent_sft/`](play/agent_sft/)|基于 nudge 的 Agent 轨迹 SFT（挖掘 → QLoRA → 复测；qwen3.5 GGUF deploy 暂阻塞）|[README](play/agent_sft/README.md)|
 |[`play/qa_assets/`](play/qa_assets/)|QA 领域素材（workflows / scenarios / hooks / kb / 示例 CSV / PRD）|[README](play/qa_assets/README.md)|
 |[`play/sft_hello/`](play/sft_hello/)|一次性的 MLX-LM hello-world 微调（pipeline 烟测）|[README](play/sft_hello/README.md)|
 

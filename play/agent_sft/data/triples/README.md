@@ -1,13 +1,23 @@
 # Triples — Phase 2 SFT 数据产物目录
 
-`agent_sft/data/triples/` 装存 Phase 2 数据流水线（mine → extract → split → format）的全部中间 + 最终产物。Phase 2 收尾交付的两份 1k 数据集（`runs_1k_fast_{7b,32b}_r0_124/` + `*_1k.jsonl`）入 git；其它 smoke / 临时产物按 `.gitignore` 默认忽略，可重生。
+`agent_sft/data/triples/` 装存数据流水线（mine → extract / synthesize → split → format）的中间产物和最终训练样本。v1 的两份 1k 数据集仍保留作历史基线；当前 qwen3.5 线以 clean-data 版本为主。
+
+## 当前数据集速查
+
+|数据集|底座 / 来源|用途|状态|
+|---|---|---|---|
+|`train_7b_1k.jsonl` / `val_7b_1k.jsonl`|Qwen2.5-7B mining|v1 训练与复现|历史保留|
+|`train_32b_1k.jsonl` / `val_32b_1k.jsonl`|Qwen2.5-32B mining|wrong_tool hard sample / ablation|历史保留|
+|`train_qwen3.jsonl` / `val_qwen3.jsonl`|v1 7B + v1 32B + v1.5 9B 混源|v1.5 qwen3.5 重训|被 clean-data 版本取代|
+|`train_qwen3_clean.jsonl` / `val_qwen3_clean.jsonl`|qwen3 clean rebuild|v1.6 当前默认训练数据|当前推荐|
 
 ## 文件清单
 
 |文件 / 目录|生成于|是否入 git|用途|
 |---|---|---|---|
 |`runs_1k_fast_{7b,32b}_r0_124/<scen>-r<N>.json`|`mine_triples.py` (fast scenario, run_id 0-124)|✅|Phase 2 终交付的 raw envelope，每模型 250 个（2 scenario × 125 run）|
-|`{triples,train_triples,val_triples,train,val}_{7b,32b}_1k.jsonl`|`synthesize.py` → `split.py` → `formatter.py`|✅|两份模型各自的全链路 SFT 数据；`train_*.jsonl` 是 MLX-LM 直接可吃的 chat schema|
+|`{triples,train_triples,val_triples,train,val}_{7b,32b}_1k.jsonl`|`synthesize.py` → `split.py` → `formatter.py`|✅|v1 两份模型各自的全链路 SFT 数据；`train_*.jsonl` 是 MLX-LM 直接可吃的 chat schema|
+|`*_qwen3*.jsonl` / `qwen3_clean_report.json`|qwen3.5 迁移与 clean-data rebuild|✅ / 部分 gitignored|当前 qwen3 训练线；详见 [`DECISIONS §10`](../../DECISIONS.md) / [`§11`](../../DECISIONS.md)|
 |`runs/<scen>-r<N>.json`|`mine_triples.py` 默认输出|❌ (gitignore)|本地 smoke / 临时跑批|
 |`triples.jsonl` / `train.jsonl` / `val.jsonl` 等无 `_1k` 后缀|默认产物|❌ (gitignore)|本地 smoke 派生；要复现 1k 数据集见 §重生命令|
 
@@ -22,7 +32,7 @@
 
 ## 重生命令
 
-### 1k 终交付批次（与 repo 内 `*_1k.jsonl` 一致）
+### v1 1k 终交付批次（与 repo 内 `*_1k.jsonl` 一致）
 
 以 7B 为例（32B 把 `AGENT_ENGINE_MODEL` 换成 `qwen2.5:32b`、所有 `_7b_` 换成 `_32b_` 即可）：
 
@@ -76,15 +86,15 @@ python play/agent_sft/data/formatter.py \
 
 ## OOD 评估
 
-**OOD 评估不在本目录**——复用 Phase 1 落地的 `play/evals/data/bfcl_slice/gold.jsonl`（50 例 BFCL `simple_python` 切片）。Phase 5 复测时直接：
+**OOD 评估不在本目录**——复用 Phase 1 落地的 `play/evals/data/bfcl_slice/gold.jsonl`（50 例 BFCL `simple_python` 切片）。v1 Phase 5 复测时直接：
 
 ```bash
 python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen
 ```
 
-不复制公开数据集到本仓库；BFCL 上游变更由 `play/evals/data/bfcl_slice/_fetch.py` 管理。
+qwen3.5 迁移后，`agent-sft-qwen-3` 仍是 placeholder，不能用这条命令判断 adapter 真实 OOD 表现。不复制公开数据集到本仓库；BFCL 上游变更由 `play/evals/data/bfcl_slice/_fetch.py` 管理。
 
-## Phase 2 终交付：1k × 2 模型
+## v1 Phase 2 终交付：1k × 2 模型
 
 两份独立数据集，挖批参数对齐（fast scenario / `max_retries=0` / `run_id 0-124` / 2 scenarios），仅 mining 模型不同：
 
@@ -101,11 +111,13 @@ python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen
 
 `val` 切分一致：每 scenario 末 20% run_id（即 `run_id ∈ [100, 124]`）→ val。
 
-**7B vs 32B 选择指引**：
+**7B vs 32B 选择指引（v1 历史）**：
 
-- 默认走 7B：单条 triple compute 成本 ~22s（vs 32B ~32s），yield 高 15%，已覆盖 missed 主分布。
-- 32B 价值在 wrong_tool 分布更广（27% vs 10%）——若 Phase 3 训练后发现 wrong_tool 召回低，可拌入 32B 数据补 hard sample。
-- 两份并存而非合并入一个 train.jsonl：保留模型来源标签便于 Phase 3 ablation；训练时可任选其一或拼接。
+|选择|适合场景|代价|
+|---|---|---|
+|7B|默认训练；missed 主分布覆盖够，单条 triple 成本较低|wrong_tool 分布较窄|
+|32B|补 wrong_tool hard sample；做 ablation|单条 triple 成本更高|
+|混合|qwen3 迁移早期凑数据量|需要清洗去重与 train/val 泄漏检查；v1.6 已重建 clean-data|
 
 ## 历史遗留：57-triple pilot 与方法选择
 

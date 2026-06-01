@@ -1,13 +1,15 @@
 # tools — agent_engine 的 reasoning tool 注册表
 
-## 分类原则（plan §6）
+## 分类原则
 
 agent_engine 的 `tools/` 包**只**放推理性 tool：
 
-- **Reasoning tool**：输入完全由 LLM 推理决定 + 输出供 LLM 继续推理 → 留这里
-- **External I/O tool**：输入由上游确定 + 输出有副作用或下游不再需要 LLM 决策 → 归 workflow stage（不进 agent_engine）
+|类别|放哪里|判断标准|
+|---|---|---|
+|Reasoning tool|留在 `agent_engine/tools/`|输入由 LLM 推理决定，输出还要喂回 LLM 继续推理|
+|External I/O tool|做成 `workflow` deterministic stage|输入由上游确定，或工具有外部副作用，或输出不再需要 LLM 决策|
 
-**纪律靠文档维持，不做 runtime allowlist 校验**（plan §12 fail-fast 哲学）。违反纪律的代码会在调用时自然报错。
+**纪律靠文档维持，不做 runtime allowlist 校验**。违反纪律的代码会在调用时自然报错。
 
 ## 现有 tool
 

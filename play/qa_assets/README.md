@@ -4,6 +4,20 @@ QA 测试方案 agent 项目的**资产层**——配置、scenario、hooks、�
 
 把这一层与 [play/agent_engine/](../agent_engine/) (LLM 推理引擎) 和 [play/workflow/](../workflow/) (pipeline runner) 解耦：领域东西全在这里，引擎与 runner 完全 domain-agnostic。
 
+## 端到端流程
+
+```mermaid
+flowchart LR
+    csv["examples/req_tracker.csv<br/>需求表"] --> load["load_csv"]
+    prd["examples/*.md<br/>PRD markdown"] --> prdload["load_each_prd"]
+    load --> prdload --> yaml["to_yaml<br/>给 agent 的输入"]
+    yaml --> discuss["workflow agent stage<br/>qa_discuss.md"]
+    kb["kb/ + vdb/qa_kb<br/>可选 RAG"] -.->|retrieve_docs| discuss
+    discuss --> artifact["Result.artifact"]
+    artifact --> md["render_md<br/>test_plan.md"]
+    artifact --> cases["render_csv<br/>cases.csv"]
+```
+
 ## 项目布局
 
 ```
@@ -15,7 +29,7 @@ play/qa_assets/
 ├── hooks/
 │   ├── load_csv.py                 # CSV → list[dict], 最小校验
 │   ├── load_each_prd.py            # 对有 prd_doc_path 的行: Path.read_text() → prd_md
-│   ├── to_yaml.py                  # 序列化助手 (替代模板 filter, plan §4.3)
+│   ├── to_yaml.py                  # 序列化助手（替代 workflow 模板 filter）
 │   ├── render_md.py                # Jinja: artifact + 元数据 → test_plan.md
 │   └── render_csv.py               # 测试用例节 → cases.csv
 ├── templates/
@@ -50,10 +64,12 @@ python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
 
 成功跑完 `qa_supervisor` 后，`output_dir` 下典型产物：
 
-- `transcript.json` — 多 agent 完整 history (topic / turn / speaker / artifact_event / tool_call)
-- `test_plan_artifact.md` — 引擎内 artifact 快照（六节：Requirements / 原子需求 / 风险等级 / 测试用例 / 非功能 / Critic 反馈）
-- `test_plan.md` — `render_md` 用 Jinja 模板拼好的对外测试方案 markdown（含范围与排期表）
-- `cases.csv` — `render_csv` 从「测试用例」节解析出的平铺用例行
+|文件|来源|用途|
+|---|---|---|
+|`transcript.json`|agent_engine|多 agent 完整 history：topic / turn / speaker / artifact_event / tool_call|
+|`test_plan_artifact.md`|agent_engine artifact|引擎内 artifact 快照（六节：Requirements / 原子需求 / 风险等级 / 测试用例 / 非功能 / Critic 反馈）|
+|`test_plan.md`|`render_md` hook|对外测试方案 markdown（含范围与排期表）|
+|`cases.csv`|`render_csv` hook|从「测试用例」节解析出的平铺用例行|
 
 ## 输入契约 (CSV schema)
 
@@ -70,7 +86,7 @@ python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
 |`sprint_start`|否|ISO date, 元数据透传到输出|
 |`sprint_end`|否|同上|
 
-> 不接入 docx/xlsx/pdf 等二进制格式 (plan §9 显式不做项). 要喂 PRD 必须先转 markdown.
+> 不接入 docx/xlsx/pdf 等二进制格式。要喂 PRD 必须先转 markdown.
 
 ## 多 agent 角色分工 (qa_discuss.md)
 
@@ -83,16 +99,21 @@ python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
 |`nfr_planner`|member|性能/安全/a11y/i18n 非功能测试点|非功能|
 |`critic`|member|多轮反馈: 覆盖空白 / 优先级矛盾 / 互相冲突|Critic 反馈 (append)|
 
-step 流: `open → produce (4 specialist 并行) → critic_r1 → revise → critic_r2 → finalize`. 单次 run 把整张 CSV 的全部需求一次性塞进同一份讨论 (plan §8 P3 批处理边界); ≤ ~10 行需求时 context 够用.
+step 流: `open → produce (4 specialist 并行) → critic_r1 → revise → critic_r2 → finalize`. 单次 run 把整张 CSV 的全部需求一次性塞进同一份讨论；≤ ~10 行需求时 context 够用。
 
 ## 当前阶段
 
-- **已落地**: `qa_supervisor` 为 **6 段**线性 workflow（`load` → `load_prds` → `serialize_for_agent` → `discuss` → `render_md` → `render_csv`）；多 agent scenario、`req_tracker.csv` 示例、Jinja 模板与上述落盘产物已串在同一 yaml 里。
-- **P4（计划中）**: 在 `qa_discuss` 里稳定启用 `retrieve_docs`，与 `kb/` + `vdb/qa_kb` 的 RAG 检索深度结合（工具与 ingest 已具备时，主要剩 scenario/prompt 与评测）。
+|阶段|状态|说明|
+|---|---|---|
+|6 段线性 workflow|✅ 已落地|`load` → `load_prds` → `serialize_for_agent` → `discuss` → `render_md` → `render_csv`|
+|多 agent scenario|✅ 已落地|`qa_discuss.md`、`req_tracker.csv` 示例、Jinja 模板与落盘产物已串在同一 YAML|
+|RAG 深度结合|📝 计划中|工具与 ingest 已具备；主要剩 scenario / prompt 稳定性与评测|
 
-## 显式不做项 (plan §9)
+## 显式不做项
 
-- 真 Confluence/Jira/Figma/TestRail connector
-- 独立 Gantt/Schedule 输出
-- pytest harness (scenario 仍是 .md 业务工件)
-- per-row run-loop (整批一次塞)
+|不做项|原因|
+|---|---|
+|真 Confluence / Jira / Figma / TestRail connector|本目录是资产层示例，不接真实 SaaS|
+|独立 Gantt / Schedule 输出|当前 `test_plan.md` 已覆盖排期表达|
+|pytest harness|scenario 仍是 `.md` 业务工件，不把它包装成测试框架|
+|per-row run-loop|当前边界是整批一次塞；逐行跑会放大 LLM 成本和编排复杂度|
