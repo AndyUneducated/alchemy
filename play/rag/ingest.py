@@ -26,6 +26,7 @@ from chunker import split_text
 from tokenizer import tokenize
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
+EMBED_BATCH_SIZE = max(1, int(os.getenv("RAG_EMBED_BATCH_SIZE", "4")))
 
 
 def _read_file(path: str) -> str:
@@ -57,6 +58,21 @@ def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
                         rel = os.path.relpath(fpath, path)
                         docs.append((rel, text))
     return docs
+
+
+def _embed_documents(
+    ef: OllamaEmbeddingFunction, documents: list[str], *, batch_size: int
+) -> list[list[float]]:
+    embeddings: list[list[float]] = []
+    for start in range(0, len(documents), batch_size):
+        batch = documents[start:start + batch_size]
+        print(
+            f"  embedding batch {start // batch_size + 1}/"
+            f"{(len(documents) + batch_size - 1) // batch_size} "
+            f"({len(batch)} chunk(s))"
+        )
+        embeddings.extend(ef(batch))
+    return embeddings
 
 
 def ingest(
@@ -93,7 +109,10 @@ def ingest(
             metadatas.append({"source": rel_path, "chunk_index": i})
 
     print(f"Embedding {len(documents)} chunk(s) via {model} ...")
-    collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+    embeddings = _embed_documents(ef, documents, batch_size=EMBED_BATCH_SIZE)
+    collection.upsert(
+        ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
+    )
 
     print(f"Building BM25 index via tokenizer {EMBED_TOKENIZER} ...")
     tokenized = [tokenize(doc) for doc in documents]

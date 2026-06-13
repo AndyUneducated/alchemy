@@ -158,3 +158,13 @@ flowchart LR
 |目的|内容|
 |---|---|
 |歧义 query 自适应 rerank|`agent_engine` 侧 `scenarios/test_vdb.md` prompt nudge LLM 在歧义 query 上 `rerank=true`|
+
+## 2026-06-13 — CI VDB fixture ingest 稳定化
+
+### 功能
+
+GitHub CI 构建 `vdb/test_vdb` / `vdb/panel` fixture 时不再在 Chroma `upsert` 阶段重复触发 Ollama embedding，避免小语料也可能因一次大批量请求超时而整轮 CI 失败。
+
+### 技术
+
+`ingest.py` 将 Ollama embedding 改为显式分批计算，再把 `embeddings` 与 `documents` / `metadatas` 一起传入 Chroma `upsert`；新增静态契约测试钉住“预计算向量写入”的路径，防止回退成 Chroma 内部隐式 embedding。
