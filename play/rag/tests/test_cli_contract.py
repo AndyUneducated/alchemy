@@ -67,3 +67,11 @@ def test_query_py_envelope_emits_required_meta_keys():
             f"envelope meta no longer emits {key}; agent_engine retrieve_docs "
             f"slim projection expects this key."
         )
+
+
+def test_query_py_uses_precomputed_query_embeddings():
+    """ingest 端显式写入 embeddings 后，query 端也必须显式算 query embedding；
+    否则给 Chroma 注入 embedding_function 会和 persisted collection 配置冲突。"""
+    src = QUERY_PY.read_text(encoding="utf-8")
+    assert "embedding_function=" not in src
+    assert "query_embeddings" in src or "_embed_query" in src

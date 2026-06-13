@@ -8,7 +8,7 @@ import sys
 from typing import Literal, TypedDict
 
 import chromadb
-from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+import ollama
 
 from config import (
     EMBED_MODEL,
@@ -38,6 +38,18 @@ def _load_meta(vdb_dir: str) -> dict:
         return {}
     with open(meta_path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def _response_embeddings(response) -> list[list[float]]:
+    if isinstance(response, dict):
+        return response["embeddings"]
+    return response.embeddings
+
+
+def _embed_query(model: str, query_text: str) -> list[float]:
+    client = ollama.Client(host=OLLAMA_BASE_URL)
+    [embedding] = _response_embeddings(client.embed(model=model, input=[query_text]))
+    return embedding
 
 
 def _materialize(
@@ -99,18 +111,15 @@ def search(
 
     stored_tokenizer = meta.get("tokenizer") or EMBED_TOKENIZER
 
-    ef = OllamaEmbeddingFunction(url=OLLAMA_BASE_URL, model_name=effective_model)
     client = chromadb.PersistentClient(path=vdb_dir)
     collections = client.list_collections()
     if not collections:
         raise FileNotFoundError(f"No collections found in {vdb_dir}")
 
     if collection_name:
-        collection = client.get_collection(name=collection_name, embedding_function=ef)
+        collection = client.get_collection(name=collection_name)
     else:
-        collection = client.get_collection(
-            name=collections[0].name, embedding_function=ef
-        )
+        collection = client.get_collection(name=collections[0].name)
         if len(collections) > 1:
             print(
                 f"Multiple collections found; using '{collection.name}'. "
@@ -122,13 +131,15 @@ def search(
     pool_k = retrieve_k * HYBRID_OVERSAMPLE
 
     if mode == "dense":
-        scored = dense_search(collection, query_text, retrieve_k)
+        query_embedding = _embed_query(effective_model, query_text)
+        scored = dense_search(collection, query_embedding, retrieve_k)
     elif mode == "bm25":
         query_tokens = tokenize(query_text, name=stored_tokenizer)
         scored = bm25_search(vdb_dir, query_tokens, retrieve_k)
     elif mode == "hybrid":
+        query_embedding = _embed_query(effective_model, query_text)
         query_tokens = tokenize(query_text, name=stored_tokenizer)
-        dense = dense_search(collection, query_text, pool_k)
+        dense = dense_search(collection, query_embedding, pool_k)
         lexical = bm25_search(vdb_dir, query_tokens, pool_k)
         scored = rrf_fuse(dense, lexical, k_top=retrieve_k)
     else:

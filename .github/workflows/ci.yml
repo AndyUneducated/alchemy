@@ -22,6 +22,7 @@ jobs:
       OLLAMA_MODELS: ${{ github.workspace }}/.cache/ollama/models
       # GHA runners lack RAM for 27b; 9b keeps live judge / traj tests runnable.
       EVALS_TEST_OLLAMA_MODEL: qwen3.5:9b
+      AGENT_ENGINE_MODEL: qwen3.5:9b
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
       # Avoid unauthenticated HF Hub tokenizer downloads during CI fixture ingest.

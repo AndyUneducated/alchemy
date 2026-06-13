@@ -21,7 +21,7 @@ class _FakeChromaCollection:
         self._ids = ids
         self._distances = distances
 
-    def query(self, query_texts, n_results):
+    def query(self, query_embeddings, n_results):
         return {
             "ids": [self._ids[:n_results]],
             "distances": [self._distances[:n_results]],
@@ -32,7 +32,7 @@ def test_dense_search_converts_distance_to_similarity_monotonically():
     coll = _FakeChromaCollection(
         ids=["a", "b", "c"], distances=[0.0, 1.0, 3.0],
     )
-    out = dense_search(coll, "q", k=3)
+    out = dense_search(coll, [0.1, 0.2], k=3)
 
     assert out == [("a", 1.0), ("b", 0.5), ("c", 0.25)]
     assert out[0][1] > out[1][1] > out[2][1], (
@@ -45,7 +45,7 @@ def test_dense_search_respects_k():
         ids=[f"id{i}" for i in range(10)],
         distances=[float(i) for i in range(10)],
     )
-    out = dense_search(coll, "q", k=3)
+    out = dense_search(coll, [0.1, 0.2], k=3)
     assert len(out) == 3
 
 

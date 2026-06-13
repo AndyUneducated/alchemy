@@ -33,7 +33,7 @@ def test_tokenize_filters_angle_bracket_special_tokens(monkeypatch):
         tokenizer_module, "_tokenizer",
         _fake_tokenizer_factory(["<bos>", "Hello", "Ġworld", "<eos>"]),
     )
-    assert tokenize("dummy") == ["hello", "world"]
+    assert tokenize("dummy", name="fake") == ["hello", "world"]
 
 
 def test_tokenize_strips_sentencepiece_and_gpt2_prefixes(monkeypatch):
@@ -41,7 +41,7 @@ def test_tokenize_strips_sentencepiece_and_gpt2_prefixes(monkeypatch):
         tokenizer_module, "_tokenizer",
         _fake_tokenizer_factory(["▁foo", "Ġbar", "baz"]),
     )
-    assert tokenize("dummy") == ["foo", "bar", "baz"]
+    assert tokenize("dummy", name="fake") == ["foo", "bar", "baz"]
 
 
 def test_tokenize_lowercases(monkeypatch):
@@ -49,7 +49,7 @@ def test_tokenize_lowercases(monkeypatch):
         tokenizer_module, "_tokenizer",
         _fake_tokenizer_factory(["FooBar", "QUERY"]),
     )
-    assert tokenize("dummy") == ["foobar", "query"]
+    assert tokenize("dummy", name="fake") == ["foobar", "query"]
 
 
 def test_tokenize_drops_empty_after_normalization(monkeypatch):
@@ -57,7 +57,7 @@ def test_tokenize_drops_empty_after_normalization(monkeypatch):
         tokenizer_module, "_tokenizer",
         _fake_tokenizer_factory(["Ġ", "", "▁", "Ġreal"]),
     )
-    assert tokenize("dummy") == ["real"]
+    assert tokenize("dummy", name="fake") == ["real"]
 
 
 def test_tokenize_mixed_special_and_word_pieces(monkeypatch):
@@ -67,7 +67,7 @@ def test_tokenize_mixed_special_and_word_pieces(monkeypatch):
             ["<|im_start|>", "ZX", "-", "74", "92", "<|im_end|>"]
         ),
     )
-    assert tokenize("dummy") == ["zx", "-", "74", "92"], (
+    assert tokenize("dummy", name="fake") == ["zx", "-", "74", "92"], (
         "rare alphanumeric IDs (the very case BM25 is meant to recover) must "
         "survive tokenization untouched"
     )

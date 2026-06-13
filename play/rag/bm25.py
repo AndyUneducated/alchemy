@@ -14,8 +14,10 @@ def _load_bm25(vdb_dir: str):
         return pickle.load(f)
 
 
-def dense_search(collection, query_text: str, k: int) -> list[tuple[str, float]]:
-    res = collection.query(query_texts=[query_text], n_results=k)
+def dense_search(
+    collection, query_embedding: list[float], k: int
+) -> list[tuple[str, float]]:
+    res = collection.query(query_embeddings=[query_embedding], n_results=k)
     ids = res.get("ids", [[]])[0]
     distances = res.get("distances", [[]])[0]
     return [(i, 1.0 / (1.0 + d)) for i, d in zip(ids, distances)]
