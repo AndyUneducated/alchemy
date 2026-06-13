@@ -24,6 +24,8 @@ jobs:
       EVALS_TEST_OLLAMA_MODEL: qwen3.5:9b
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TRANSFORMERS_CACHE: ${{ github.workspace }}/.cache/huggingface
+      # Avoid unauthenticated HF Hub tokenizer downloads during CI fixture ingest.
+      RAG_EMBED_TOKENIZER: basic
 
     steps:
       - uses: actions/checkout@v4

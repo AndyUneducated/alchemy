@@ -71,3 +71,7 @@ def test_tokenize_mixed_special_and_word_pieces(monkeypatch):
         "rare alphanumeric IDs (the very case BM25 is meant to recover) must "
         "survive tokenization untouched"
     )
+
+
+def test_basic_tokenizer_preserves_rare_ids_without_hf_download():
+    assert tokenize("ZX-7492 项目代号", name="basic") == ["zx", "-", "7492", "项目代号"]
