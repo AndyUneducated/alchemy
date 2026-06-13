@@ -32,3 +32,11 @@ def test_ingest_embeds_in_batches():
     src = INGEST_PY.read_text(encoding="utf-8")
     assert "RAG_EMBED_BATCH_SIZE" in src
     assert "_embed_documents" in src
+
+
+def test_ingest_configures_ollama_timeout_and_retries():
+    src = INGEST_PY.read_text(encoding="utf-8")
+    assert "ollama.Client" in src
+    assert "RAG_OLLAMA_TIMEOUT" in src
+    assert "RAG_EMBED_RETRIES" in src
+    assert "httpx.TimeoutException" in src

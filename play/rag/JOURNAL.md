@@ -168,3 +168,13 @@ GitHub CI 构建 `vdb/test_vdb` / `vdb/panel` fixture 时不再在 Chroma `upser
 ### 技术
 
 `ingest.py` 将 Ollama embedding 改为显式分批计算，再把 `embeddings` 与 `documents` / `metadatas` 一起传入 Chroma `upsert`；新增静态契约测试钉住“预计算向量写入”的路径，防止回退成 Chroma 内部隐式 embedding。
+
+## 2026-06-13 — Ollama embedding timeout 收敛
+
+### 功能
+
+CI 构建 `docs/panel` VDB 时，即使 GitHub runner 上 embedding 模型冷启动或单次请求较慢，也能通过更小批次、长 timeout 和自动重试完成 fixture 生成。
+
+### 技术
+
+`ingest.py` 从 Chroma 的 `OllamaEmbeddingFunction` 改为直接使用 `ollama.Client(timeout=...)` 计算向量，默认 `RAG_EMBED_BATCH_SIZE=1`、`RAG_OLLAMA_TIMEOUT=300`、`RAG_EMBED_RETRIES=3`；Chroma collection 不再持有 embedding function，只接收预计算向量。

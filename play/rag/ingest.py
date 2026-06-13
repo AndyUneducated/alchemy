@@ -6,12 +6,14 @@ import json
 import os
 import pickle
 import sys
+import time
 from datetime import datetime, timezone
 
 import fitz  # pymupdf
 
 import chromadb
-from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+import httpx
+import ollama
 from rank_bm25 import BM25Okapi
 
 from config import (
@@ -26,7 +28,9 @@ from chunker import split_text
 from tokenizer import tokenize
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
-EMBED_BATCH_SIZE = max(1, int(os.getenv("RAG_EMBED_BATCH_SIZE", "4")))
+EMBED_BATCH_SIZE = max(1, int(os.getenv("RAG_EMBED_BATCH_SIZE", "1")))
+EMBED_RETRIES = max(1, int(os.getenv("RAG_EMBED_RETRIES", "3")))
+OLLAMA_TIMEOUT_SECONDS = float(os.getenv("RAG_OLLAMA_TIMEOUT", "300"))
 
 
 def _read_file(path: str) -> str:
@@ -60,8 +64,34 @@ def _collect_docs(paths: list[str]) -> list[tuple[str, str]]:
     return docs
 
 
+def _response_embeddings(response) -> list[list[float]]:
+    if isinstance(response, dict):
+        return response["embeddings"]
+    return response.embeddings
+
+
+def _embed_batch(
+    client: ollama.Client, model: str, batch: list[str], *, attempts: int
+) -> list[list[float]]:
+    for attempt in range(1, attempts + 1):
+        try:
+            response = client.embed(model=model, input=batch)
+            return _response_embeddings(response)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            if attempt == attempts:
+                raise
+            wait_seconds = 2 ** (attempt - 1)
+            print(
+                f"  embedding request timed out ({exc}); "
+                f"retrying in {wait_seconds}s ({attempt}/{attempts})"
+            )
+            time.sleep(wait_seconds)
+
+    raise RuntimeError("unreachable embedding retry state")
+
+
 def _embed_documents(
-    ef: OllamaEmbeddingFunction, documents: list[str], *, batch_size: int
+    client: ollama.Client, model: str, documents: list[str], *, batch_size: int
 ) -> list[list[float]]:
     embeddings: list[list[float]] = []
     for start in range(0, len(documents), batch_size):
@@ -71,7 +101,9 @@ def _embed_documents(
             f"{(len(documents) + batch_size - 1) // batch_size} "
             f"({len(batch)} chunk(s))"
         )
-        embeddings.extend(ef(batch))
+        embeddings.extend(
+            _embed_batch(client, model, batch, attempts=EMBED_RETRIES)
+        )
     return embeddings
 
 
@@ -90,11 +122,11 @@ def ingest(
 
     print(f"Found {len(docs)} document(s)")
 
-    ef = OllamaEmbeddingFunction(url=OLLAMA_BASE_URL, model_name=model)
+    embed_client = ollama.Client(host=OLLAMA_BASE_URL, timeout=OLLAMA_TIMEOUT_SECONDS)
 
     client = chromadb.PersistentClient(path=output_dir)
     col_name = collection_name or os.path.basename(os.path.normpath(output_dir))
-    collection = client.get_or_create_collection(name=col_name, embedding_function=ef)
+    collection = client.get_or_create_collection(name=col_name)
 
     ids: list[str] = []
     documents: list[str] = []
@@ -109,7 +141,9 @@ def ingest(
             metadatas.append({"source": rel_path, "chunk_index": i})
 
     print(f"Embedding {len(documents)} chunk(s) via {model} ...")
-    embeddings = _embed_documents(ef, documents, batch_size=EMBED_BATCH_SIZE)
+    embeddings = _embed_documents(
+        embed_client, model, documents, batch_size=EMBED_BATCH_SIZE
+    )
     collection.upsert(
         ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
     )
