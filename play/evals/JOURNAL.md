@@ -492,3 +492,13 @@ phase 1 → phase 8 + wave 系列 + §13 / §14 / §16 / §17 一连串清理后
 |---|---|
 |行为|本轮只校准文档状态，不新增指标或改变评测行为|
 |验证口径|用文件清单确认 `tasks/` / `metrics/` 已覆盖 Phase 1-8，Phase 9-10 仍作为计划保留|
+
+## 2026-06-13 — CI live RAG 门禁收敛
+
+### 功能
+
+GitHub CI 继续覆盖 RAG VDB fixture 构建、真实 query subprocess、hybrid retrieval 和 Ollama 基础 smoke；`rag_qa` 的真生成 e2e 仅在本地 live 环境运行，避免 GitHub-hosted runner 上长生成链路以 `SIGTERM` 形式 flake。
+
+### 技术
+
+`test_rag_qa_run_e2e_panel_lexical_only` 增加 `CI=true` skip gate；本地 `ollama + vdb` 齐备时行为不变。CI 保留 `rag_retrieval` live 覆盖检索注入与指标聚合，把答案生成质量/时延风险移出必过门禁。

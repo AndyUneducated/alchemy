@@ -14,6 +14,8 @@ CI 干净（默认无 ollama / 无 VDB 自动 skip）；本地 dev 起 ollama + 
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from evals.cli import _build_task_with_optional_deps, parse_model_spec
@@ -80,6 +82,13 @@ def test_rag_retrieval_run_e2e_panel(panel_vdb_path):
 
 # ---------- rag_qa e2e（panel VDB + ollama judge；limit=1 进一步控时间）----
 
+_ci_skip_rag_qa_live = pytest.mark.skipif(
+    os.environ.get("CI", "").lower() == "true",
+    reason="rag_qa live generation is too slow/flaky for GitHub-hosted runners",
+)
+
+
+@_ci_skip_rag_qa_live
 @ollama_required
 @panel_vdb_required
 def test_rag_qa_run_e2e_panel_lexical_only(panel_vdb_path, ollama_model):
