@@ -1,33 +1,33 @@
-# tools — agent_engine 的 reasoning tool 注册表
+# tools — agent_engine reasoning tool registry
 
-## 分类原则
+## Classification principles
 
-agent_engine 的 `tools/` 包**只**放推理性 tool：
+The agent_engine `tools/` package holds **reasoning tools only**:
 
-|类别|放哪里|判断标准|
+|Category|Location|Criterion|
 |---|---|---|
-|Reasoning tool|留在 `agent_engine/tools/`|输入由 LLM 推理决定，输出还要喂回 LLM 继续推理|
-|External I/O tool|做成 `workflow` deterministic stage|输入由上游确定，或工具有外部副作用，或输出不再需要 LLM 决策|
+|Reasoning tool|Stay in `agent_engine/tools/`|Input decided by LLM reasoning; output fed back to the LLM for further reasoning|
+|External I/O tool|Implement as a `workflow` deterministic stage|Input fixed upstream, or tool has external side effects, or output no longer needs LLM decisions|
 
-**纪律靠文档维持，不做 runtime allowlist 校验**。违反纪律的代码会在调用时自然报错。
+**Discipline is maintained by documentation, not runtime allowlist validation.** Code that violates it fails naturally at call time.
 
-## 现有 tool
+## Existing tools
 
-|文件|性质|说明|
+|File|Kind|Description|
 |---|---|---|
-|`retrieve_docs.py`|Reasoning|LLM 动态决策 query/mode/rerank 的语义搜索；subprocess 调用 `play/rag/query.py --json`|
+|`retrieve_docs.py`|Reasoning|Semantic search with LLM-chosen query/mode/rerank; subprocess call to `play/rag/query.py --json`|
 
-`artifact.py`（位于 agent_engine 根目录）的 6 个 artifact 工具（`read/write/append/propose_vote/cast_vote/finalize`）是**进程内副作用**（写 ArtifactStore 内存对象），不属于 external I/O，留在 agent_engine。
+The six artifact tools in `artifact.py` (at agent_engine root: `read/write/append/propose_vote/cast_vote/finalize`) are **in-process side effects** (writing the in-memory ArtifactStore), not external I/O, so they stay in agent_engine.
 
-## 加新 tool 的模式
+## Pattern for adding a new tool
 
-1. 新建 `tools/<name>.py`，导出：
+1. Create `tools/<name>.py` exporting:
    - `TOOL_DEF: dict` — OpenAI function-calling schema
-   - `def handler(...) -> str` — 实现，返回 JSON 字符串（错误用 `{"error": "..."}`）
-2. 在 `tools/__init__.py` 的 `TOOL_DEFINITIONS` 与 `TOOL_HANDLERS` 各加一行
-3. **不**用装饰器自动注册——隐式 import 副作用让 scenario YAML 校验调试很痛
+   - `def handler(...) -> str` — implementation returning a JSON string (errors use `{"error": "..."}`)
+2. Add one line each to `TOOL_DEFINITIONS` and `TOOL_HANDLERS` in `tools/__init__.py`
+3. **Do not** use decorator auto-registration — implicit import side effects make scenario YAML validation painful to debug
 
-## 共享 helper
+## Shared helpers
 
-- `_envelope.py`: `is_error / warn_if_error` —— `{"error": ...}` 信封约定
-- `_subprocess.py`: `run_json_subprocess` —— 子进程 + JSON envelope 解包
+- `_envelope.py`: `is_error / warn_if_error` — `{"error": ...}` envelope convention
+- `_subprocess.py`: `run_json_subprocess` — subprocess + JSON envelope unpack

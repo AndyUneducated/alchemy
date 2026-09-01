@@ -1,11 +1,10 @@
-"""metrics/retrieval.py 单元层：5 个 IR 指标行为契约.
+"""metrics/retrieval.py unit layer: 5 IR indicator behavior contracts.
 
-测试目标不是"重写 ranx 的数学测试"，而是焊死：
-  ① 工厂生产的 callable 接受 `list[SampleResult]` 协议（与 task.aggregation() 同形）
-  ② 从 SampleResult.artifacts.{pred_ids, gold_ids} 拉数据（phase 4 契约耦合点）
-  ③ 边界（空列表 / artifacts 缺字段 / gold 全空）走 0.0 优雅降级，不抛
-  ④ 已知玩具数据上的数值正确性（perfect / partial / miss 三种排布）
-"""
+The test goal is not to "rewrite ranx's math tests", but to weld in:
+  ① The callable produced by the factory accepts the `list[SampleResult]` protocol (same shape as task.aggregation())
+  ② Pull data from SampleResult.artifacts.{pred_ids, gold_ids} (phase 4 contract coupling point)
+  ③ Boundary (empty list/artifacts missing fields/gold all empty) goes to 0.0, graceful degradation, no throwing
+  ④ Numerical correctness on known toy data (three arrangements of perfect / partial / miss)"""
 
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from evals.metrics.retrieval import (
 
 
 def _sr(doc_id: str, pred_ids: list[str], gold_ids: list[str]) -> SampleResult:
-    """构造一条 retrieval 风格 SampleResult（pred/target 占位空字符串）."""
+    """Constructs a retrieval style SampleResult (pred/target placeholder empty string)."""
     return SampleResult(
         doc_id=doc_id,
         prediction="",
@@ -30,7 +29,7 @@ def _sr(doc_id: str, pred_ids: list[str], gold_ids: list[str]) -> SampleResult:
     )
 
 
-# ---------- 边界（4 条）-----------------------------------------------------
+# ---------- Boundaries (4)----------------------------------------------------------------
 
 def test_recall_empty_list_returns_zero():
     """空 sample_results → 0.0（不抛，避免 aggregation 崩溃）."""
@@ -38,19 +37,19 @@ def test_recall_empty_list_returns_zero():
 
 
 def test_recall_missing_artifacts_returns_zero():
-    """老 task 的 SampleResult 没有 pred_ids/gold_ids → 优雅降级 0.0."""
+    """SampleResult of old task does not have pred_ids/gold_ids → graceful degradation 0.0."""
     sr = SampleResult(doc_id="x", prediction="p", target="t", metrics={"acc": 1.0})
     assert recall_at_k(5)([sr]) == 0.0
 
 
 def test_recall_all_gold_empty_returns_zero():
-    """gold_ids 全空（无可评样本）→ 0.0（避免 ranx 抛异常）."""
+    """gold_ids is all empty (no evaluation samples) → 0.0 (to avoid ranx throwing exceptions)."""
     srs = [_sr("q1", ["d1"], []), _sr("q2", ["d2"], [])]
     assert recall_at_k(5)(srs) == 0.0
 
 
 def test_metrics_are_aggregation_callable_shape():
-    """工厂返回的 callable 接受 list[SampleResult] → float（与 task.aggregation() 协议同形）."""
+    """The callable returned by the factory accepts list[SampleResult] → float (identical to the task.aggregation() protocol)."""
     srs = [_sr("q1", ["d1"], ["d1"])]
     for f in [recall_at_k(5), precision_at_k(5), mrr(), ndcg_at_k(5), map_at_k(5)]:
         v = f(srs)
@@ -58,10 +57,10 @@ def test_metrics_are_aggregation_callable_shape():
         assert 0.0 <= v <= 1.0
 
 
-# ---------- 数值正确性（5 条）-----------------------------------------------
+# ---------- Numerical correctness (5 items) --------------------------------------------------
 
 def test_recall_perfect_recall():
-    """gold 全在 top-k → recall=1.0."""
+    """gold is all in top-k → recall=1.0."""
     srs = [
         _sr("q1", ["d1", "d2", "d3"], ["d1", "d2"]),
         _sr("q2", ["d4", "d5"], ["d4"]),
@@ -70,16 +69,16 @@ def test_recall_perfect_recall():
 
 
 def test_recall_partial_50pct():
-    """q1 召回 1/2，q2 召回 1/1 → mean = (0.5 + 1.0) / 2 = 0.75."""
+    """q1 recalls 1/2, q2 recalls 1/1 → mean = (0.5 + 1.0) / 2 = 0.75."""
     srs = [
-        _sr("q1", ["d1", "dx"], ["d1", "d2"]),  # gold=2，pred 命中 1 → recall=0.5
-        _sr("q2", ["d4"], ["d4"]),  # gold=1，pred 命中 1 → recall=1.0
+        _sr("q1", ["d1", "dx"], ["d1", "d2"]),  # gold=2, pred hit 1 → recall=0.5
+        _sr("q2", ["d4"], ["d4"]),  # gold=1, pred hit 1 → recall=1.0
     ]
     assert abs(recall_at_k(5)(srs) - 0.75) < 1e-9
 
 
 def test_precision_at_k_top1():
-    """precision@1：top1 命中 → 1.0；未命中 → 0.0；mean."""
+    """precision@1: top1 hit → 1.0; miss → 0.0; mean."""
     srs = [
         _sr("q1", ["d1", "d2"], ["d1"]),  # top1 = d1 = gold → 1.0
         _sr("q2", ["dx", "d4"], ["d4"]),  # top1 = dx ≠ gold → 0.0
@@ -94,31 +93,29 @@ def test_mrr_first_relevant_at_rank2():
 
 
 def test_ndcg_at_k_decreases_with_lower_rank():
-    """同样的 gold 集合，rank 1 vs rank 3 → ndcg@5 严格下降.
+    """The same gold set, rank 1 vs rank 3 → ndcg@5 strictly decreases.
 
-    锁定 ndcg 的 rank-sensitive 性（与 recall 不同）.
-    """
+    Locks the rank-sensitivity of ndcg (unlike recall)."""
     srs_top = [_sr("q1", ["d1", "x", "y"], ["d1"])]
     srs_low = [_sr("q1", ["x", "y", "d1"], ["d1"])]
     assert ndcg_at_k(5)(srs_top) > ndcg_at_k(5)(srs_low)
 
 
-# ---------- 跨指标关系（2 条）-----------------------------------------------
+# ---------- Cross-indicator relationships (2 items) --------------------------------------------------
 
 def test_recall_precision_inverse_at_high_k():
-    """大 k → recall 趋升 / precision 趋降（基础 IR 直觉）.
+    """Big k → recall goes up / precision goes down (basic IR intuition).
 
-    gold=[d1]，pred 有 1 个 gold 在第一位 + 4 个噪声：
+    gold=[d1], pred has 1 gold in the first position + 4 noise:
       recall@5 = 1/1 = 1.0
-      precision@5 = 1/5 = 0.2
-    """
+      precision@5 = 1/5 = 0.2"""
     srs = [_sr("q1", ["d1", "n1", "n2", "n3", "n4"], ["d1"])]
     assert recall_at_k(5)(srs) == 1.0
     assert abs(precision_at_k(5)(srs) - 0.2) < 1e-9
 
 
 def test_map_perfect_equals_one():
-    """perfect rank（所有 gold 都在最前面，无噪声）→ MAP=1.0."""
+    """perfect rank (all gold on top, no noise) → MAP=1.0."""
     srs = [
         _sr("q1", ["d1", "d2", "d3"], ["d1", "d2", "d3"]),
         _sr("q2", ["d4"], ["d4"]),

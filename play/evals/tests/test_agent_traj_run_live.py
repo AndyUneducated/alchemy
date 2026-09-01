@@ -1,15 +1,14 @@
-"""agent_traj run-path live e2e：agent_engine subprocess + ollama 双 gate.
+"""agent_traj run-path live e2e: agent_engine subprocess + ollama double gate.
 
-目标：在双 gate 都满足时把"evals → subprocess → agent_engine → JSON envelope → trajectory
-metric"端到端跑一遍 brainstorm.md（最小 scenario，无 artifact，3 agents × 2 steps）.
+Goal: When both gates are satisfied, put "evals → subprocess → agent_engine → JSON envelope → trajectory
+metric" run brainstorm.md end-to-end (minimum scenario, no artifacts, 3 agents × 2 steps).
 
-为什么用 brainstorm 而不是 panel：
-  - panel 有 4 名 member + moderator + 11 个 step + tool 链——单跑 ~分钟级
-  - brainstorm 仅 2 step，~10-30s（qwen3.6:27b 在 M-series Mac 上）；CI 友好
-  - phase 5 在线路径主要是 envelope contract + run_fn 通了；行为细节由 score 矩阵覆盖
+Why use brainstorm instead of panel:
+  - The panel has 4 members + moderator + 11 step + tool chains - single operation ~ minute level
+  - brainstorm only 2 steps, ~10-30s (qwen3.6:27b on M-series Mac); CI friendly
+  - The online path of phase 5 is mainly envelope contract + run_fn passed; the behavior details are covered by the score matrix
 
-被 gate 跳过时（无 ollama / 模型未拉）conftest 会清晰提示用户怎么 ollama pull.
-"""
+When skipped by gate (no ollama/model not pulled) conftest will clearly prompt the user how to pull ollama."""
 
 from __future__ import annotations
 
@@ -28,14 +27,13 @@ from .conftest import agent_engine_required, ollama_required
 @ollama_required
 @agent_engine_required
 def test_run_brainstorm_e2e_pins_trajectory():
-    """e2e：跑 brainstorm.md → trajectory 注入 metadata + 5 个 metric 都能算出.
+    """e2e: Run brainstorm.md → trajectory and inject metadata + 5 metrics to calculate it.
 
-    成功条件:
-      - subprocess 正常退出（不抛 RuntimeError）
-      - doc.metadata['trajectory'] 7 个 key 全 pin 上
-      - 至少 1 个 speaker 进了 transcript（agent_engine 真有 LLM 回应）
-      - 5 个 metric 都能 evaluate（不抛 / 数值在 [0,1]）
-    """
+    Success conditions:
+      - The subprocess exits normally (no RuntimeError is thrown)
+      - doc.metadata['trajectory'] 7 keys all pinned
+      - At least 1 speaker entered the transcript (agent_engine really responded with LLM)
+      - All 5 metrics can be evaluated (no throwing / value in [0,1])"""
     run_fn = make_run_fn()
     task = AgentTraj(run_fn=run_fn)
 
@@ -61,12 +59,12 @@ def test_run_brainstorm_e2e_pins_trajectory():
                 "tool_calls", "tool_seq", "decision"):
         assert key in traj, f"trajectory missing {key!r}"
 
-    # 至少 1 名 speaker 应该真出过声（brainstorm 没有 require_tool，模型怠工 0
-    # 几率极低；若真发生说明 agent_engine 整段链路有问题，比 metric 数值更关键）
+    # At least 1 speaker should have actually made a sound (brainstorm does not require_tool, model slowdown 0
+    # The probability is extremely low; if it does happen, it means there is a problem with the entire link of agent_engine, which is more critical than the metric value)
     speakers = {e["speaker"] for e in traj["transcript"] if "speaker" in e}
     assert len(speakers) >= 1, f"transcript 没有 speaker 条目: {traj['transcript']}"
 
-    # 5 个 metric 都能算（不锁数值，仅锁不抛 + 落 [0,1]）
+    # All 5 metrics can be calculated (no locking of values, only locking without throwing + falling [0,1])
     from evals.api import Response
     sr = task.process_results(enriched, Response(doc_id=doc.id))
     for k in ("task_success", "tool_call_set_f1", "argument_correctness",

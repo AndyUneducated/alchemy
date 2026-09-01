@@ -1,61 +1,61 @@
-# Triples — Phase 2 SFT 数据产物目录
+# Triples — Phase 2 SFT data product directory
 
-`agent_sft/data/triples/` 装存数据流水线（mine → extract / synthesize → split → format）的中间产物和最终训练样本。v1 的两份 1k 数据集仍保留作历史基线；当前 qwen3.5 线以 clean-data 版本为主。
+`agent_sft/data/triples/` stores the intermediate products and final training samples of the data pipeline (mine → extract / synthesize → split → format). The two 1k data sets of v1 are still retained as historical Baseline; the current qwen3.5 line is mainly the clean-data version.
 
-## 当前数据集速查
+## Quick check of current data set
 
-|数据集|底座 / 来源|用途|状态|
+|dataset|base/source|purpose|status|
 |---|---|---|---|
-|`train_7b_1k.jsonl` / `val_7b_1k.jsonl`|Qwen2.5-7B mining|v1 训练与复现|历史保留|
-|`train_32b_1k.jsonl` / `val_32b_1k.jsonl`|Qwen2.5-32B mining|wrong_tool hard sample / ablation|历史保留|
-|`train_qwen3.jsonl` / `val_qwen3.jsonl`|v1 7B + v1 32B + v1.5 9B 混源|v1.5 qwen3.5 重训|被 clean-data 版本取代|
-|`train_qwen3_clean.jsonl` / `val_qwen3_clean.jsonl`|qwen3 clean rebuild|v1.6 当前默认训练数据|当前推荐|
+|`train_7b_1k.jsonl` / `val_7b_1k.jsonl`|Qwen2.5-7B mining|v1 training and reproduction|history retention|
+|`train_32b_1k.jsonl` / `val_32b_1k.jsonl`|Qwen2.5-32B mining|wrong_tool hard sample / ablation|History retention|
+|`train_qwen3.jsonl` / `val_qwen3.jsonl`|v1 7B + v1 32B + v1.5 9B mixed source|v1.5 qwen3.5 retraining|replaced by clean-data version|
+|`train_qwen3_clean.jsonl` / `val_qwen3_clean.jsonl`|qwen3 clean rebuild|v1.6 current default training data|current recommendation|
 
-## 文件清单
+## File list
 
-|文件 / 目录|生成于|是否入 git|用途|
+|File/Directory|Generated in|Whether to enter git|Purpose|
 |---|---|---|---|
-|`runs_1k_fast_{7b,32b}_r0_124/<scen>-r<N>.json`|`mine_triples.py` (fast scenario, run_id 0-124)|✅|Phase 2 终交付的 raw envelope，每模型 250 个（2 scenario × 125 run）|
-|`{triples,train_triples,val_triples,train,val}_{7b,32b}_1k.jsonl`|`synthesize.py` → `split.py` → `formatter.py`|✅|v1 两份模型各自的全链路 SFT 数据；`train_*.jsonl` 是 MLX-LM 直接可吃的 chat schema|
-|`*_qwen3*.jsonl` / `qwen3_clean_report.json`|qwen3.5 迁移与 clean-data rebuild|✅ / 部分 gitignored|当前 qwen3 训练线；详见 [`DECISIONS §10`](../../DECISIONS.md) / [`§11`](../../DECISIONS.md)|
-|`runs/<scen>-r<N>.json`|`mine_triples.py` 默认输出|❌ (gitignore)|本地 smoke / 临时跑批|
-|`triples.jsonl` / `train.jsonl` / `val.jsonl` 等无 `_1k` 后缀|默认产物|❌ (gitignore)|本地 smoke 派生；要复现 1k 数据集见 §重生命令|
+|`runs_1k_fast_{7b,32b}_r0_124/<scen>-r<N>.json`|`mine_triples.py` (fast scenario, run_id 0-124)|✅|Phase 2 final delivered raw envelope, 250 per model (2 scenario × 125 run)|
+|`{triples,train_triples,val_triples,train,val}_{7b,32b}_1k.jsonl`|`synthesize.py` → `split.py` → `formatter.py`|✅|v1 The full-link SFT data of the two models; `train_*.jsonl` is the chat schema that can be directly consumed by MLX-LM|
+|`*_qwen3*.jsonl` / `qwen3_clean_report.json`|qwen3.5 migration and clean-data rebuild|✅ / Partially gitignored|Current qwen3 training line; See [`DECISIONS §10`](../../DECISIONS.md) / [`§11`](../../DECISIONS.md)|
+|`runs/<scen>-r<N>.json`|`mine_triples.py` default output|❌ (gitignore)|local smoke / temporary run batch|
+|`triples.jsonl` / `train.jsonl` / `val.jsonl` etc. without `_1k` suffix|Default product|❌ (gitignore)|Local smoke derivation; to reproduce 1k data set see §Rebirth command|
 
-## 两种 triple 来源（pilot 后选用 synthesize）
+## Two triple sources (select synthesize after pilot)
 
-|脚本|配对策略|yield|corrected 来源|
+|script|pairing strategy|yield|corrected source|
 |---|---|---|---|
-|`extractor.py`|first attempt 失败 + 后续 attempt 真实成功|~3-25%（看模型 recovery 率）|真实 speaker.content|
-|`synthesize.py`（**当前默认**）|每个 nudge fire → 1 triple|100%|从 step.instruction 程序化模板（fallback：通用 wrapper + 完整 instruction）|
+|`extractor.py`|First attempt failure + subsequent attempt real success|~3-25% (depending on the model recovery rate)|Real speaker.content|
+|`synthesize.py` (**current default**)|each nudge fire → 1 triple|100%|from step.instruction programmatic template (fallback: universal wrapper + full instruction)|
 
-7B pilot 测得 recovery 率仅 ~3% → extractor 路径 yield 太低不实用；synthesize 用 step.instruction 里的字面 `tool(args)` 模板造 corrected，零额外 compute 把 yield 拉到 100%。详见 §历史遗留：57-triple pilot 与方法选择。
+The recovery rate measured by 7B pilot is only ~3% → the yield of the extractor path is too low and impractical; the synthesis size is corrected using the literal `tool(args)` template in step.instruction, and zero extra compute is used to increase the yield to 100%. See §Historical legacy: 57-triple pilot and method selection.
 
-## 重生命令
+## Rebirth command
 
-### v1 1k 终交付批次（与 repo 内 `*_1k.jsonl` 一致）
+### v1 1k final delivery batch (consistent with `*_1k.jsonl` in repo)
 
-以 7B 为例（32B 把 `AGENT_ENGINE_MODEL` 换成 `qwen2.5:32b`、所有 `_7b_` 换成 `_32b_` 即可）：
+Take 7B as an example (for 32B, replace `AGENT_ENGINE_MODEL` with `qwen2.5:32b` and all `_7b_` with `_32b_`):
 
 ```bash
 export AGENT_ENGINE_MODEL=qwen2.5:7b
 
-# 1) 跑批 250 envelope（fast 副本，run_id 0-124）
+# 1) Batch 250 envelopes (fast copy, run_id 0-124)
 python play/agent_sft/data/mine_triples.py \
   --run-ids $(seq 0 124) \
   --out-dir play/agent_sft/data/triples/runs_1k_fast_7b_r0_124
 
-# 2) 抽三元组（synthesize：每个 fire 一条）
+# 2) Extract triples (synthesize: one per fire)
 python play/agent_sft/data/synthesize.py \
   --in  play/agent_sft/data/triples/runs_1k_fast_7b_r0_124 \
   --out play/agent_sft/data/triples/triples_7b_1k.jsonl
 
-# 3) 切 train/val（per-scenario 末 20% run_id → val）
+# 3) Split train/val (per-scenario last 20% run_id → val)
 python play/agent_sft/data/split.py \
   --in    play/agent_sft/data/triples/triples_7b_1k.jsonl \
   --train play/agent_sft/data/triples/train_triples_7b_1k.jsonl \
   --val   play/agent_sft/data/triples/val_triples_7b_1k.jsonl
 
-# 4) 格式化为 MLX-LM 样本（train + val 各跑一次）
+# 4) Format MLX-LM samples (run formatter on train + val)
 python play/agent_sft/data/formatter.py \
   --in  play/agent_sft/data/triples/train_triples_7b_1k.jsonl \
   --out play/agent_sft/data/triples/train_7b_1k.jsonl
@@ -64,67 +64,67 @@ python play/agent_sft/data/formatter.py \
   --out play/agent_sft/data/triples/val_7b_1k.jsonl
 ```
 
-### 本地 smoke / 改 schema 调试
+### Local smoke / change schema debugging
 
-走默认输出（`runs/` + `triples.jsonl` + `train.jsonl`，全 gitignored），命令同上但去掉 `--out-dir`、文件名去 `_*_1k` 后缀、`--run-ids 0 1 2 3 4 5` 跑 12 envelope 即可。要复现 baseline eval 的 `max_retries=1` 行为：加 `--upstream`（mine + synthesize 必须一致，否则 turn_idx 错位 yield 归零）。
+Use the default output (`runs/` + `triples.jsonl` + `train.jsonl`, all gitignored), the command is the same as above but remove `--out-dir`, remove the `_*_1k` suffix from the file name, `--run-ids 0 1 2 3 4 5` and run 12 envelopes. To reproduce the `max_retries=1` behavior of baseline eval: add `--upstream` (mine + synthesize must be consistent, otherwise turn_idx will be misplaced and yield will be reset to zero).
 
-每个脚本 `--help` 看完整 flag。
+`--help` to see complete flags per script.
 
-## Scenario：fast 副本 vs upstream
+## Scenario: fast copy vs upstream
 
-`data/scenarios/{tool_chain,code_review}_fast.md` 是上游 `agent_engine/scenarios/*.md` 的 mining 优化派生：
+`data/scenarios/{tool_chain,code_review}_fast.md` is a mining optimized derivative of upstream `agent_engine/scenarios/*.md`:
 
-|改动|fast|upstream|为什么 fast 这么改|
+|Change|fast|upstream|Why fast is changed like this|
 |---|---|---|---|
-|`max_retries`|0|1|synthesize 只看 first attempt，retry 是纯浪费 LLM 调用|
-|`max_tokens`|80|160-200|agent prompt 本就限制 ≤30/50 字，cap 贴近实际负载|
-|moderator open / finalize|删|有|0 fires，纯仪式开销|
+|`max_retries`|0|1|synthesize only looks at the first attempt, retry is a pure waste of LLM calls|
+|`max_tokens`|80|160-200|agent prompts already cap at ≤30/50 chars; cap matches actual load|
+|moderator open / finalize|delete|has |0 fires, pure ritual overhead|
 |envelope wall clock (7B / M4 Pro)|~42s/env|~65s/env|-35%|
-|synthesize yield|~4 triples/env|~4.75 triples/env|相当|
+|synthesize yield|~4 triples/env|~4.75 triples/env|Quite|
 
-`mine_triples.py` 默认走 fast；`--upstream` 切回原 scenario（与 baseline eval 数据一致）。`extractor.py` / `synthesize.py` 也有同款 `--upstream` flag，必须与 mining 步骤一致——否则 turn_idx 错位会让 yield 归零。
+`mine_triples.py` defaults to fast; `--upstream` switches back to the original scenario (consistent with baseline eval data). `extractor.py` / `synthesize.py` also has the same `--upstream` flag, which must be consistent with the mining step - otherwise the misalignment of turn_idx will cause the yield to return to zero.
 
-## OOD 评估
+## OOD evaluation
 
-**OOD 评估不在本目录**——复用 Phase 1 落地的 `play/evals/data/bfcl_slice/gold.jsonl`（50 例 BFCL `simple_python` 切片）。v1 Phase 5 复测时直接：
+**OOD evaluation is not in this directory** - Reuse the `play/evals/data/bfcl_slice/gold.jsonl` implemented in Phase 1 (50 examples of BFCL `simple_python` slices). v1 Phase 5 retest directly:
 
 ```bash
 python -m evals run --task bfcl_slice --model ollama:agent-sft-qwen
 ```
 
-qwen3.5 迁移后，`agent-sft-qwen-3` 仍是 placeholder，不能用这条命令判断 adapter 真实 OOD 表现。不复制公开数据集到本仓库；BFCL 上游变更由 `play/evals/data/bfcl_slice/_fetch.py` 管理。
+After qwen3.5 migration, `agent-sft-qwen-3` is still a placeholder — do not use this command to judge real adapter OOD performance. Public datasets are not copied into this repo; BFCL upstream changes are managed by `play/evals/data/bfcl_slice/_fetch.py`.
 
-## v1 Phase 2 终交付：1k × 2 模型
+## v1 Phase 2 final delivery: 1k × 2 models
 
-两份独立数据集，挖批参数对齐（fast scenario / `max_retries=0` / `run_id 0-124` / 2 scenarios），仅 mining 模型不同：
+Two independent data sets, mining batch parameters are aligned (fast scenario / `max_retries=0` / `run_id 0-124` / 2 scenarios), only the mining model is different:
 
-|项|7B (Qwen2.5-7B)|32B (Qwen2.5-32B)|
+|Item|7B (Qwen2.5-7B)|32B (Qwen2.5-32B)|
 |---|---|---|
 |envelope（committed in `runs_1k_fast_{7b,32b}_r0_124/`）|250|250|
 |triples (`triples_*_1k.jsonl`)|**1212**|**1052**|
 |triples / envelope|4.85|4.21|
 |train / val (`train_*_1k.jsonl` / `val_*_1k.jsonl`)|966 / 246|842 / 210|
-|失败模式分布|missed 1091 / wrong_tool 121|missed 773 / wrong_tool 279|
-|scenario 分布|code_review 933 / tool_chain 279|code_review 802 / tool_chain 250|
-|实测 wall clock（M4 Pro）|~7.5 h|~9.5 h|
+|Failure mode distribution|missed 1091/wrong_tool 121|missed 773/wrong_tool 279|
+|scenario distribution|code_review 933 / tool_chain 279|code_review 802 / tool_chain 250|
+|Tested wall clock (M4 Pro)|~7.5 h|~9.5 h|
 |on-disk size|envelopes 2.1 MB + jsonl ~11 MB|envelopes 2.4 MB + jsonl ~10 MB|
 
-`val` 切分一致：每 scenario 末 20% run_id（即 `run_id ∈ [100, 124]`）→ val。
+`val` is split consistently: the last 20% run_id of each scenario (i.e. `run_id ∈ [100, 124]`) → val.
 
-**7B vs 32B 选择指引（v1 历史）**：
+**7B vs 32B Selection Guide (v1 History)**:
 
-|选择|适合场景|代价|
+|Choose|Suit the scene|Price|
 |---|---|---|
-|7B|默认训练；missed 主分布覆盖够，单条 triple 成本较低|wrong_tool 分布较窄|
-|32B|补 wrong_tool hard sample；做 ablation|单条 triple 成本更高|
-|混合|qwen3 迁移早期凑数据量|需要清洗去重与 train/val 泄漏检查；v1.6 已重建 clean-data|
+|7B|Default training; missed main distribution coverage is sufficient, single triple cost is lower |wrong_tool distribution is narrower|
+|32B|Complement wrong_tool hard sample; do ablation|Single triple cost is higher|
+|Hybrid|qwen3 migration data volume in the early stage|needs cleaning and deduplication and train/val leakage check; v1.6 has been rebuilt clean-data|
 
-## 历史遗留：57-triple pilot 与方法选择
+## Historical legacy: 57-triple pilot and method selection
 
-Phase 2 早期跑过 4 个 pilot 批次（详细时序见 `JOURNAL.md` 2026-05-10 条目），关键结论：
+Four pilot batches were run in the early stages of Phase 2 (see the `JOURNAL.md` 2026-05-10 entry for detailed timing). Key conclusions:
 
-1. 7B + extractor（要求 first-fail + later-success 真 recovery）yield 仅 0.17/env，与 plan 估算 5/env 差 30 倍。
-2. 试 `max_retries` 翻倍 → 无改善；试 32B 对照 → recovery 从 3% 跳到 25%，证明底座 capability 才是 recovery 率主因。
-3. 改走 synthesize 路径（per-fire + step.instruction 模板造 corrected）→ 7B 也能 yield ~4.75/env，命中 plan 原估算。
+1. 7B + extractor (requires first-fail + later-success true recovery) yield is only 0.17/env, which is 30 times worse than plan’s estimated 5/env.
+2. Try doubling `max_retries` → no improvement; try 32B comparison → recovery jumps from 3% to 25%, proving that base capability is the main cause of recovery rate.
+3. Change to the synthesize path (per-fire + step.instruction template corrected) → 7B can also yield ~4.75/env, hitting the original estimate of plan.
 
-**为什么仍保留 `extractor.py`**：未来若 Phase 3 训练后 7B 自己 recovery 率拉到 30%+，extractor 的"真自纠"语义比 synthesize 的"模板答案"更对应项目核心论点（self-correction），届时一行命令切回。
+**Why `extractor.py`** is still retained: In the future, if the recovery rate of 7B reaches 30%+ after Phase 3 training, and the "true self-correction" semantics of extractor are more consistent with the core argument of the project (self-correction) than the "template answer" of synthesize, then the one-line command will be switched back.

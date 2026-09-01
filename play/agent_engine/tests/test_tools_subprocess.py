@@ -1,21 +1,20 @@
-"""Tools dispatch + retrieve_docs 子进程契约 + 跨子项目 `play/rag/query.py`
-CLI 契约的单测.
+"""Tools dispatch + retrieve_docs subprocess contract + cross-subproject `play/rag/query.py`
+CLI contract tests.
 
-agent_engine 唯一的"跨子项目硬依赖"是 `tools/retrieve_docs.py` → `play/rag/query.py`
-的 subprocess + JSON envelope 握手（DECISIONS §11 / §13 同精神）.这一文件
-把这一处契约一次性扣死：
+agent_engine's only cross-subproject hard dependency is `tools/retrieve_docs.py` → `play/rag/query.py`
+subprocess + JSON envelope handshake (DECISIONS §11 / §13 same spirit). This file
+locks that contract in one place:
 
-  - `agent_engine.tools.dispatch`：路由 / 未知工具 / `is_error` / `warn_if_error`
-  - `retrieve_docs.handler`：
-      * subprocess 命令参数（旗标 / 顺序 / `--rerank` 仅在 rerank=True 时追加）
-      * stdout JSON envelope `{data, meta}` 的 slim 投影（剔除 query / 多余 meta
-        字段，只保留 LLM 真正需要的 `mode / reranked / top_k`）
-      * exit code != 0 / 非 JSON → 返 `{"error": ...}`
-  - **跨项目契约**：`play/rag/query.py` 的 CLI 必须仍然接受
-    `--vdb / --query / --top-k / --mode / --rerank / --json` 6 个 flag，
-    且 `--mode` choices 仍含 `dense / bm25 / hybrid`. 这是"rag 改了让 agent_engine
-    悄悄坏掉"的最后一道防线——agent_engine 改不到 rag 的源码，但能在自己的 test
-    里钉死期望的 CLI surface.
+  - `agent_engine.tools.dispatch`: routing / unknown tool / `is_error` / `warn_if_error`
+  - `retrieve_docs.handler`:
+      * subprocess command args (flags / order / `--rerank` only when rerank=True)
+      * slim projection of stdout JSON envelope `{data, meta}` (drop query / extra meta
+        fields; keep only `mode / reranked / top_k` the LLM needs)
+      * exit code != 0 / non-JSON → return `{"error": ...}`
+  - **Cross-project contract**: `play/rag/query.py` CLI must still accept
+    `--vdb / --query / --top-k / --mode / --rerank / --json` six flags,
+    and `--mode` choices still include `dense / bm25 / hybrid`. Last line of defense
+    against silent rag breaks — agent_engine cannot edit rag source but can pin expected CLI surface in tests.
 """
 from __future__ import annotations
 
@@ -48,8 +47,8 @@ def test_dispatch_unknown_tool_returns_error_envelope():
 
 
 def test_dispatch_routes_retrieve_docs_to_handler(monkeypatch: pytest.MonkeyPatch):
-    """`dispatch("retrieve_docs", args)` 走 `retrieve_docs.handler`；
-    monkeypatch subprocess 让 handler 不真发 chromadb 请求."""
+    """`dispatch("retrieve_docs", args)` goes through `retrieve_docs.handler`;
+    monkeypatch subprocess so handler does not hit chromadb."""
     captured: dict = {}
 
     def fake_subprocess(cmd):
@@ -79,7 +78,7 @@ def test_warn_if_error_writes_first_line_to_stderr(capsys):
     warn_if_error("xtool", '{"error": "boom\\nstack"}')
     err = capsys.readouterr().err
     assert "WARNING: tool xtool failed: boom" in err
-    # 多行 error 只取首行
+    # multi-line error: take first line only
     assert "stack" not in err
 
 
@@ -96,7 +95,7 @@ def test_tool_definitions_exposes_retrieve_docs():
 # ---------- retrieve_docs handler -------------------------------------
 
 def test_retrieve_docs_handler_passes_required_flags(monkeypatch: pytest.MonkeyPatch):
-    """handler 必须把所有 LLM 提供的字段映射到 query.py 的 CLI flag."""
+    """handler must map all LLM-provided fields to query.py CLI flags."""
     captured: dict = {}
 
     def fake_subprocess(cmd):
@@ -116,7 +115,7 @@ def test_retrieve_docs_handler_passes_required_flags(monkeypatch: pytest.MonkeyP
     assert cmd[1].endswith("query.py"), (
         f"unexpected script path: {cmd[1]} — should resolve to play/rag/query.py"
     )
-    # 必有这些 flag + value
+    # required flags + values
     for pair in [
         ("--vdb", "/path/to/vdb"),
         ("--query", "关键词"),
@@ -128,7 +127,7 @@ def test_retrieve_docs_handler_passes_required_flags(monkeypatch: pytest.MonkeyP
             f"{pair[0]} should be followed by {pair[1]!r}; got {cmd[idx + 1]!r}"
         )
     assert "--json" in cmd
-    # rerank=False → 不追加 --rerank
+    # rerank=False → do not append --rerank
     assert "--rerank" not in cmd
 
 
@@ -172,8 +171,8 @@ def test_retrieve_docs_handler_slims_envelope_to_data_and_meta(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """rag envelope `{query, data, meta: {mode, reranked, top_k, embedding_model, vdb}}`
-    → tool 边界投影为 `{data, meta: {mode, reranked, top_k}}`. 老消费者不应看到
-    embedding_model / vdb / query 这些 LLM 不关心的字段."""
+    → tool boundary projects to `{data, meta: {mode, reranked, top_k}}`. Old consumers
+    must not see embedding_model / vdb / query fields the LLM does not need."""
     monkeypatch.setattr(
         retrieve_docs, "run_json_subprocess", lambda cmd: (0, {
             "query": "q",
@@ -194,9 +193,8 @@ def test_retrieve_docs_handler_slims_envelope_to_data_and_meta(
 # ---------- cross-project: play/rag/query.py CLI contract -------------
 
 def test_rag_query_script_path_exists_and_resolves_under_play():
-    """`retrieve_docs._QUERY_SCRIPT` 必须真指向 `play/rag/query.py`. 这道断言
-    防 retrieve_docs 内部 path 计算被改坏（DECISIONS §11 / agent_engine 与 rag
-    解耦的进程边界依赖此 path 解析）.
+    """`retrieve_docs._QUERY_SCRIPT` must point at `play/rag/query.py`. Guards against
+    broken internal path resolution (DECISIONS §11 / process boundary between agent_engine and rag).
     """
     resolved = Path(retrieve_docs._QUERY_SCRIPT).resolve()
     assert resolved == RAG_QUERY_PATH.resolve(), (
@@ -206,9 +204,9 @@ def test_rag_query_script_path_exists_and_resolves_under_play():
 
 
 def test_rag_query_cli_surface_still_exposes_required_flags():
-    """跨子项目契约：`play/rag/query.py` 的 CLI 仍然接受 retrieve_docs.handler
-    会传的所有 flag. 静态文本检查（不需要 chromadb / rag 依赖装好），任何
-    flag 重命名 / 删除立即在本测试失败."""
+    """Cross-project contract: `play/rag/query.py` CLI still accepts all flags
+    retrieve_docs.handler passes. Static text check (no chromadb / rag deps needed);
+    any flag rename/delete fails here immediately."""
     src = RAG_QUERY_PATH.read_text(encoding="utf-8")
     required_flags = ["--vdb", "--query", "--top-k", "--mode", "--rerank", "--json"]
     missing = [f for f in required_flags if f not in src]
@@ -220,8 +218,8 @@ def test_rag_query_cli_surface_still_exposes_required_flags():
 
 
 def test_rag_query_mode_choices_still_include_hybrid_dense_bm25():
-    """`--mode` choices 仍含三种检索策略；retrieve_docs 的 tool schema enum 与之
-    严格对齐（tools/retrieve_docs.py 第 ~45 行）."""
+    """`--mode` choices still include three retrieval strategies; retrieve_docs tool schema enum
+    strictly aligned (tools/retrieve_docs.py ~line 45)."""
     src = RAG_QUERY_PATH.read_text(encoding="utf-8")
     pattern = re.compile(
         r'choices\s*=\s*\[\s*"dense"\s*,\s*"bm25"\s*,\s*"hybrid"\s*\]'
@@ -234,9 +232,9 @@ def test_rag_query_mode_choices_still_include_hybrid_dense_bm25():
 
 
 def test_rag_query_json_envelope_shape_documented():
-    """rag CLI doc 仍承诺 `{query, data, meta}` envelope（DECISIONS §11 同精神）.
-    retrieve_docs.handler 直接索引 `payload["data"]` 与 `payload["meta"][...]`,
-    rag 改 envelope key 会让 handler 抛 KeyError."""
+    """rag CLI doc still promises `{query, data, meta}` envelope (DECISIONS §11 same spirit).
+    retrieve_docs.handler indexes `payload["data"]` and `payload["meta"][...]` directly;
+    rag envelope key changes cause handler KeyError."""
     src = RAG_QUERY_PATH.read_text(encoding="utf-8")
     assert "{query, data, meta}" in src, (
         "rag/query.py CLI help no longer documents the {query, data, meta} "

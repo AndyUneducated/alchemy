@@ -1,24 +1,23 @@
-"""族 4 RAG 接地维度（5 个 judge_xxx 闭包工厂 + 2 个 RAG 专用 parser）.
+"""Family 4 RAG ground dimension (5 judge_xxx closure factories + 2 RAG-specific parsers).
 
-为什么单独建 `judge_rag.py` 而不是塞进 `judge_core.py`：
-  - judge_core 是"评分方法学"（pointwise / pairwise / g_eval / self_consistency）
-  - judge_rag  是"评分对象 = RAG pipeline 各环节"（faithfulness / answer_correctness / ...）
-  两层正交：判 LM 范式扩展到第 5 个不会拖累 judge_rag 的演化（DECISIONS §4 决策）.
+Why build `judge_rag.py` separately instead of stuffing it into `judge_core.py`:
+  - judge_core is the "scoring methodology" (pointwise / pairwise / g_eval / self_consistency)
+  - judge_rag is "scoring object = each link of RAG pipeline" (faithfulness / answer_correctness / ...)
+  Two levels of orthogonality: The extension of the judge LM paradigm to the 5th does not drag down the evolution of judge_rag (DECISIONS §4 decision).
 
-5 个维度对齐 RAGAS 主框架（faithfulness / answer_correctness / context_precision /
-context_recall / answer_relevancy），但**不直接 import ragas**：
-  - 依赖膨胀（langchain / openai / 数据科学全家桶）
-  - 我们已有 LM ABC 与 closure 工厂模式，自实现 ~150 行就把同一通路跑通
-  - 锁住 prompt 字面字符串（lm-eval 不变量），ragas 内部 prompt 是黑盒
+5 dimensions aligned to the RAGAS main framework (faithfulness / answer_correctness / context_precision /
+context_recall / answer_relevancy), but without importing ragas directly:
+  - Dependency expansion (langchain/openai/data science family bucket)
+  - We already have LM ABC and closure factory patterns, and it only takes ~150 lines to run the same path.
+  - Lock the prompt literal string (lm-eval invariant), the prompt inside ragas is a black box
 
-数据契约（path B+C，见 DECISIONS §4）：
-  - `response.text` 装 LM-side 输出（answer 字符串）
-  - `doc.metadata['contexts']` 装 retrieval 产物（list[str]，by rag_qa.process_docs 注入）
-  - `doc.target` 装 gold 答案（answer_correctness / context_recall 用）
+Data contract (path B+C, see DECISIONS §4):
+  - `response.text` loads LM-side output (answer string)
+  - `doc.metadata['contexts']` installs retrieval products (list[str], injected by rag_qa.process_docs)
+  - `doc.target` installs gold answers (for answer_correctness / context_recall)
 
-每个 judge_xxx 都是 closure 工厂：返回 `Callable[[Doc, Response], float]`，
-与 judge_core.judge_pointwise 协议同形——self_consistency 也能照样套.
-"""
+Each judge_xxx is a closure factory: returns `Callable[[Doc, Response], float]`,
+Identical to the judge_core.judge_pointwise protocol - self_consistency can also be used."""
 
 from __future__ import annotations
 
@@ -29,7 +28,7 @@ from ..api import Doc, Request, Response
 from ..models.base import LM
 
 
-# ---------- 默认 prompt 模板 -------------------------------------------------
+# ----------Default prompt template-------------------------------------------------
 
 DEFAULT_CLAIM_EXTRACT_TEMPLATE = (
     "Decompose the following text into atomic factual statements. "
@@ -74,22 +73,21 @@ DEFAULT_ANSWER_RELEVANCE_TEMPLATE = (
 )
 
 
-# ---------- RAG 专用 parsers -------------------------------------------------
+# ---------- RAG-specific parsers --------------------------------------------------
 
 def parse_statement_list(text: str) -> list[str]:
-    """从 LLM 输出抽 bulleted/numbered 列表项 → list[str].
+    """Extract bulleted/numbered list items from LLM output → list[str].
 
-    支持的前缀：`- foo` / `* foo` / `1. foo` / `1) foo` / 纯换行行也接.
-    Trim 空白，过滤空行。这是 faithfulness / context_recall / answer_correctness
-    三个 metric 共用的 decomposition 入口.
-    """
+    Supported prefixes: `- foo` / `* foo` / `1. foo` / `1) foo` / Pure newline lines are also accepted.
+    Trim blank, filter empty lines. This is faithfulness/context_recall/answer_correctness
+    Decomposition entry shared by three metrics."""
     lines = (text or "").splitlines()
     out: list[str] = []
     for line in lines:
         s = line.strip()
         if not s:
             continue
-        # 剥常见 bullet 前缀
+        # Strip common bullet prefixes
         s = re.sub(r"^[\-\*•]\s+", "", s)
         s = re.sub(r"^\d+[\.\)]\s+", "", s)
         s = s.strip()
@@ -99,14 +97,13 @@ def parse_statement_list(text: str) -> list[str]:
 
 
 def parse_tp_fp_fn(text: str) -> tuple[int, int, int]:
-    """从 judge 输出抽 (TP, FP, FN) 三整数.
+    """Draw (TP, FP, FN) three integers from the judge output.
 
-    解析策略（鲁棒优先）：
-      ① 先找显式形如 'TP=3' / 'FP: 1' / 'FN 2' 的命名 token
-      ② 若三键都没匹配，回退取前 3 个非负整数
+    Parsing strategy (robust first):
+      ① First find the named token with explicit form like 'TP=3' / 'FP: 1' / 'FN 2'
+      ② If none of the three keys match, fall back to the first three non-negative integers.
 
-    缺任一键 → ValueError，强制 caller 知道 judge 输出失格.
-    """
+    Any key is missing → ValueError, forcing the caller to know that the judge output is disqualified."""
     s = text or ""
     found: dict[str, int] = {}
     for key in ("TP", "FP", "FN"):
@@ -116,7 +113,7 @@ def parse_tp_fp_fn(text: str) -> tuple[int, int, int]:
     if all(k in found for k in ("TP", "FP", "FN")):
         return found["TP"], found["FP"], found["FN"]
 
-    # fallback: 前 3 个非负 int
+    # fallback: first 3 non-negative ints
     ints = [int(m) for m in re.findall(r"\d+", s)]
     if len(ints) >= 3:
         return ints[0], ints[1], ints[2]
@@ -125,28 +122,27 @@ def parse_tp_fp_fn(text: str) -> tuple[int, int, int]:
 
 
 def _parse_yes_no(text: str) -> int:
-    """LLM 'yes/no' 输出 → 1/0；保守策略：歧义返回 0（NLI 失败默认 not-supported）."""
+    """LLM 'yes/no' output → 1/0; conservative strategy: ambiguity returns 0 (default is not-supported on NLI failure)."""
     s = (text or "").strip().lower()
     if not s:
         return 0
-    # 优先看首词是否 'yes'/'no'
+    # Give priority to whether the first word is 'yes'/'no'
     first = re.split(r"\W+", s, maxsplit=1)[0]
     if first in {"yes", "y", "true", "supported", "entailed", "1"}:
         return 1
     if first in {"no", "n", "false", "unsupported", "0"}:
         return 0
-    # 全文搜兜底
+    # Full text search
     if re.search(r"\byes\b", s):
         return 1
     return 0
 
 
 def _ask(lm_or_rec, prompt: str, *, doc_id: str = "", max_tokens: int = 64) -> str:
-    """单轮 LM 调用助手——把 LM ABC 的 batch in/out 压缩到单 prompt → text 形态.
+    """Single-round LM call assistant - compress the batch in/out of LM ABC into a single prompt → text form.
 
-    DECISIONS §7.3：接受 `LM` 或 `_JudgeRecorder`（duck-typing：has `.call`）；
-    factory 内部走 recorder 时 LM 调用记录会被 collected 供 efficiency.judge.* 子组消费.
-    """
+    DECISIONS §7.3: Accepts `LM` or `_JudgeRecorder` (duck-typing: has `.call`);
+    When the recorder is used inside the factory, the LM call records will be collected for consumption by the efficiency.judge.* subgroup."""
     req = Request(
         doc_id=doc_id, prompt=prompt,
         request_type="generate_until", max_tokens=max_tokens,
@@ -169,16 +165,15 @@ def judge_faithfulness(
     max_tokens_extract: int = 256,
     max_tokens_nli: int = 16,
 ) -> Callable[[Doc, Response], float]:
-    """两步 judge：
-      ① 让 judge_lm 把 `response.text` 拆 atomic claims（parse_statement_list 解析）
-      ② 逐 claim 让 judge_lm 对 `doc.metadata['contexts']`（拼成 single context block）
-         判 yes/no（NLI 风格）。返回 #supported / #total.
+    """Two-step judge:
+      ① Let judge_lm split `response.text` into atomic claims (parse_statement_list parsing)
+      ② Let judge_lm pair `doc.metadata['contexts']` claim by claim (spelled into single context block)
+         Check yes/no (NLI style). Return #supported / #total.
 
-    `contexts` 来自 `doc.metadata`，遵循 path B+C：检索器产物住在 doc 一侧.
-    无 contexts / 无可解析 claim → 0.0（保守）.
+    `contexts` comes from `doc.metadata`, following path B+C: retriever products live on the doc side.
+    No contexts / no resolvable claim → 0.0 (conservative).
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
-    """
+    DECISIONS §7.3: The closure holds the `_recorder` property for task.collect_judge_responses to pull."""
     from .judge_core import _JudgeRecorder
     rec = _JudgeRecorder(judge_lm)
 
@@ -218,18 +213,17 @@ def judge_answer_correctness(
     template: str = DEFAULT_TP_FP_FN_TEMPLATE,
     max_tokens: int = 64,
 ) -> Callable[[Doc, Response], float | None]:
-    """单步 judge：让 judge_lm 数 TP/FP/FN（事实级），返回 F1 | None.
+    """Single-step judge: let judge_lm count TP/FP/FN (fact level), return F1 | None.
 
-    不依赖 retrieval contexts——只比 response 与 doc.target，是 grounding 维度里
-    最直接的 "endpoint quality" 指标。F1 的好处是 precision (1-FP/(TP+FP)) 与
-    recall (1-FN/(TP+FN)) 双约束.
+    Does not rely on retrieval contexts - only response and doc.target, in the grounding dimension
+    The most direct "endpoint quality" indicator. The advantage of F1 is that precision (1-FP/(TP+FP)) and
+    recall (1-FN/(TP+FN)) double constraint.
 
-    无 target / response 全空 / TP+FP+FN=0 → 0.0（degenerate-input：empty 输入
-    的 F1=0 是合法最低分）；parse 失败 → None（DECISIONS §X wave 4，与 phase 7 P2
-    "未测得"占位同形）.
+    No target / response empty / TP+FP+FN=0 → 0.0 (degenerate-input: empty input
+    of F1=0 is the legal minimum); parse fails → None (DECISIONS §X wave 4, with phase 7 P2
+    "Not measured" placeholder is the same shape).
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性.
-    """
+    DECISIONS §7.3: closure holds the `_recorder` attribute."""
     from .judge_core import _JudgeRecorder
     rec = _JudgeRecorder(judge_lm)
 
@@ -264,17 +258,16 @@ def judge_context_precision(
     template: str = DEFAULT_CONTEXT_RELEVANCE_TEMPLATE,
     max_tokens: int = 16,
 ) -> Callable[[Doc, Response], float]:
-    """逐 context（按 rank 顺序）让 judge_lm 判"对回答 query 是否有用 yes/no"，
-    返回相关 context 的比例（top-k 的 binary precision）.
+    """Let judge_lm judge "whether it is useful to answer query yes/no" context by context (in rank order),
+    Returns the proportion of the relevant context (binary precision of top-k).
 
-    与 metrics/retrieval.precision_at_k 的差别：那个是按 doc_id 与 gold_ids 的
-    set-membership 比；这个是 LLM 直接判"语义是否相关"——更贴近"上下文质量"
-    而非"召回的 doc 在不在 gold 集合里".
+    Difference from metrics/retrieval.precision_at_k: that one is based on doc_id and gold_ids
+    Compared with set-membership; this is LLM directly judging "whether the semantics are relevant" - closer to the "context quality"
+    Rather than "whether the recalled doc is in the gold collection".
 
-    无 contexts → 0.0；prediction 不参与（这是 query 与 context 的关系）.
+    No contexts → 0.0; prediction is not involved (this is the relationship between query and context).
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性.
-    """
+    DECISIONS §7.3: closure holds the `_recorder` attribute."""
     from .judge_core import _JudgeRecorder
     rec = _JudgeRecorder(judge_lm)
 
@@ -303,18 +296,17 @@ def judge_context_recall(
     max_tokens_extract: int = 256,
     max_tokens_nli: int = 16,
 ) -> Callable[[Doc, Response], float]:
-    """两步 judge：
-      ① 把 `doc.target`（gold 答案）拆 atomic claims
-      ② 逐 claim 判"能否从 `doc.metadata['contexts']` 推出"，返回比例.
+    """Two-step judge:
+      ① Split `doc.target` (gold answer) into atomic claims
+      ② Determine "whether it can be deduced from `doc.metadata['contexts']` claim by claim, and return the proportion.
 
-    与 judge_faithfulness 对偶：
-      - faithfulness：response 的 claim 在 contexts 里 →  "你答的我能在材料里看到"
-      - context_recall：target  的 claim 在 contexts 里 → "标准答案里的事实材料覆盖了多少"
+    Dual to judge_faithfulness:
+      - faithfulness: the claim of response is in contexts → "I can see your answer in the material"
+      - context_recall: target's claim is in contexts → "How much is covered by the factual material in the standard answer"
 
-    无 target / 无可解析 claim → 0.0.
+    No target / no resolvable claim → 0.0.
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性.
-    """
+    DECISIONS §7.3: closure holds the `_recorder` attribute."""
     from .judge_core import _JudgeRecorder
     rec = _JudgeRecorder(judge_lm)
 
@@ -351,19 +343,18 @@ def judge_answer_relevancy(
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
 ) -> Callable[[Doc, Response], float | None]:
-    """单步 judge：rate 1-5 "回答有没有正面 address 问题"（不管对错）.
+    """Single-step judge: rate 1-5 "Answer whether there is a positive address question" (regardless of whether it is right or wrong).
 
-    与 judge_answer_correctness 互补：
-      - correctness：事实层面对不对（看 target）
-      - relevancy  ：是否在答这个问题（不看 target，看 input vs response 主题对齐）
+    Complementary to judge_answer_correctness:
+      - correctness: whether the facts are correct (see target)
+      - relevancy: Whether you are answering this question (do not look at the target, look at the input vs response topic alignment)
 
-    解析复用 `judge_core.parse_pointwise_score`（同源 1-5 形态）.
-    无 response → 0.0（empty pred 的 relevancy=0 是合法最低分）；parse 失败 → None
-    （DECISIONS §X wave 4，1-5 scale 0 越界，None 显式表"未测得"，与 phase 7 P2 同形）.
+    Parse reuse `judge_core.parse_pointwise_score` (same source 1-5 form).
+    No response → 0.0 (relevancy=0 of empty pred is the legal minimum score); parse failed → None
+    (DECISIONS §X wave 4, 1-5 scale 0 is out of bounds, None explicitly means "not measured", the same shape as phase 7 P2).
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性.
-    """
-    from .judge_core import _JudgeRecorder, parse_pointwise_score  # 避免循环 import
+    DECISIONS §7.3: closure holds the `_recorder` attribute."""
+    from .judge_core import _JudgeRecorder, parse_pointwise_score  # Avoid circular import
     rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float | None:

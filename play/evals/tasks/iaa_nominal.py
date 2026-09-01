@@ -1,25 +1,24 @@
-"""Phase 8 vertical slice：族 1 后半 IAA nominal task — kappa paradox 主舞台.
+"""Phase 8 vertical slice: Family 1 second half IAA nominal task — kappa paradox main stage.
 
-30 条 highly imbalanced binary spam/ham (27 ham + 3 spam, ~90/10) + 4 份 stub predictions
-+ 3 raters/sample 演 kappa paradox 三场叙事：
+30 highly imbalanced binary spam/ham (27 ham + 3 spam, ~90/10) + 4 stub predictions
++ 3 raters/sample perform kappa paradox three narrative scenes:
 
-  | 预测              | accuracy | cohens_kappa | gwet_ac1 | fleiss_kappa | 故事 |
+  | prediction | accuracy | cohens_kappa | gwet_ac1 | fleiss_kappa | story |
   |---|---|---|---|---|---|
-  | perfect           | 1.00     | 1.00         | 1.00     | 1.00         | 上界 sanity |
-  | constant_majority | **0.90** | **~0.0**     | **~0.89**| ~0.0         | **核心 paradox**：全押多数类，acc 高但 cohens_kappa 失效；gwet_ac1 仍诚实地高 (paradox 解药 1) |
-  | noisy_diverging   | ~0.77    | mid (~0.26)  | mid (~0.67)| <0          | 多 rater 分歧，fleiss/krippendorff 拉平到负数 (反向叙事) |
-  | garbage           | 0.30     | <0           | <0       | <0           | 下界 sanity |
+  | perfect | 1.00 | 1.00 | 1.00 | 1.00 | upper bound sanity |
+  | constant_majority | **0.90** | **~0.0** | **~0.89**| ~0.0 | **Core paradox**: All-in majority class, acc high but cohens_kappa dead; gwet_ac1 still honestly high (paradox antidote 1) |
+  | noisy_diverging | ~0.77 | mid (~0.26) | mid (~0.67)| <0 | Multi rater divergence, fleiss/krippendorff flattened to negative numbers (reverse narrative) |
+  | garbage | 0.30 | <0 | <0 | <0 | lower bound sanity |
 
-设计要点（DECISIONS §8）：
-  - **output_type='none'**：与 rag_retrieval 同型，runner 跳 LM 调用；score 主路径焊死全部
-    教学叙事，run 路径完整教学 deferred (DECISIONS §8 显式让步同源 phase 5)
-  - **load_prediction 注入 raters**：score 路径，row['raters'] 进 doc.metadata；
-    process_results 把 raters 转写到 SampleResult.artifacts
-  - **库直调下放**：sklearn classification metrics + statsmodels.fleiss_kappa +
-    krippendorff.alpha 全部 task 内 import；metrics/agreement.py 仅装手算 + 共享 helper
-  - **15 stat aggregation**：classification (9) + agreement 2-rater (3) + multi-rater (2)
-    + diagnostic confusion matrix (1, `_` 前缀视为非 first-class 指标)
-"""
+Design points (DECISIONS §8):
+  - **output_type='none'**: Same type as rag_retrieval, runner jumps to LM call; score main path welds all
+    Teaching narrative, run path complete teaching deferred (DECISIONS §8 explicit concession from the same source phase 5)
+  - **load_prediction injects raters**: score path, row['raters'] into doc.metadata;
+    process_results transcribe raters to SampleResult.artifacts
+  - **Library direct adjustment and decentralization**: sklearn classification metrics + statsmodels.fleiss_kappa +
+    krippendorff.alpha import in all tasks; metrics/agreement.py only installs manual calculation + shared helper
+  - **15 stat aggregation**: classification (9) + agreement 2-rater (3) + multi-rater (2)
+    + diagnostic confusion matrix (1, `_` prefix is treated as non-first-class indicator)"""
 
 from __future__ import annotations
 
@@ -50,22 +49,21 @@ from ..registry import register_task
 from .base import Task
 
 LABELS = ("ham", "spam")
-POSITIVE_CLASS = "spam"  # imbalanced minority class — 报 precision/recall/f1/f_beta 的目标类
+POSITIVE_CLASS = "spam"  # imbalanced minority class — report the target class of precision/recall/f1/f_beta
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "iaa_nominal" / "gold.jsonl"
 
 
 @register_task("iaa_nominal")
 class IaaNominal(Task):
-    """族 1 后半 IAA nominal task：kappa paradox 教学主舞台.
+    """Family 1 second half IAA nominal task: kappa paradox teaching main stage.
 
-    数据契约（与 rag_retrieval 同 path B+C）：
-      - score 路径：predictions JSONL 行 schema = `{id, prediction, raters: list[str]}`
-      - run 路径：runner 给占位 Response（doc.metadata 无 raters）→ aggregation 给 sanity 0
-    """
+    Data contract (same path B+C as rag_retrieval):
+      - score path: predictions JSONL row schema = `{id, prediction, raters: list[str]}`
+      - run path: runner gives placeholder Response (doc.metadata has no raters) → aggregation gives sanity 0"""
 
     name: ClassVar[str] = "iaa_nominal"
-    output_type: ClassVar[str] = "none"  # phase 4 literal：runner 跳 lm.generate_until
+    output_type: ClassVar[str] = "none"  # phase 4 literal: runner jumps lm.generate_until
 
     data_path: Path = DATA_PATH
 
@@ -79,28 +77,27 @@ class IaaNominal(Task):
                 yield Doc(id=row["id"], input=row["input"], target=row["target"])
 
     def doc_to_text(self, doc: Doc) -> str:
-        # output_type='none' 时不会被 runner 调；保留方法满足 ABC 即可
+        # When output_type='none', it will not be adjusted by the runner; the reserved method can satisfy ABC
         return ""
 
     def doc_to_target(self, doc: Doc) -> str:
         return doc.target or ""
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：row['raters'] 注入 doc.metadata；prediction 走 Response.text."""
+        """score path: row['raters'] injects doc.metadata; prediction goes to Response.text."""
         raters = list(row.get("raters", []))
         enriched = replace(doc, metadata={**doc.metadata, "raters": raters})
         return enriched, Response(doc_id=doc.id, text=row.get("prediction"))
 
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
-        """pred 不在 LABELS 内 → 标 `_pred_invalid` 由 aggregation 过滤.
+        """pred not in LABELS → label `_pred_invalid` filtered by aggregation.
 
-        历史 (audit follow-up)：旧实现把 OOV pred (含 run path 占位 `""` / LM 输出
-        `'Spam'` / `'Label: spam'` 等噪声) 直接喂给 sklearn metric → 内部触发
-        `UserWarning: y_pred contains classes not in y_true` × N + 退化路径
-        `RuntimeWarning: invalid value encountered in scalar divide`，stderr 被污染.
-        改为 `_pred_invalid` flag + aggregation 切片：sklearn 看到的 yp 严格 ⊆ LABELS,
-        warnings 消失，accuracy / multi-rater 仍走全部 sample 不影响数值.
-        """
+        History (audit follow-up): The old implementation uses OOV pred (including run path placeholder `""` / LM output
+        `'Spam'` / `'Label: spam'` and other noise) are directly fed to sklearn metric → internal trigger
+        `UserWarning: y_pred contains classes not in y_true` × N + degenerate paths
+        `RuntimeWarning: invalid value encountered in scalar divide`, stderr is polluted.
+        Change to `_pred_invalid` flag + aggregation slicing: yp as seen by sklearn strict ⊆ LABELS,
+        The warnings disappear, accuracy / multi-rater still takes all samples without affecting the values."""
         pred = (response.text or "").strip()
         target = doc.target or ""
         pred_invalid = pred not in LABELS
@@ -122,20 +119,20 @@ class IaaNominal(Task):
             return bool(sr.artifacts.get("_pred_invalid", False))
 
         def _y(srs: list[SampleResult]) -> tuple[list[str], list[str]]:
-            """全部 sample（含 invalid）；用于 accuracy / confusion_matrix
-            等"OOV pred 自然不命中而不污染数值"的 metric."""
+            """All samples (including invalid); used for accuracy / confusion_matrix
+            Wait for the metric of "OOV pred naturally misses without polluting the value"."""
             return [s.target for s in srs], [s.prediction for s in srs]
 
         def _y_valid(srs: list[SampleResult]) -> tuple[list[str], list[str]]:
-            """仅 valid pred 的 (yt, yp)；用于 sklearn 内部会因 OOV pred 触发
-            `UserWarning: y_pred contains classes not in y_true` 的 metric
-            (audit P1a 修复)."""
+            """Only valid pred’s (yt, yp); used internally in sklearn and will be triggered by OOV pred
+            metric for `UserWarning: y_pred contains classes not in y_true`
+            (audit P1a fix)."""
             valid = [s for s in srs if not _is_invalid(s)]
             return [s.target for s in valid], [s.prediction for s in valid]
 
         def _pos_label_present(yt: list[str], yp: list[str]) -> bool:
-            # 历史保留：valid subset 进来后 yp ⊆ labels 通常成立，但 yt ∪ yp 可能不含
-            # POSITIVE_CLASS（如 limit=5 全 ham 切片）— 仍需短路避免 sklearn raise.
+            # History preservation: after valid subset comes in, yp ⊆ labels usually holds, but yt ∪ yp may not contain
+            # POSITIVE_CLASS (e.g. limit=5 full ham slice) - still needs to be short-circuited to avoid sklearn raises.
             seen = set(yt) | set(yp)
             return POSITIVE_CLASS in seen and seen.issubset(set(labels))
 
@@ -146,7 +143,7 @@ class IaaNominal(Task):
             return 0.0 if x != x else float(x)
 
         def _accuracy(srs: list[SampleResult]) -> float:
-            """全部 sample：OOV pred 自然不等于 target → 0 贡献，不调 sklearn 路径."""
+            """All samples: OOV pred is naturally not equal to target → 0 contribution, and the sklearn path is not adjusted."""
             if not srs:
                 return 0.0
             yt, yp = _y(srs)
@@ -193,7 +190,7 @@ class IaaNominal(Task):
             return float(f1_score(yt, yp, labels=labels, average="macro", zero_division=0))
 
         def _f_beta_2(srs: list[SampleResult]) -> float:
-            """F_β=2：recall 加权 4× precision；imbalanced 任务的"宁多召回"权衡."""
+            """F_β=2: recall weighted 4× precision; "more recall" trade-off for imbalanced tasks."""
             if not srs:
                 return 0.0
             yt, yp = _y_valid(srs)
@@ -234,8 +231,8 @@ class IaaNominal(Task):
             import warnings as _warnings
 
             with _warnings.catch_warnings():
-                # Pe=1 退化（单类切片）让 sklearn 内部 `expected = ... / np.sum(sum0)`
-                # 除 0 emit RuntimeWarning；外层 `_nan_to_zero` 已兜数值，此处消噪.
+                # Pe=1 degeneracy (single-class slicing) lets sklearn internal `expected = ... / np.sum(sum0)`
+                # In addition to 0 emit RuntimeWarning; the outer layer `_nan_to_zero` has the value and is denoised here.
                 _warnings.simplefilter("ignore", category=RuntimeWarning)
                 return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
 
@@ -248,7 +245,7 @@ class IaaNominal(Task):
             return float(scott_pi(yt, yp))
 
         def _gwet_ac1(srs: list[SampleResult]) -> float:
-            """kappa paradox 解药 1：高度不均衡边际下仍诚实反映一致性."""
+            """Antidote 1 to the kappa paradox: still reflect consistency honestly under highly imbalanced margins."""
             if not srs:
                 return 0.0
             yt, yp = _y_valid(srs)
@@ -257,7 +254,7 @@ class IaaNominal(Task):
             return float(gwet_ac1(yt, yp))
 
         def _fleiss_kappa(srs: list[SampleResult]) -> float:
-            """gold + N raters → statsmodels fleiss_kappa；run 路径 raters 缺失 → 0."""
+            """gold + N raters → statsmodels fleiss_kappa; run path raters missing → 0."""
             if not srs:
                 return 0.0
             matrix = build_rater_matrix(srs, include_gold=True)
@@ -268,8 +265,8 @@ class IaaNominal(Task):
             import warnings as _warnings
 
             with _warnings.catch_warnings():
-                # Pe=1 退化（单类切片）让 statsmodels `(p_mean - p_mean_exp) / (1 - p_mean_exp)`
-                # 除 0 emit RuntimeWarning；外层 `_nan_to_zero` 已兜数值，此处消噪.
+                # Pe=1 degenerate (single class slicing) let statsmodels `(p_mean - p_mean_exp) / (1 - p_mean_exp)`
+                # In addition to 0 emit RuntimeWarning; the outer layer `_nan_to_zero` has the value and is denoised here.
                 _warnings.simplefilter("ignore", category=RuntimeWarning)
                 return _nan_to_zero(fleiss_kappa(agg))
 
@@ -284,13 +281,13 @@ class IaaNominal(Task):
             # (degenerate single-class subset; e.g. --limit 5 over a ham-only slice).
             if len({v for row in matrix for v in row}) < 2:
                 return 0.0
-            # krippendorff 期望形状 (raters, subjects) — 对 build_rater_matrix 的 N×K 转置
+            # krippendorff desired shape (raters, subjects) — N×K transpose of build_rater_matrix
             rd = np.asarray(matrix).T
             return float(krippendorff.alpha(reliability_data=rd, level_of_measurement="nominal"))
 
         def _confusion(srs: list[SampleResult]) -> dict[str, dict[str, int]]:
-            """{gold_label: {pred_label: count}}（诊断辅助，非单标量；`_` 前缀避开
-            higher_is_better 排序 / cross-run 比较默认期待 scalar）."""
+            """{gold_label: {pred_label: count}} (diagnostic aid, not a single scalar; `_` prefix avoidance
+            higher_is_better sort/cross-run comparison expects scalar by default)."""
             if not srs:
                 return {}
             yt, yp = _y(srs)

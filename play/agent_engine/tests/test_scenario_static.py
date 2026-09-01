@@ -1,12 +1,12 @@
-"""Scenario.expanded_turns 静态展开单测（DECISIONS §13）.
+"""Scenario.expanded_turns static expansion tests (DECISIONS §13).
 
-锁三层不变量：
+Locks three invariants:
 
-  1. **形态正确**：四种 `who` 形态（moderator / member / all / [name1, name2]）的
-     展开顺序、turn_idx 1-based 都对
-  2. **字段透传**：require_tool / max_retries / step_id / instruction 直接来自 step
-  3. **runtime 同源**：在所有现网 scenario 上 `Scenario(...).expanded_turns()` 长度
-     与 `Discussion._expanded` 完全相等，agent 名顺序一致——避免静态展开偏离 runtime
+  1. **Shape correct**: all four `who` forms (moderator / member / all / [name1, name2])
+     expand in correct order with 1-based turn_idx
+  2. **Field passthrough**: require_tool / max_retries / step_id / instruction come from step
+  3. **Runtime parity**: on all live scenarios, `Scenario(...).expanded_turns()` length
+     equals `Discussion._expanded` with identical agent order — static expansion must not drift from runtime
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _write_scenario(tmp_path: Path, yaml_text: str) -> Path:
     return p
 
 
-# ---------- who 四形态 -------------------------------------------------
+# ---------- who four forms ---------------------------------------------
 
 def test_expanded_turns_who_list_explicit_names(tmp_path: Path):
     yaml_text = textwrap.dedent("""\
@@ -52,7 +52,7 @@ def test_expanded_turns_who_list_explicit_names(tmp_path: Path):
 
 
 def test_expanded_turns_who_member_role_filter(tmp_path: Path):
-    """`who: member` 按 role 过滤，按声明顺序，不含 moderator."""
+    """`who: member` filters by role, declaration order, excludes moderator."""
     yaml_text = textwrap.dedent("""\
         ---
         agents:
@@ -89,7 +89,7 @@ def test_expanded_turns_who_moderator_role_filter(tmp_path: Path):
 
 
 def test_expanded_turns_who_all_includes_everyone(tmp_path: Path):
-    """`who: all` 全员按声明顺序（含 moderator）."""
+    """`who: all` all agents in declaration order (includes moderator)."""
     yaml_text = textwrap.dedent("""\
         ---
         agents:
@@ -106,7 +106,7 @@ def test_expanded_turns_who_all_includes_everyone(tmp_path: Path):
     assert [e.agent for e in s.expanded_turns()] == ["M", "A"]
 
 
-# ---------- 字段透传 ---------------------------------------------------
+# ---------- field passthrough ------------------------------------------
 
 def test_expanded_turns_carries_require_tool_and_max_retries(tmp_path: Path):
     yaml_text = textwrap.dedent("""\
@@ -130,7 +130,7 @@ def test_expanded_turns_carries_require_tool_and_max_retries(tmp_path: Path):
     assert expanded[0].require_tool == "cast_vote"
     assert expanded[0].max_retries == 3
     assert expanded[0].instruction == "vote please"
-    # require_tool 缺省 + max_retries 缺省 → require_tool=None, max_retries=0
+    # default require_tool + max_retries → require_tool=None, max_retries=0
     assert expanded[1].require_tool is None
     assert expanded[1].max_retries == 0
 
@@ -138,7 +138,7 @@ def test_expanded_turns_carries_require_tool_and_max_retries(tmp_path: Path):
 def test_expanded_turns_default_max_retries_is_one_when_require_tool_present(
     tmp_path: Path,
 ):
-    """与 Discussion._run_turn 默认 `1 if require_tool else 0` 行为一致."""
+    """Matches Discussion._run_turn default `1 if require_tool else 0` behavior."""
     yaml_text = textwrap.dedent("""\
         ---
         agents:
@@ -155,7 +155,7 @@ def test_expanded_turns_default_max_retries_is_one_when_require_tool_present(
 
 
 def test_expanded_turn_is_frozen_dataclass():
-    """ExpandedTurn 不可变（防止消费者写穿）."""
+    """ExpandedTurn is immutable (prevents consumer mutation)."""
     e = ExpandedTurn(
         turn_idx=1, agent="A", step_id=None, instruction="x",
         require_tool=None, max_retries=0,
@@ -164,7 +164,7 @@ def test_expanded_turn_is_frozen_dataclass():
         e.turn_idx = 2  # type: ignore[misc]
 
 
-# ---------- runtime 同源（关键 invariant，DECISIONS §13）--------------
+# ---------- runtime parity (key invariant, DECISIONS §13) ----------------
 
 @pytest.mark.parametrize("scenario_file", [
     "brainstorm.md",
@@ -176,12 +176,11 @@ def test_expanded_turn_is_frozen_dataclass():
     "example.md",
 ])
 def test_expanded_turns_matches_discussion_expanded(scenario_file: str):
-    """所有现网 scenario 上 `Scenario.expanded_turns()` 长度 + (agent.name, step_id)
-    序列与 `Discussion._expand_steps()` 字节相同——锁住"静态展开 == runtime 展开".
+    """On all live scenarios, `Scenario.expanded_turns()` length + (agent.name, step_id)
+    sequence byte-identical to `Discussion._expand_steps()` — locks static == runtime expansion.
 
-    这是把展开权从 evals/agent_sft 收回 agent_engine 的安全网：未来 Discussion
-    展开规则改了 _resolve_who_names 自动同步；如果哪天有人拆走 _resolve_who_names
-    的共用，本测试会立刻失败。
+    Safety net for reclaiming expansion from evals/agent_sft: future Discussion rule
+    changes sync via _resolve_who_names; if shared usage is split, this test fails immediately.
     """
     path = SCENARIOS_DIR / scenario_file
     if not path.exists():
@@ -208,6 +207,6 @@ def test_expanded_turns_matches_discussion_expanded(scenario_file: str):
         f"{scenario_file}: static={len(static_pairs)} vs runtime={len(runtime_pairs)}"
     )
     assert static_pairs == runtime_pairs, scenario_file
-    # turn_idx 也必须 1-based 单调
+    # turn_idx must also be 1-based monotonic
     for i, e in enumerate(static_expanded, 1):
         assert e.turn_idx == i, f"{scenario_file}: turn_idx[{i-1}] = {e.turn_idx}"

@@ -331,17 +331,17 @@ def _resolve_who_names(
     declared_order: list[str],
     role_by_name: dict[str, str],
 ) -> list[str]:
-    """纯函数版 who 解析：返回 agent 名字列表（不返回 Agent 对象）.
+    """Pure-function who resolution: returns agent name list (not Agent objects).
 
-    与 `Discussion._resolve_who` 字节同源——后者在此基础上 `self._by_name[n]`
-    转回 Agent 对象。本函数被 `Scenario.expanded_turns()`（静态展开，不需要
-    runtime Agent）与 `Discussion._resolve_who`（runtime）共用，确保两条路径
-    展开顺序与名单完全一致。
+    Byte-identical to `Discussion._resolve_who` — the latter maps `self._by_name[n]`
+    back to Agent objects on top of this. Shared by `Scenario.expanded_turns()` (static
+    expansion, no runtime Agent) and `Discussion._resolve_who` (runtime) so both paths
+    produce identical expansion order and name lists.
 
-    四种 `who` 形态见 [`README.md`](README.md) Scenario schema：
-      - `"all"`：全员，按声明顺序
-      - `"moderator"` / `"member"`：按 role 过滤，按声明顺序
-      - `["name1", ...]`：显式名单
+    Four `who` forms — see [`README.md`](README.md) Scenario schema:
+      - `"all"`: all agents, in declaration order
+      - `"moderator"` / `"member"`: filter by role, in declaration order
+      - `["name1", ...]`: explicit name list
     """
     if isinstance(who, str):
         if who == "all":
@@ -354,11 +354,11 @@ def _resolve_who_names(
 
 @dataclass(frozen=True)
 class ExpandedTurn:
-    """`Scenario.expanded_turns()` 一项：静态展开的一个 (agent, step) turn.
+    """One item from `Scenario.expanded_turns()`: a statically expanded (agent, step) turn.
 
-    与 `Discussion._expand_steps` 展开形态字节相同；`turn_idx` 1-based，`require_tool`
-    / `max_retries` 直接透传 step 字段，让消费者（evals nudge_fire_rate / agent_sft
-    extractor）不需要解析 scenario YAML 自己复刻展开逻辑。
+    Byte-identical expansion shape to `Discussion._expand_steps`; `turn_idx` is 1-based;
+    `require_tool` / `max_retries` pass through step fields directly so consumers
+    (evals nudge_fire_rate / agent_sft extractor) need not re-parse scenario YAML.
     """
     turn_idx: int
     agent: str
@@ -480,15 +480,16 @@ class Scenario:
         )
 
     def expanded_turns(self) -> list[ExpandedTurn]:
-        """静态展开 `steps:` 列表为线性 `ExpandedTurn` 序列——不实例化 Agent / 不跑 LLM.
+        """Statically expand `steps:` into a linear `ExpandedTurn` sequence — no Agent instantiation / no LLM.
 
-        展开顺序 = `Discussion._expand_steps()` 同源（共用 `_resolve_who_names`）：
-        steps 顺序 × 每 step 内 who 解析后的 agent 顺序。`turn_idx` 1-based，与
-        `Discussion.run` 写入 history 的 `turn N of M` marker 对齐。
+        Expansion order matches `Discussion._expand_steps()` (shared `_resolve_who_names`):
+        step order × agent order after who resolution within each step. `turn_idx` is
+        1-based, aligned with the `turn N of M` marker written to history by `Discussion.run`.
 
-        给评测 / 训练数据挖掘等"不跑 LLM 也想知道这个 scenario 会展开成什么"的消费者
-        用：例如 `play/evals` `nudge_fire_rate` task 派生 `expected_require_tool_turns`、
-        `play/agent_sft` extractor 按 turn_idx 索引 step instruction（DECISIONS §13）.
+        For eval / training-data consumers that need to know what a scenario expands to
+        without running LLM: e.g. `play/evals` `nudge_fire_rate` derives
+        `expected_require_tool_turns`; `play/agent_sft` extractor indexes step instruction
+        by turn_idx (DECISIONS §13).
         """
         agents_cfg = self.meta.get("agents") or []
         declared_order = [a["name"] for a in agents_cfg]

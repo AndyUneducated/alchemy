@@ -1,4 +1,4 @@
-# QA 测试方案 workflow — kitchen_sink schema 的 QA 实例 (plan §4.3)
+# QA test-plan workflow — QA instance of kitchen_sink schema (plan §4.3)
 #
 #   cd play/
 #   python -m workflow run qa_assets/workflows/qa_supervisor.yaml \
@@ -7,11 +7,11 @@
 # 6 stages: load → load_prds → serialize_for_agent → discuss → render_md → render_csv
 
 name: qa_supervisor
-description: CSV (需求 + 排期) -> 测试方案多 agent 协作 (md artifact)
+description: CSV (requirements + schedule) -> multi-agent test plan collaboration (md artifact)
 
 vars:
   csv_path:
-    required: true                                # 输入 CSV 路径
+    required: true                                # input CSV path
   output_dir:
     default: "/tmp/qa_out"
 
@@ -22,43 +22,43 @@ stages:
     type: deterministic
     fn: load_csv
     args: {csv_path: "{{ vars.csv_path }}"}
-    # output → "load"; 形态 list[dict]
+    # output → "load"; shape list[dict]
 
   - name: load_prds
     type: deterministic
-    fn: load_each_prd                             # 对有 prd_doc_path 的行: Path.read_text() 写回 prd_md
+    fn: load_each_prd                             # rows with prd_doc_path: Path.read_text() → prd_md
     args: {requirements: "{{ stages.load.output }}"}
-    # output → "load_prds"; 形态 list[dict]
+    # output → "load_prds"; shape list[dict]
 
   - name: serialize_for_agent
     type: deterministic
-    fn: to_yaml                                   # 显式序列化, 不在模板里做 (plan §4.3)
+    fn: to_yaml                                   # explicit serialization, not in template (plan §4.3)
     args: {obj: "{{ stages.load_prds.output }}"}
-    # output → "serialize_for_agent"; 形态 str (yaml-formatted)
+    # output → "serialize_for_agent"; shape str (yaml-formatted)
 
   - name: discuss
     type: agent
     scenario: ../scenarios/qa_discuss.md
-    config:                                       # 整体 unpack 给 Engine.invoke(**config)
+    config:                                       # unpacked wholesale into Engine.invoke(**config)
       initial_artifact:
         Requirements: "{{ stages.serialize_for_agent.output }}"
       artifact_path: "{{ vars.output_dir }}/test_plan_artifact.md"
       transcript_path: "{{ vars.output_dir }}/transcript.json"
-      print_stream: true                          # PoC: 让多 agent loop 在 CLI 里可见
+      print_stream: true                          # PoC: multi-agent loop visible in CLI
     output: discussion                            # → Result.artifact dict
 
   - name: render_md
     type: deterministic
     fn: render_md
     args:
-      sections: "{{ stages.discussion.output }}"  # artifact dict (含 6 节)
-      requirements: "{{ stages.load_prds.output }}"   # 透传 sprint/assignee 元数据
+      sections: "{{ stages.discussion.output }}"  # artifact dict (6 sections)
+      requirements: "{{ stages.load_prds.output }}"   # pass through sprint/assignee metadata
       template: "{{ pkg_dir }}/../templates/test_plan.md.j2"
       output_path: "{{ vars.output_dir }}/test_plan.md"
 
   - name: render_csv
     type: deterministic
-    fn: render_csv                                # 解析 sections['测试用例'] 平铺为行
+    fn: render_csv                                # flatten sections['Test Cases'] to rows
     args:
       sections: "{{ stages.discussion.output }}"
       requirements: "{{ stages.load_prds.output }}"

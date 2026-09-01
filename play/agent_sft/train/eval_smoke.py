@@ -1,25 +1,24 @@
 """Lightweight tool-call eval — fast proxy for nudge-fire rate.
 
-不走 Ollama / agent_engine 端到端（Phase 5 才会跑那个），只用 mlx_lm.generate
-对 val set 直接生成，解析输出里的 `<tool_call>{...}</tool_call>` 块（Qwen2.5
-native 渲染形态），与 ground-truth tool_call 比对。
+Instead of using Ollama / agent_engine end-to-end (Phase 5 will only run that), just use mlx_lm.generate
+Directly generate val set and parse the `<tool_call>{...}</tool_call>` block in the output (Qwen2.5
+native rendering form), compared with ground-truth tool_call.
 
-4 项指标，从松到严依次降级：
+4 indicators, downgraded from loose to strict:
 
-|指标|定义|
+|Indicator|Definition|
 |---|---|
-|`tool_call_emit_rate`|输出含 `<tool_call>` 块|
+|`tool_call_emit_rate`|Output containing `<tool_call>` blocks|
 |`tool_name_match`|emit + name == ground-truth name|
-|`arg_set_match`|name_match + arguments key 集合 == ground-truth key 集合|
-|`arg_value_match`|arg_set_match + arguments dict 完全相等|
+|`arg_set_match`|name_match + arguments key set == ground-truth key set|
+|`arg_value_match`|arg_set_match + arguments dict are exactly equal|
 
-输出 [`eval_smoke.json`](runs/) 含上述 4 项 + per-tool breakdown + 抽样输出.
+Output [`eval_smoke.json`](runs/) contains the above 4 items + per-tool breakdown + sampling output.
 
-用法：
+Usage:
     python eval_smoke.py --adapter-path runs/smoke
-    python eval_smoke.py --adapter-path runs/smoke --max-samples 50  # 不跑全集
-    python eval_smoke.py --base-only --adapter-path runs/smoke       # 不挂 adapter，只测底座
-"""
+    python eval_smoke.py --adapter-path runs/smoke --max-samples 50 # Do not run the complete set
+    python eval_smoke.py --base-only --adapter-path runs/smoke # Do not hang adapter, only test the base"""
 
 from __future__ import annotations
 
@@ -36,10 +35,12 @@ PLAY_DIR = HERE.parent.parent
 DEFAULT_VALID_FILE = HERE.parent / "data" / "triples" / "val_7b_1k.jsonl"
 DEFAULT_MODEL = "mlx-community/Qwen3.5-9B-4bit"
 
-# Qwen2.5 native tool-call 渲染形态（chat template `tool_call.arguments | tojson`）
+# Qwen2.5 native tool-call rendering form (chat template `tool_call.arguments | tojson`)
+# Qwen2.5 native tool-call rendering form (chat template `tool_call.arguments | tojson`)
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 
-# Qwen3.5 native tool-call 渲染形态（XML 嵌套，arguments 是 dict 而非 JSON 字符串）：
+# Qwen3.5 native tool-call rendering form (XML nested, arguments are dict instead of JSON string):
+# Qwen3.5 native tool-call rendering form (XML nested, arguments are dict instead of JSON string):
 #   <tool_call>
 #   <function=NAME>
 #   <parameter=KEY>VALUE</parameter>
@@ -54,7 +55,7 @@ _PARAM_RE = re.compile(r"<parameter=([^>\s]+)>(.*?)</parameter>", re.DOTALL)
 
 
 def parse_tool_calls(text: str) -> list[dict[str, Any]]:
-    """抽 tool_call list；兼容 Qwen2.5 JSON 形态与 Qwen3.5 XML 嵌套形态."""
+    """Extract tool_call list; compatible with Qwen2.5 JSON form and Qwen3.5 XML nested form."""
     calls: list[dict[str, Any]] = []
     for m in _TOOL_CALL_RE.finditer(text):
         try:
@@ -75,7 +76,7 @@ def parse_tool_calls(text: str) -> list[dict[str, Any]]:
 
 
 def ground_truth_call(sample: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
-    """messages[-1] 的 tool_calls[0] → (name, args dict)；schema 不对返 None."""
+    """tool_calls[0] of messages[-1] → (name, args dict); schema is not returned None."""
     msgs = sample.get("messages") or []
     if not msgs or msgs[-1].get("role") != "assistant":
         return None
@@ -100,7 +101,7 @@ def ground_truth_call(sample: dict[str, Any]) -> tuple[str, dict[str, Any]] | No
 
 
 def render_prompt(sample: dict[str, Any], tokenizer) -> str:
-    """剥掉最后一条 assistant，把剩下的喂 chat template + add_generation_prompt."""
+    """Peel off the last assistant and feed the rest to chat template + add_generation_prompt."""
     msgs = sample["messages"][:-1]
     return tokenizer.apply_chat_template(
         msgs,
@@ -207,7 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     if not samples:
         sys.exit(f"no samples in {args.valid_file}")
 
-    # Lazy import: mlx_lm 仅在真要跑时加载
+# Lazy import: mlx_lm is only loaded when really running
+# Lazy import: mlx_lm is only loaded when really running
     try:
         from mlx_lm import generate, load  # type: ignore[import-not-found]
     except ImportError as e:

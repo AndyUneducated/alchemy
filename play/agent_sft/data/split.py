@@ -1,12 +1,12 @@
 """Per-scenario by-run_id train/val splitter.
 
-Plan §Decisions：per-scenario 末 20% run_id 作 val，其余 → train.
-Fallback：当某 scenario 的 unique run_ids 数 < 5 时，全归 train（val 数据点太少
-失去统计意义；典型见 pilot 阶段 3 run_id × 1-2 triples/run）.
+Plan §Decisions: per-scenario last 20% run_id as val, the rest → train.
+Fallback: When the number of unique run_ids of a scenario is < 5, all return to train (val data points are too few
+Loss of statistical significance; typically see pilot stage 3 run_id × 1-2 triples/run).
 
-输入应当是 `triples.jsonl`（含 scenario / run_id 元数据），不能是 formatter
-输出（messages 格式丢了元数据）；formatter 应在本步骤之后跑.
-"""
+Input should be `triples.jsonl` (with scenario / run_id metadata), not formatter
+Output (messages format loses metadata); formatter should be run after this step."""
+Output (messages format loses metadata); formatter should be run after this step."""
 
 from __future__ import annotations
 
@@ -29,13 +29,13 @@ def split_train_val(
     scenario_key: str = "scenario",
     run_id_key: str = "run_id",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """切 (train, val)，per-scenario 独立按 run_id 取末 20%.
+    """Cut (train, val), per-scenario independently by run_id and take the last 20%."""
 
-    边界：
-      - 某 scenario 仅有 < min_run_ids_for_val 个 unique run_id → 全 train
-      - run_ids 排序后取末 max(1, floor(N * val_ratio)) 个进 val
-      - 空输入 → ([], [])
-    """
+    Boundary:
+      - A scenario has only < min_run_ids_for_val unique run_ids → all trains
+      - After sorting run_ids, take the last max(1, floor(N * val_ratio)) into val
+      - empty input → ([], [])"""
+      - empty input → ([], [])"""
     by_scen: dict[str, list[dict]] = defaultdict(list)
     for s in samples:
         by_scen[s.get(scenario_key, "_unknown")].append(s)
@@ -78,21 +78,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument(
         "--in", dest="in_path", required=True,
-        help="输入 triples.jsonl（必须含 scenario + run_id 字段）",
+help="Input triples.jsonl (must contain scenario + run_id fields)",
     )
     parser.add_argument(
-        "--train", required=True, help="train split 输出 jsonl 路径",
+        "--train", required=True, help="train split output jsonl path",
     )
     parser.add_argument(
-        "--val", required=True, help="val split 输出 jsonl 路径",
+"--val", required=True, help="val split output jsonl path",
     )
     parser.add_argument(
         "--val-ratio", type=float, default=DEFAULT_VAL_RATIO,
-        help=f"val 比例（默认 {DEFAULT_VAL_RATIO}）",
+help=f"val ratio (default {DEFAULT_VAL_RATIO})",
     )
     parser.add_argument(
         "--min-run-ids-for-val", type=int, default=MIN_RUN_IDS_FOR_VAL,
-        help=f"unique run_id 数 < 此阈值 → fallback 全 train（默认 {MIN_RUN_IDS_FOR_VAL}）",
+        help=f"unique run_id count < this threshold → fallback all train (default {MIN_RUN_IDS_FOR_VAL})",
     )
     args = parser.parse_args(argv)
 

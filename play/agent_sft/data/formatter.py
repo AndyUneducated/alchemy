@@ -1,17 +1,17 @@
-"""F1 SFT sample builder: Triple → MLX-LM `tools` 格式 (OpenAI tool_calls schema).
+"""F1 SFT sample builder: Triple → MLX-LM `tools` format (OpenAI tool_calls schema).
 
-Schema 锁定见 [`DECISIONS §4`](../DECISIONS.md)：assistant message 用 OpenAI
-`tool_calls` 字段 + 顶层 `tools` 列出可见工具，与 Qwen2.5 native chat template
-渲染目标 `<tool_call>{"name":..., "arguments":...}</tool_call>` 对齐，下游
-Ollama function-call 解析器 + `agent_engine` 的 `tool_call` event 同源。
+Schema locking see [`DECISIONS §4`](../DECISIONS.md): assistant message using OpenAI
+`tool_calls` field + top-level `tools` lists visible tools, same as Qwen2.5 native chat template
+Render target `<tool_call>{"name":..., "arguments":...}</tool_call>` aligned, downstream
+Ollama function-call parser + `agent_engine`'s `tool_call` event has the same origin.
 
 Output schema (MLX-LM `tools` data format,
-[LORA.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md))：
+[LORA.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)):
 
     {
       "messages": [
-        {"role": "system",    "content": agent.prompt},
-        {"role": "user",      "content": 最近 K turn 渲染 + step.instruction},
+        {"role": "system", "content": agent.prompt},
+        {"role": "user", "content": recent K turn rendering + step.instruction},
         {"role": "assistant", "content": "",
          "tool_calls": [{"id": "call_0", "type": "function",
                          "function": {"name": "...", "arguments": "{...}"}}]}
@@ -22,22 +22,22 @@ Output schema (MLX-LM `tools` data format,
       ]
     }
 
-`arguments` 用 dict（[LORA.md 两种都接受](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)；
-v1 用 JSON-string 是为兼容 Qwen2.5 chat_template，**v1.5 起换 dict**因为 Qwen3.5
-chat_template 用 `tool_call.arguments|items` 严格要求 mapping，string 会触发
-`TypeError: Can only get item pairs from a mapping.`）.
+`arguments` uses dict ([LORA.md accepts both](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md);
+v1 uses JSON-string to be compatible with Qwen2.5 chat_template, **v1.5 will be replaced with dict** because of Qwen3.5
+chat_template uses `tool_call.arguments|items` to strictly require mapping, string will trigger
+`TypeError: Can only get item pairs from a mapping.`).
 
-`tools` 来源：scenario YAML 的 `tools:` 块（resolve via `agent_engine.scenario._resolve_tool_defs`）
-+ `artifact.enabled` 时 `ArtifactStore.build_tool_defs(caller=agent_name)`（按 role 过滤
-moderator-only 工具，与 runtime per-agent tool_defs 同源）.
+`tools` Source: `tools:` block of scenario YAML (resolve via `agent_engine.scenario._resolve_tool_defs`)
++ `ArtifactStore.build_tool_defs(caller=agent_name)` when `artifact.enabled` (filtered by role
+moderator-only tool, same origin as runtime per-agent tool_defs).
 
-drop 规则：
-  - `synthesize._extract_call_template` 找不到字面 `tool(args)` 模板（如 retrieve_docs
-    的 fallback wrapper 类）→ 整条丢弃；
-  - 模板里 args 既无 strict ast 解析也无 tolerant kw/positional 提取 → 整条丢弃.
+drop rules:
+  - `synthesize._extract_call_template` cannot find literal `tool(args)` template (like retrieve_docs
+    fallback wrapper class) → discard the entire piece;
+  - The args in the template have neither strict ast parsing nor tolerant kw/positional extraction → discard the entire args.
 
-context 截取：默认 max_recent=6（与 code_review.md memory.max_recent 一致）.
-"""
+Context interception: default max_recent=6 (consistent with code_review.md memory.max_recent)."""
+Context interception: default max_recent=6 (consistent with code_review.md memory.max_recent)."""
 
 from __future__ import annotations
 
@@ -55,13 +55,13 @@ PLAY_DIR = REPO_ROOT / "play"
 if str(PLAY_DIR) not in sys.path:
     sys.path.insert(0, str(PLAY_DIR))
 
-# Same dir; synthesize.py 已注入 PLAY_DIR
+# Same dir; synthesize.py injected into PLAY_DIR
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# agent_engine 是 schema 单源——_resolve_tool_defs / _resolve_tool_owners
-# 与 runtime per-agent tool_defs 完全同源，避免 schema drift（DECISIONS §4）.
-# DECISIONS §13 后 frontmatter 解析也走 `Scenario.from_yaml(path).meta`，不再
-# 直接调 evals.metrics.nudge._split_frontmatter shim.
+# agent_engine is schema single source - _resolve_tool_defs / _resolve_tool_owners
+# Completely homologous to runtime per-agent tool_defs to avoid schema drift (DECISIONS §4).
+# DECISIONS §13 After frontmatter parsing also goes to `Scenario.from_yaml(path).meta`, no longer
+# Directly adjust evals.metrics.nudge._split_frontmatter shim.
 from agent_engine import Scenario  # noqa: E402
 from agent_engine.scenario import (  # noqa: E402
     _resolve_tool_defs,
@@ -80,7 +80,7 @@ def format_triple(
     *,
     max_recent: int = DEFAULT_MAX_RECENT,
 ) -> dict[str, Any] | None:
-    """Triple dict → SFT sample dict, or None if args 不可解析（drop）."""
+    """Triple dict → SFT sample dict, or None if args are not parsable (drop)."""
     scenario_path = Path(scenario_path)
     meta = _read_scenario_meta(scenario_path)
     agent_name = str(triple.get("agent", ""))
@@ -89,25 +89,25 @@ def format_triple(
 
     template = _extract_call_template(instruction, required_tool)
     if not template:
-        return None  # fallback wrapper 类，drop（DECISIONS §4 + user 决策）
+        return None  # fallback wrapper class, drop (DECISIONS §4 + user decision)
 
     tool_defs = _load_tool_defs(meta, agent_name)
     schema = _find_tool_schema(tool_defs, required_tool)
     if schema is None:
-        return None  # required_tool 不在 agent 可见工具清单——异常情况，防御性 drop
+        return None  # required_tool is not in the tool list visible to the agent - abnormal situation, defensive drop
 
     args = _call_template_to_args_dict(template, required_tool, schema)
     if args is None:
-        return None  # 模板既不严格也不宽松解析——drop
+        return None  # Template is neither strict nor loose parsing - drop
 
     system_content = _agent_prompt(meta, agent_name)
 
     recent = _render_recent_context(triple.get("context") or [], max_recent)
     user_parts: list[str] = []
     if recent:
-        user_parts.append(f"最近对话:\n{recent}")
+user_parts.append(f"Recent conversation:\n{recent}")
     user_parts.append(
-        f"现在请执行:\n{instruction}" if instruction else "现在请执行本轮任务。"
+f"Please execute now:\n{instruction}" if instruction else "Please execute this round of tasks now."
     )
     user_content = "\n\n".join(user_parts)
 
@@ -139,7 +139,8 @@ def format_triple(
 # --- scenario meta + tool defs ---------------------------------------------
 
 def _read_scenario_meta(scenario_path: Path) -> dict[str, Any]:
-    """走 `Scenario.from_yaml` 拿 frontmatter dict——schema 校验与 agent_engine 同源."""
+    """Go to `Scenario.from_yaml` to get the frontmatter dict - the schema check has the same origin as agent_engine."""
+    """Go to `Scenario.from_yaml` to get the frontmatter dict - the schema check has the same origin as agent_engine."""
     return Scenario.from_yaml(str(scenario_path)).meta
 
 
@@ -151,12 +152,13 @@ def _agent_prompt(meta: dict[str, Any], agent_name: str) -> str:
 
 
 def _load_tool_defs(meta: dict[str, Any], agent_name: str) -> list[dict]:
-    """Per-agent runtime view of tool defs（scenario.tools + artifact filtered by role）.
+    """Per-agent runtime view of tool defs (scenario.tools + artifact filtered by role)."""
+    """Per-agent runtime view of tool defs (scenario.tools + artifact filtered by role)."""
 
-    与 [`agent_engine.scenario`](../../agent_engine/scenario.py) `_run_turn` 装配
-    `tool_defs` 同 source-of-truth：base scenario tools 全 agent 共享；artifact 工具
-    按 `tool_owners` role filter 个体化.
-    """
+    Assembled with [`agent_engine.scenario`](../../agent_engine/scenario.py) `_run_turn`
+    `tool_defs` is the same as source-of-truth: base scenario tools are shared by all agents; artifact tools
+    Individualized by `tool_owners` role filter."""
+    Individualized by `tool_owners` role filter."""
     tool_configs = meta.get("tools") or []
     base_defs = list(_resolve_tool_defs(tool_configs)) if tool_configs else []
 
@@ -173,7 +175,7 @@ def _load_tool_defs(meta: dict[str, Any], agent_name: str) -> list[dict]:
         )
         base_defs.extend(store.build_tool_defs(caller=agent_name))
 
-    # 深拷贝防止下游 mutate 影响其他 sample
+# Deep copy prevents downstream mutate from affecting other samples
     return [copy.deepcopy(d) for d in base_defs]
 
 
@@ -191,22 +193,22 @@ def _call_template_to_args_dict(
     tool_name: str,
     tool_schema: dict,
 ) -> dict[str, Any] | None:
-    """`tool(arg1, key=val)` → {"prop1": arg1, "key": val}.
+    """`tool(arg1, key=val)` → {"prop1": arg1, "key": val}."""
 
-    两轮策略（覆盖 99%+ 模板）：
+    Two round strategy (covers 99%+ templates):
 
-    1. **strict**：`ast.parse(mode="eval")` + `ast.literal_eval` 每个 arg；干净 Python
-       字面量调用走这条（append_section / write_section / 部分 cast_vote）.
-    2. **tolerant fallback**：仅当 strict 解析失败（如 cast_vote 的 `option="合入" 或 "退回"`
-       含无效中文 token），按 paren-aware 顶层逗号切分，每段 try `key=value`-then-string-literal
-       提取；保留拿得到的键名 + 任意首个字符串字面量值.
+    1. **strict**: `ast.parse(mode="eval")` + `ast.literal_eval` per arg; clean Python
+       Literal calls go this way (append_section/write_section/part cast_vote).
+    2. **tolerant fallback**: Only when strict parsing fails (such as cast_vote's `option="combine" or "fallback"`
+       Contains invalid Chinese token), split by paren-aware top-level comma, each paragraph try `key=value`-then-string-literal
+       Extract; keep the retrieved key name + any first string literal value.
 
-    约束：
-      - 提取出的所有 key 必须在 `tool_schema.parameters.properties` 内——防御 mismatched
+    Constraints:
+      - All extracted keys must be in `tool_schema.parameters.properties` - to prevent mismatched
         instruction.
-      - 至少有 1 个 key 落进 dict 才返回；全空返 None.
-      - required keys 缺失时填 ""——保结构信号，参数信号是 fallback wrapper drop 后的次级目标.
-    """
+      - Return only if at least 1 key falls into dict; return None if all keys are empty.
+      - Fill in "" when required keys are missing - structure-preserving signal, Parameter signal is the secondary target after fallback wrapper drop."""
+      - Fill in "" when required keys are missing - structure-preserving signal, Parameter signal is the secondary target after fallback wrapper drop."""
     properties = (tool_schema.get("function", {})
                   .get("parameters", {})
                   .get("properties", {}))
@@ -223,7 +225,7 @@ def _call_template_to_args_dict(
     if not parsed:
         return None
 
-    # 过滤未知键 + 补齐 required 占位
+# Filter unknown keys + fill in required placeholders
     out = {k: v for k, v in parsed.items() if k in properties}
     if not out:
         return None
@@ -250,18 +252,18 @@ def _strict_parse(
             val = ast.literal_eval(node)
         except (ValueError, SyntaxError):
             return None
-        # positional → 按声明顺序映射到 prop_names 里第一个未占用的键
+# positional → mapped to the first unoccupied key in prop_names in declaration order
         while pos_idx < len(prop_names) and prop_names[pos_idx] in used_keys:
             pos_idx += 1
         if pos_idx >= len(prop_names):
-            break  # 多余 positional 静默丢弃，schema 优先
+            break  # Excess positional is discarded silently, schema takes precedence
         key = prop_names[pos_idx]
         out[key] = val
         used_keys.add(key)
         pos_idx += 1
     for kw in call.keywords:
         if kw.arg is None:
-            return None  # **kwargs 不解析
+            return None  # **kwargs not parsed
         try:
             val = ast.literal_eval(kw.value)
         except (ValueError, SyntaxError):
@@ -270,7 +272,7 @@ def _strict_parse(
     return out
 
 
-# 顶层 paren-aware comma split，跨引号/方括号也安全
+# Top-level paren-aware comma split, cross-quotes/square brackets are also safe
 def _split_top_level_commas(s: str) -> list[str]:
     parts: list[str] = []
     depth = 0
@@ -317,7 +319,7 @@ _SQ_LITERAL_RE = re.compile(r"'([^']*)'")
 def _tolerant_parse(
     call_template: str, tool_name: str, prop_names: list[str]
 ) -> dict[str, Any] | None:
-    # 剥 tool_name( ... ) 外壳
+# Peel tool_name( ... ) shell
     head = call_template.find("(")
     tail = call_template.rfind(")")
     if head < 0 or tail < 0 or head >= tail:
@@ -339,7 +341,7 @@ def _tolerant_parse(
             val = _extract_first_literal(val_text)
             out[key] = val
         else:
-            # positional → 按声明顺序映射
+# positional → map in declaration order
             while pos_idx < len(prop_names) and prop_names[pos_idx] in used_keys:
                 pos_idx += 1
             if pos_idx >= len(prop_names):
@@ -352,13 +354,24 @@ def _tolerant_parse(
 
 
 def _extract_first_literal(text: str) -> Any:
-    """从混乱文本里抽第一个可识别字面量（string / list-of-string）；都失败返 ""."""
+    """Extract the first recognized literal (string / list-of-string) from the cluttered text; return "" on failure."""
     text = text.strip()
     try:
         return ast.literal_eval(text)
     except (ValueError, SyntaxError):
         pass
-    # list-of-strings: ["a", "b"] / ['a', 'b'] / 中文混合
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
+# list-of-strings: ["a", "b"] / ['a', 'b'] / Chinese mixed
     list_match = re.search(r"\[(.*?)\]", text, re.DOTALL)
     if list_match:
         items = _DQ_LITERAL_RE.findall(list_match.group(1))
@@ -378,9 +391,8 @@ def _extract_first_literal(text: str) -> Any:
 # --- recent context render -------------------------------------------------
 
 def _render_recent_context(context: list[dict[str, Any]], max_recent: int) -> str:
-    """渲染 context 段落. context 已是 JSONL 反序列化后的 list[dict]（agent_engine §16 起
-    每条 entry 含显式 `type` 字段；speaker 也有 `type=="speaker"`）.
-    """
+    """Render context paragraph. context is already a JSONL deserialized list[dict] (from agent_engine §16"""
+Each entry has an explicit `type` field; speaker also has `type=="speaker"`)."""
     if max_recent <= 0:
         return ""
     tail = context[-max_recent:] if len(context) > max_recent else list(context)
@@ -390,7 +402,7 @@ def _render_recent_context(context: list[dict[str, Any]], max_recent: int) -> st
             continue
         kind = entry.get("type")
         if kind == "topic":
-            lines.append(f"【主题】{entry.get('content', '')}")
+lines.append(f"[Topic]{entry.get('content', '')}")
         elif kind == "turn":
             lines.append(f"【{entry.get('content', '')}】")
         elif kind == "speaker":
@@ -398,7 +410,7 @@ def _render_recent_context(context: list[dict[str, Any]], max_recent: int) -> st
         elif kind in ("artifact_event", "tool_call"):
             tool = entry.get("tool", "?")
             caller = entry.get("caller", "?")
-            lines.append(f"[工具] {caller} → {tool}")
+lines.append(f"[tool] {caller} → {tool}")
     return "\n".join(lines)
 
 
@@ -427,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument(
         "--in", dest="in_path", required=True,
-        help="triples.jsonl input path (含 scenario / agent / context 字段)",
+help="triples.jsonl input path (including scenario / agent / context field)",
     )
     parser.add_argument(
         "--out", dest="out_path", required=True,
@@ -435,11 +447,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--scenarios-root", default=None,
-        help="scenarios/ 目录；默认 play/agent_engine/scenarios",
+help="scenarios/ directory; default play/agent_engine/scenarios",
     )
     parser.add_argument(
         "--max-recent", type=int, default=DEFAULT_MAX_RECENT,
-        help=f"user message 里渲染最近多少条 history（默认 {DEFAULT_MAX_RECENT}）",
+help=f"How many recent histories are rendered in the user message (default {DEFAULT_MAX_RECENT})",
     )
     args = parser.parse_args(argv)
 

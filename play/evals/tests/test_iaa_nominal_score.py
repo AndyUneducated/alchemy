@@ -1,10 +1,9 @@
-"""Phase 8 iaa_nominal task 的 score 路径矩阵锁（4 份 predictions）.
+"""Phase 8 iaa_nominal task's score path matrix lock (4 predictions).
 
-核心叙事 — kappa paradox：
-  - constant_majority：accuracy=0.9 但 cohens_kappa=0；gwet_ac1≈0.89 仍诚实地高
-  - noisy_diverging：cohens_kappa mid (~0.26)，但 fleiss_kappa < 0（多 rater 拉平）
-  - garbage：所有 kappa 系列 < 0
-"""
+Core narrative — kappa paradox:
+  - constant_majority: accuracy=0.9 but cohens_kappa=0; gwet_ac1≈0.89 is still honestly high
+  - noisy_diverging: cohens_kappa mid (~0.26), but fleiss_kappa < 0 (multi rater leveling)
+  - garbage: all kappa series < 0"""
 
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ def _score(pred_name: str):
     return evaluate_score(IaaNominal(), PRED_DIR / f"{pred_name}.jsonl")
 
 
-# ---------- perfect: 上界 sanity ----------
+# ---------- perfect: upper realm sanity ----------
 
 def test_perfect_all_metrics_one():
     r = _score("perfect")
@@ -40,25 +39,25 @@ def test_perfect_all_metrics_one():
     assert r.aggregated["krippendorff_alpha"] == pytest.approx(1.0)
 
 
-# ---------- constant_majority: kappa paradox 主战场 ----------
+# ---------- constant_majority: kappa paradox main battlefield ----------
 
 def test_constant_majority_kappa_paradox_acc_high_kappa_zero():
-    """核心断言：acc=0.9 高（看似良好）但 cohens_kappa=0（实际 = 多数类基线）."""
+    """Core assertion: acc=0.9 is high (seems good) but cohens_kappa=0 (actual = majority class baseline)."""
     r = _score("constant_majority")
     assert r.aggregated["accuracy"] == pytest.approx(0.9)
     assert r.aggregated["cohens_kappa"] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_constant_majority_gwet_ac1_paradox_antidote():
-    """kappa paradox 解药 1：gwet_ac1≈0.89 仍诚实地高（与 cohens_kappa=0 形成对比）."""
+    """Antidote 1 to the kappa paradox: gwet_ac1≈0.89 is still honestly high (in contrast to cohens_kappa=0)."""
     r = _score("constant_majority")
     assert r.aggregated["gwet_ac1"] == pytest.approx(0.805 / 0.905, abs=1e-9)
     assert r.aggregated["gwet_ac1"] > 0.85
 
 
 def test_constant_majority_minority_class_collapse():
-    """kappa paradox 副产品：少数类（spam）的 precision/recall/f1 全 0；
-    balanced_accuracy / mcc / f1_macro 也跌到 0/0.5（揭示真实失明）."""
+    """By-product of kappa paradox: precision/recall/f1 of minority class (spam) are all 0;
+    balanced_accuracy / mcc / f1_macro also dropped to 0/0.5 (revealing true blindness)."""
     r = _score("constant_majority")
     assert r.aggregated["precision_spam"] == 0.0
     assert r.aggregated["recall_spam"] == 0.0
@@ -68,17 +67,17 @@ def test_constant_majority_minority_class_collapse():
 
 
 def test_constant_majority_multi_rater_low():
-    """3 raters 全押多数类 → fleiss / krippendorff 也接近 0（与 cohens_kappa 同源失明）."""
+    """3 raters all-in majority class → fleiss / krippendorff also close to 0 (cohens_kappa cognate blindness)."""
     r = _score("constant_majority")
     assert abs(r.aggregated["fleiss_kappa"]) < 0.05
     assert abs(r.aggregated["krippendorff_alpha"]) < 0.05
 
 
-# ---------- noisy_diverging: 多 rater 拉平叙事 ----------
+# ---------- noisy_diverging: Multiple raters to level the narrative ----------
 
 def test_noisy_diverging_cohen_mid_fleiss_negative():
-    """反向叙事：2-rater (gold vs pred) cohens_kappa mid (~0.26)，
-    但 4 ratings (gold + 3 raters) fleiss_kappa <0 — 多 rater 暴露内部分歧."""
+    """Reverse narrative: 2-rater (gold vs pred) cohens_kappa mid (~0.26),
+    But 4 ratings (gold + 3 raters) fleiss_kappa <0 — multiple raters expose internal disagreements."""
     r = _score("noisy_diverging")
     assert 0.15 < r.aggregated["cohens_kappa"] < 0.35
     assert 0.55 < r.aggregated["gwet_ac1"] < 0.75
@@ -87,15 +86,15 @@ def test_noisy_diverging_cohen_mid_fleiss_negative():
 
 
 def test_noisy_diverging_accuracy_around_077():
-    """21 ham 对 + 2 spam 对 = 23/30，acc ≈ 0.767."""
+    """21 ham pairs + 2 spam pairs = 23/30, acc ≈ 0.767."""
     r = _score("noisy_diverging")
     assert r.aggregated["accuracy"] == pytest.approx(23.0 / 30.0, abs=1e-9)
 
 
-# ---------- garbage: 下界 sanity ----------
+# ---------- garbage: lower bound sanity ----------
 
 def test_garbage_acc_low_all_kappas_negative():
-    """garbage：30% 准确 + 全 kappa 系列 < 0（盲眼或反向预测）."""
+    """garbage: 30% accurate + full kappa series < 0 (blind or backward prediction)."""
     r = _score("garbage")
     assert r.aggregated["accuracy"] == pytest.approx(0.3, abs=1e-9)
     assert r.aggregated["cohens_kappa"] < 0
@@ -105,11 +104,11 @@ def test_garbage_acc_low_all_kappas_negative():
     assert r.aggregated["krippendorff_alpha"] < 0
 
 
-# ---------- 结构断言（整套指标齐 + confusion matrix 形态）----------
+# ---------- Structural assertion (complete set of indicators + confusion matrix form) ----------
 
 def test_aggregated_has_15_stats():
-    """aggregation 返 15 个键（9 classification + 3 agreement 2-rater + 2 multi-rater
-    + 1 _confusion_matrix）—— 防 stat 丢失退化."""
+    """aggregation returns 15 keys (9 classification + 3 agreement 2-rater + 2 multi-rater
+    + 1 _confusion_matrix) - to prevent stat loss and degradation."""
     r = _score("perfect")
     expected = {
         "accuracy", "balanced_accuracy", "mcc",
@@ -123,10 +122,10 @@ def test_aggregated_has_15_stats():
 
 
 def test_confusion_matrix_nested_form():
-    """`_confusion_matrix` 嵌套 dict 形态：{gold: {pred: count}}（诊断辅助）."""
+    """`_confusion_matrix` Nested dict shape: {gold: {pred: count}} (diagnostic aid)."""
     r = _score("constant_majority")
     cm = r.aggregated["_confusion_matrix"]
-    # 27 ham gold → 全部预测 ham；3 spam gold → 全部预测 ham
+    # 27 ham gold → all predictions ham; 3 spam gold → all predictions ham
     assert cm["ham"]["ham"] == 27
     assert cm["ham"]["spam"] == 0
     assert cm["spam"]["ham"] == 3

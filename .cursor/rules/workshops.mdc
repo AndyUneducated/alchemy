@@ -32,16 +32,16 @@ Each `play/` (or `grow/`) sub-project with non-trivial design choices keeps two 
 |File|Unit|Records|
 |---|---|---|
 |`DECISIONS.md`|one architecture decision|`Status` + `Date` metadata, then `Context` / `Options considered` / `Decision` / `Consequences` (ADR-style, MADR-flavored). Sub-projects may keep their own section headings (e.g. `Scope` / `Implementation` for `play/evals` phase entries) as long as the metadata lines are present.|
-|`JOURNAL.md`|one milestone (≤2 per working day)|`## YYYY-MM-DD — title` heading; **功能** / **技术** sections required; **取舍** section optional and should reference `DECISIONS §N` instead of duplicating rationale.|
+|`JOURNAL.md`|one milestone (≤2 per working day)|`## YYYY-MM-DD — title` heading; **Functional** / **Technical** sections required; **Trade-offs** section optional and should reference `DECISIONS §N` instead of duplicating rationale.|
 
 Discipline:
 
 - **Every important technical decision** (architecture, contract, dependency choice, explicit non-goal, supersession of an earlier decision) must land as a new entry in the sub-project's `DECISIONS.md`. Don't bury rationale only in commit messages or code comments.
 - **Append only.** When a decision is replaced, update its `- **Status**: superseded by §M (...)` line rather than deleting; old entries stay readable for the supersession trail.
-- **Functional + technical both required in the journal.** A milestone is what made today different from yesterday — describe it on both axes; a journal entry without 技术 collapses into a release note, without 功能 collapses into a refactor diary.
+- **Functional + technical both required in the journal.** A milestone is what made today different from yesterday — describe it on both axes; a journal entry without **Technical** collapses into a release note, without **Functional** collapses into a refactor diary.
 - **Cross-project decisions** (e.g. an envelope contract shared by `play/rag` and `play/agent_engine`) get one ADR per sub-project, with each entry cross-linking the others.
 - New sub-projects only need these files once a non-trivial decision or milestone exists; one-shot scratch demos are exempt.
 
 ## Language
 
-Use the same natural language as the user for that turn (中文 ↔ English).
+Use the same natural language as the user for that turn (Chinese ↔ English).

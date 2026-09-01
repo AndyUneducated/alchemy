@@ -1,26 +1,25 @@
-"""Phase 8 vertical slice：族 1 后半 IAA ordinal task — ordinal-aware vs nominal 教学.
+"""Phase 8 vertical slice: Family 1 second half IAA ordinal task — ordinal-aware vs nominal teaching.
 
-25 条 1-5 likert ratings (uniform 5×5) + 4 份 stub predictions + 3 raters/sample 演
-"ordinal-aware metric 救场 nominal kappa 失明" 双向叙事：
+25 1-5 likert ratings (uniform 5×5) + 4 stub predictions + 3 raters/sample performances
+"ordinal-aware metric rescue nominal kappa blindness" two-way narrative:
 
-  | 预测       | accuracy | cohens_kappa | weighted_quad | pearson | lins_ccc | 故事 |
+  | prediction | accuracy | cohens_kappa | weighted_quad | pearson | lins_ccc | story |
   |---|---|---|---|---|---|---|
-  | perfect    | 1.00     | 1.00         | 1.00          | 1.00    | 1.00     | 上界 sanity |
-  | off_by_one | **0.00** | **-0.25**    | **0.71**      | **0.83**| **0.71** | **核心叙事**：偏 1 → exact / nominal 全失明；ordinal-aware (weighted κ + corr + ccc) 救场 |
-  | random     | ~0.20    | ~0           | ~0            | ~0      | ~0       | 下界 sanity |
-  | garbage    | ~0.20    | 0 (paradox)  | -1.00         | -1.00   | -1.00    | 极端反向：ordinal-aware 直接抓出 perfect inverse；nominal cohen 仍迷失 (paradox 复刻) |
+  | perfect | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | upper bound sanity |
+  | off_by_one | **0.00** | **-0.25** | **0.71** | **0.83**| **0.71** | **Core narrative**: partial 1 → exact / nominal total blindness; ordinal-aware (weighted κ + corr + ccc) rescue |
+  | random | ~0.20 | ~0 | ~0 | ~0 | ~0 | lower bound sanity |
+  | garbage | ~0.20 | 0 (paradox) | -1.00 | -1.00 | -1.00 | Extreme inverse: ordinal-aware directly captures the perfect inverse; nominal cohen is still lost (paradox reprint) |
 
-设计要点（DECISIONS §8）：
-  - **output_type='none'**：与 iaa_nominal / rag_retrieval 同型，runner 跳 LM 调用；
-    score 主路径焊死全部教学叙事，run 路径完整教学 deferred (DECISIONS §8 显式让步)
-  - **target as int**：gold/prediction JSONL 存字符串 `"4"`，process_results 内 `int()` 转
-  - **库直调下放 + 手算 lins_ccc**：sklearn cohen_kappa_score (with weights=...) +
+Design points (DECISIONS §8):
+  - **output_type='none'**: Same type as iaa_nominal / rag_retrieval, runner jumps to LM call;
+    The score main path welds all teaching narratives, the run path completes the teaching deferred (DECISIONS §8 explicit concession)
+  - **target as int**: gold/prediction JSONL stores the string `"4"`, and converts it to `int()` in process_results
+  - **Library direct adjustment and decentralization + hand calculation lins_ccc**: sklearn cohen_kappa_score (with weights=...) +
     scipy.stats {pearsonr, spearmanr, kendalltau} + statsmodels.fleiss_kappa +
-    krippendorff.alpha (ordinal/interval) 全部 task 内 import；lins_ccc 走
-    metrics/agreement.py 手算 (无库可用 + 公式简单)
-  - **12 stat aggregation**：exact (1) + agreement nominal/ordinal (3) + corr (3)
-    + ccc (1) + multi-rater (4 = fleiss + krip×2 level + icc11)
-"""
+    krippendorff.alpha (ordinal/interval) import in all tasks; lins_ccc goes
+    metrics/agreement.py hand calculation (no library available + simple formula)
+  - **12 stat aggregation**: exact (1) + agreement nominal/ordinal (3) + corr (3)
+    + ccc (1) + multi-rater (4 = fleiss + krip×2 level + icc11)"""
 
 from __future__ import annotations
 
@@ -41,21 +40,20 @@ from ..metrics.agreement import build_rater_matrix, icc_1_1, lins_ccc
 from ..registry import register_task
 from .base import Task
 
-LIKERT_LABELS = (1, 2, 3, 4, 5)  # 整数序数标签
+LIKERT_LABELS = (1, 2, 3, 4, 5)  # Integer ordinal label
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "iaa_ordinal" / "gold.jsonl"
 
 
 @register_task("iaa_ordinal")
 class IaaOrdinal(Task):
-    """族 1 后半 IAA ordinal task：ordinal-aware metric vs nominal κ 失明对比.
+    """Family 1 second half IAA oral task: ordinal-aware metric vs nominal κ blindness comparison.
 
-    数据契约：predictions JSONL 行 = `{id, prediction: str-of-int, raters: list[str-of-int]}`,
-    process_results 内 `int()` 转换。
-    """
+    Data contract: predictions JSONL row = `{id, prediction: str-of-int, raters: list[str-of-int]}`,
+    `int()` conversion within process_results."""
 
     name: ClassVar[str] = "iaa_ordinal"
-    output_type: ClassVar[str] = "none"  # phase 4 literal: runner 跳 lm.generate_until
+    output_type: ClassVar[str] = "none"  # phase 4 literal: runner jumps lm.generate_until
 
     data_path: Path = DATA_PATH
 
@@ -69,28 +67,27 @@ class IaaOrdinal(Task):
                 yield Doc(id=row["id"], input=row["input"], target=row["target"])
 
     def doc_to_text(self, doc: Doc) -> str:
-        # output_type='none' 时不会被 runner 调；保留方法满足 ABC
+        # When output_type='none' it will not be called by the runner; the reserved method satisfies ABC
         return ""
 
     def doc_to_target(self, doc: Doc) -> str:
         return doc.target or ""
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：row['raters'] 注入 metadata；prediction → Response.text."""
+        """score path: row['raters'] inject metadata; prediction → Response.text."""
         raters = list(row.get("raters", []))
         enriched = replace(doc, metadata={**doc.metadata, "raters": raters})
         return enriched, Response(doc_id=doc.id, text=row.get("prediction"))
 
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
-        """字符串 → int；非法 prediction 标 `_pred_invalid` 由 aggregation 过滤.
+        """string → int; illegal prediction flag `_pred_invalid` filtered by aggregation.
 
-        历史 (audit follow-up)：旧实现把非法 prediction fallback 到 0，但 0 不在
-        LIKERT_LABELS=[1..5] 内 → sklearn `cohen_kappa_score(..., labels=[1..5])`
-        把这些 sample 视为 out-of-labels 静默丢弃 → 在「混合非法 prediction」场景下
-        kappa 系列被无声美化（实测 yt=[1,2,3,4,5] yp=[1,0,3,0,5] 时 cohens_kappa=1.0
-        而非真实约 0.6）. 改为显式 `_pred_invalid` 标记 + aggregation 过滤，避免
-        双层静默叠加.
-        """
+        History (audit follow-up): Old implementation fallsback illegal prediction to 0, but 0 is not there
+        LIKERT_LABELS=[1..5] within → sklearn `cohen_kappa_score(..., labels=[1..5])`
+        Treat these samples as out-of-labels and silently discard them → in the "mixed illegal prediction" scenario
+        The kappa series is silently beautified (actually measured when yt=[1,2,3,4,5] yp=[1,0,3,0,5] cohens_kappa=1.0
+        instead of real about 0.6). Change to explicit `_pred_invalid` flag + aggregation filtering to avoid
+        Double layer silent superposition."""
         pred_str = (response.text or "").strip()
         try:
             pred_int: int | None = int(pred_str)
@@ -105,9 +102,9 @@ class IaaOrdinal(Task):
         except (TypeError, ValueError):
             target_int = 0
 
-        # raters：score 路径已是 list[str] 形式，转 int；非法项 fallback 0（多 rater
-        # 矩阵不参与 sklearn label 静默丢弃路径，0 fallback 影响仅限 fleiss/krippendorff
-        # 的统计平滑，远小于 P0 的 metric 误抬）
+        # raters: score path is already in the form of list[str], converted to int; illegal items fallback 0 (multiple raters
+        # The matrix does not participate in the sklearn label silently discarding path, 0 fallback affects only fleiss/krippendorff
+        # The statistical smoothness of P0 is much smaller than the metric error of P0)
         raw_raters = list(doc.metadata.get("raters", []))
         rater_ints: list[int] = []
         for r in raw_raters:
@@ -120,13 +117,13 @@ class IaaOrdinal(Task):
 
         return SampleResult(
             doc_id=doc.id,
-            # 保留 raw pred_str（drill-down 看 LM 真实输出比 'None' 更有诊断价值）
+            # Keep raw pred_str (drill-down to see the real output of LM is more diagnostic than 'None')
             prediction=pred_str if pred_invalid else str(pred_int),
             target=str(target_int),
             metrics={"acc": acc},
             artifacts={
                 "raters": rater_ints,
-                "_pred_int": pred_int,  # 可为 None
+                "_pred_int": pred_int,  # Can be None
                 "_target_int": target_int,
                 "_pred_invalid": pred_invalid,
             },
@@ -139,11 +136,10 @@ class IaaOrdinal(Task):
             return bool(sr.artifacts.get("_pred_invalid", False))
 
         def _y_int_valid(srs: list[SampleResult]) -> tuple[list[int], list[int]]:
-            """仅取 valid pred 的 (yt, yp)；invalid pred 被过滤（audit P0 修复）.
+            """Only (yt, yp) of valid pred are taken; invalid pred is filtered (audit P0 fixed).
 
-            过滤后 yp ⊆ LIKERT_LABELS 严格成立，sklearn `cohen_kappa_score` 的
-            `labels=[1..5]` 不再静默丢弃外类样本 → kappa 系列在混合非法场景下数值正确.
-            """
+            After filtering, yp ⊆ LIKERT_LABELS is strictly established, sklearn `cohen_kappa_score`
+            `labels=[1..5]` no longer silently discards out-of-class samples → the kappa series has correct values in mixed illegal scenarios."""
             valid = [s for s in srs if not _is_invalid(s)]
             return (
                 [int(s.artifacts["_target_int"]) for s in valid],
@@ -162,17 +158,16 @@ class IaaOrdinal(Task):
             return len(set(xs)) < 2
 
         def _accuracy(srs: list[SampleResult]) -> float:
-            """全部 sample（含 invalid）：invalid pred 自然不等于 target → 0 贡献.
+            """All samples (including invalid): invalid pred is naturally not equal to target → 0 contribution.
 
-            走 `metrics["acc"]` 平均而非 sklearn `accuracy_score`，避开 sentinel None
-            进入 sklearn 的路径；与 sample 层 acc 字段定义保持一致.
-            """
+            Go for `metrics["acc"]` average instead of sklearn `accuracy_score`, avoid sentinel None
+            The path into sklearn; consistent with the sample layer acc field definition."""
             if not srs:
                 return 0.0
             return float(sum(s.metrics.get("acc", 0.0) for s in srs) / len(srs))
 
         def _cohens_kappa(srs: list[SampleResult]) -> float:
-            """nominal 解读：1-5 当 5 个无序类（演示 ordinal 当 nominal 看的失明）."""
+            """Interpretation of nominal: 1-5 as 5 unordered categories (demonstration of ordinal when nominal is blind)."""
             if not srs:
                 return 0.0
             yt, yp = _y_int_valid(srs)
@@ -181,13 +176,13 @@ class IaaOrdinal(Task):
             import warnings as _warnings
 
             with _warnings.catch_warnings():
-                # Pe=1 退化（小 limit 单类切片）让 sklearn 内部除 0 emit RuntimeWarning;
-                # `_nan_to_zero` 已兜数值，此处消噪 (audit P2 同源).
+                # Pe=1 degeneracy (small limit single class slices) makes sklearn internally divide by 0 emit RuntimeWarning;
+                # `_nan_to_zero` has the value, and the noise is removed here (audit P2 has the same origin).
                 _warnings.simplefilter("ignore", category=RuntimeWarning)
                 return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels))
 
         def _weighted_kappa_linear(srs: list[SampleResult]) -> float:
-            """ordinal-aware: 距离按 |i-j| 线性折扣 disagreement."""
+            """ordinal-aware: distance by |i-j| linear discount disagreement."""
             if not srs:
                 return 0.0
             yt, yp = _y_int_valid(srs)
@@ -200,11 +195,10 @@ class IaaOrdinal(Task):
                 return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="linear"))
 
         def _weighted_kappa_quadratic(srs: list[SampleResult]) -> float:
-            """ordinal-aware: 距离按 (i-j)² 二次折扣（off-by-1 远比 off-by-3 轻）.
+            """ordinal-aware: Distance by (i-j)² secondary discount (off-by-1 is much lighter than off-by-3).
 
-            **核心叙事 metric**：在 off_by_one 场景下 ≈ 0.71，与 cohens_kappa = -0.25 的对比
-            是 ordinal-aware 救场最直观的演示.
-            """
+            **Core narrative metric**: ≈ 0.71 in off_by_one scenario, compared to cohens_kappa = -0.25
+            It is the most intuitive demonstration of ordinal-aware rescue."""
             if not srs:
                 return 0.0
             yt, yp = _y_int_valid(srs)
@@ -217,7 +211,7 @@ class IaaOrdinal(Task):
                 return _nan_to_zero(cohen_kappa_score(yt, yp, labels=labels, weights="quadratic"))
 
         def _pearson_r(srs: list[SampleResult]) -> float:
-            """连续相关：把 likert 当 interval scale；off_by_one 场景 ≈ 0.83."""
+            """Continuous correlation: treat likert as interval scale; off_by_one scenario ≈ 0.83."""
             yt, yp = _y_int_valid(srs)
             if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
@@ -225,7 +219,7 @@ class IaaOrdinal(Task):
             return _nan_to_zero(r)
 
         def _spearman_rho(srs: list[SampleResult]) -> float:
-            """rank 相关：对单调变换不变；off_by_one 场景 ≈ 0.82."""
+            """rank correlation: invariant to monotonic transformations; off_by_one scenario ≈ 0.82."""
             yt, yp = _y_int_valid(srs)
             if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
@@ -233,7 +227,7 @@ class IaaOrdinal(Task):
             return _nan_to_zero(rho)
 
         def _kendall_tau(srs: list[SampleResult]) -> float:
-            """concordance-based rank corr：小样本更稳；off_by_one 场景 ≈ 0.74."""
+            """concordance-based rank corr: small samples are more stable; off_by_one scenario ≈ 0.74."""
             yt, yp = _y_int_valid(srs)
             if len(yt) < 2 or _is_constant(yt) or _is_constant(yp):
                 return 0.0
@@ -241,8 +235,8 @@ class IaaOrdinal(Task):
             return _nan_to_zero(tau)
 
         def _lins_ccc(srs: list[SampleResult]) -> float:
-            """concordance correlation: 同时罚 shift + scale；off_by_one 场景 ≈ 0.71
-            (与 weighted_kappa_quadratic 同步反映 ordinal 救场)."""
+            """concordance correlation: simultaneous penalty shift + scale; off_by_one scenario ≈ 0.71
+            (Synchronized with weighted_kappa_quadratic to reflect ordinal saves)."""
             if not srs:
                 return 0.0
             yt, yp = _y_int_valid(srs)
@@ -251,7 +245,7 @@ class IaaOrdinal(Task):
             return float(lins_ccc(yt, yp))
 
         def _fleiss_kappa(srs: list[SampleResult]) -> float:
-            """gold + N raters → statsmodels fleiss_kappa（nominal 解读，多 rater 版 Cohen）."""
+            """gold + N raters → statsmodels fleiss_kappa (nominal interpretation, multi-rater version Cohen)."""
             if not srs:
                 return 0.0
             matrix = build_rater_matrix(srs, include_gold=True)
@@ -262,21 +256,21 @@ class IaaOrdinal(Task):
             import warnings as _warnings
 
             with _warnings.catch_warnings():
-                # 单类退化让 statsmodels 内部 Pe=1 除 0 emit RuntimeWarning；
-                # `_nan_to_zero` 已兜数值，此处消噪 (audit P2 同源).
+                # Single class degradation lets statsmodels internal Pe=1 divided by 0 emit RuntimeWarning;
+                # `_nan_to_zero` has the value, and the noise is removed here (audit P2 has the same origin).
                 _warnings.simplefilter("ignore", category=RuntimeWarning)
                 return _nan_to_zero(fleiss_kappa(agg))
 
         def _krippendorff_alpha_ordinal(srs: list[SampleResult]) -> float:
-            """ordinal level：rank 距离权重，但忽略 interval 假设（5−1 与 4−2 同距）."""
+            """ordinal level: rank distance weight, but ignore the interval assumption (5−1 is the same distance as 4−2)."""
             if not srs:
                 return 0.0
             matrix = build_rater_matrix(srs, include_gold=True)
             if not matrix or len(matrix[0]) < 2:
                 return 0.0
             rd = np.asarray(matrix, dtype=int).T
-            # `<2 unique value` 必须在 dtype=int 转换后判（target 是 str("1") raters 是
-            # int(1)，转 int 前 unique 假性=2 但 krippendorff 看到 single-domain 后 raise）
+            # `<2 unique value` must be determined after dtype=int conversion (target is str("1") raters is
+            # int(1), unique false=2 before converting to int, but krippendorff raises after seeing single-domain)
             if len(np.unique(rd)) < 2:
                 return 0.0
             return _nan_to_zero(
@@ -284,8 +278,8 @@ class IaaOrdinal(Task):
             )
 
         def _krippendorff_alpha_interval(srs: list[SampleResult]) -> float:
-            """interval level：(i-j)² 距离（与 weighted_kappa_quadratic 同形思路），
-            演示 level 选择对 alpha 影响——多 rater 同源."""
+            """interval level: (i-j)² distance (same idea as weighted_kappa_quadratic),
+            Demonstrates the impact of level selection on alpha - multiple rater origins."""
             if not srs:
                 return 0.0
             matrix = build_rater_matrix(srs, include_gold=True)
@@ -299,7 +293,7 @@ class IaaOrdinal(Task):
             )
 
         def _icc_1_1(srs: list[SampleResult]) -> float:
-            """ICC(1,1) one-way random: 假设 raters 从 rater 总体随机抽，单 rater 单评 reliability."""
+            """ICC(1,1) one-way random: Assume that raters are randomly selected from the population of raters, and single raters are evaluated individually for reliability."""
             if not srs:
                 return 0.0
             matrix = build_rater_matrix(srs, include_gold=True)

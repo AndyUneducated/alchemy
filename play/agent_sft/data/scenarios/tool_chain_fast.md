@@ -1,18 +1,18 @@
-# 工具链 fast 副本（agent_sft Phase 2 mining 专用）
+# tool_chain fast copy (agent_sft Phase 2 mining only)
 
 # ============================================================================
-# 派生自 [`agent_engine/scenarios/tool_chain.md`](../../../agent_engine/scenarios/tool_chain.md)。
-# 上游 scenario 不动，本副本只为 synthesize.py mining 提速优化:
+# Derived from [`agent_engine/scenarios/tool_chain.md`](../../../agent_engine/scenarios/tool_chain.md).
+# Upstream scenario unchanged; this copy speeds up synthesize.py mining only:
 #
-#   1. `max_retries: 1 → 0`：synthesize 只需 first failed attempt + nudge fired
-#      事件即可造 triple，retry 是纯浪费 LLM 调用。
-#   2. `max_tokens: 200/160 → 80`：agent prompt 本就限制 ≤30/50 字，token cap
-#      贴近实际负载，无功能影响（fire 判定与生成长度无关）.
-#   3. 删 open + finalize 两个 moderator 步：0 fires，纯仪式开销.
-#   4. `vdb_dir` 相对路径 +1 层（scenario 文件向下移了 1 级目录）.
+#   1. `max_retries: 1 → 0`: synthesize only needs first failed attempt + nudge fired
+#      to build a triple; retries waste LLM calls.
+#   2. `max_tokens: 200/160 → 80`: agent prompts already cap at ≤30/50 chars; token cap
+#      matches actual load with no functional impact (fire detection is length-independent).
+#   3. Drop open + finalize moderator steps: 0 fires, pure ceremony overhead.
+#   4. `vdb_dir` relative path +1 level (scenario file moved one directory deeper).
 #
-# 上游 baseline eval（已记录 max_retries=1 的 nudge_fire_rate / agent_traj
-# 数据）按原 scenario 跑，对照不被破坏；本文件只服务 mine_triples.py.
+# Upstream baseline eval (nudge_fire_rate / agent_traj recorded with max_retries=1)
+# still uses the original scenario; this file serves mine_triples.py only.
 # ============================================================================
 
 ---

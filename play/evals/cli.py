@@ -1,26 +1,25 @@
-"""CLI：argparse 四子命令.
+"""CLI: argparse four subcommands.
 
-  list-tasks             列所有已注册 task
-  score                  score 模式打分（Phase 1 主路径，sacrebleu 风格，不驱动 LM）
-  run                    run 模式 harness 驱动 LM
-  show                   跨 run 查询 / 单 run 聚合 & 样例展示
+  list-tasks lists all registered tasks
+  score score mode scoring (Phase 1 main path, sacrebleu style, does not drive LM)
+  run run mode harness driver LM
+  show cross-run query/single-run aggregation & sample display
 
-model spec（run 的 --model / --judge-model 与 score 的 --judge-model 共用同一 grammar）：
+model spec (run's --model / --judge-model and score's --judge-model share the same grammar):
   mock:gold
   mock:noisy:0.3
   mock:constant:neutral
   mock:rule
-  ollama:qwen3.6:27b      [phase 3]
-  openai:gpt-4o-mini      [phase 3+ scaffold; not yet runnable]
-  anthropic:claude-...    [phase 3+ scaffold; not yet runnable]
+  ollama:qwen3.6:27b [phase 3]
+  openai:gpt-4o-mini [phase 3+ scaffold; not yet runnable]
+  anthropic:claude-... [phase 3+ scaffold; not yet runnable]
 
-`--judge-model` 当前 score / run 两子命令都接，挂 qa_open / rag_qa（rag_retrieval
-不接 judge）.
+`--judge-model` currently accepts both score / run sub-commands, and connects qa_open / rag_qa (rag_retrieval
+No judge).
 
-phase 4 新增 `--vdb` / `--retrieve-top-k` / `--retrieve-mode` / `--rerank` 4 个
-RAG 专属 flag：仅 `rag_retrieval` / `rag_qa` 接，其它 task 配该 flag 立即 SystemExit
-（fail-fast 而非 silently 忽略）。dispatch 在 `_build_task_with_optional_deps`.
-"""
+Phase 4 adds 4 new `--vdb` / `--retrieve-top-k` / `--retrieve-mode` / `--rerank`
+RAG exclusive flag: only `rag_retrieval` / `rag_qa` can be connected, other tasks are equipped with this flag and immediately SystemExit
+(fail-fast instead of silently ignored). dispatch in `_build_task_with_optional_deps`."""
 
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ import argparse
 import json
 from pathlib import Path
 
-from . import tasks  # noqa: F401  — 触发 @register_task 副作用
+from . import tasks  # noqa: F401 — Trigger @register_task side effect
 from .api import Request, Response
 from .models.base import LM
 from .models.mock import MockLM
@@ -40,22 +39,21 @@ from .storage import DEFAULT_RUNS_DIR, load_run, read_index, save
 EXTERNAL_PROVIDERS = ("openai", "anthropic", "gemini")
 
 
-# ---------- model spec 解析 ----------
+# ---------- model spec analysis ----------
 
-def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 forward-ref 避免循环
-    """spec → LM 实例 dispatch.
+def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task type forward-ref avoids loops
+    """spec → LM instance dispatch.
 
-      mock:<mode>[:<arg>]            → MockLM (phase 1)
-      ollama:<model>                 → OllamaLM (phase 3)
-      ollama:<model>@seed=<K>        → OllamaLM(seed=K)；agent_sft phase 1 多 seed 用
-      openai|anthropic|gemini        → NotImplementedError（架构留口，phase 3 暂不启用）
+      mock:<mode>[:<arg>] → MockLM (phase 1)
+      ollama:<model> → OllamaLM (phase 3)
+      ollama:<model>@seed=<K> → OllamaLM(seed=K); agent_sft phase 1 for multiple seeds
+      openai|anthropic|gemini → NotImplementedError (architecture is left open, phase 3 is not enabled yet)
 
-    `@seed=K` 后缀（仅 ollama 支持）：把 LM-side 采样 seed 注入 `OllamaLM(seed=K)`，
-    与 CLI 的 `--seed` 区分（后者管 fewshot 抽样 / runner 级 RNG，不到 LM 端）.
-    `lm.name` 保留 `@seed=K` 后缀让 EvalResult.model 字段可区分多 seed run，方便
-    aggregate_seeds.py 按 (task, model_label_w/o_seed, seed) group.
-    """
-    # 先剥 `@seed=K` 后缀（仅出现在最尾），剩余给具体 provider parse
+    `@seed=K` suffix (only supported by ollama): Inject the LM-side sampling seed into `OllamaLM(seed=K)`,
+    Differentiate from CLI's `--seed` (the latter manages fewshot sampling/runner-level RNG, not the LM end).
+    `lm.name` retains the `@seed=K` suffix so that the EvalResult.model field can distinguish multiple seed runs, which is convenient
+    aggregate_seeds.py by (task, model_label_w/o_seed, seed) group."""
+    # First strip off the `@seed=K` suffix (only appears at the end), and leave the rest to the specific provider parse
     seed_suffix: str | None = None
     lm_seed: int | None = None
     if "@seed=" in spec:
@@ -98,7 +96,7 @@ def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 for
             kwargs["seed"] = lm_seed
         lm = OllamaLM(model=model, **kwargs)
         if seed_suffix is not None:
-            # 把 seed 标到 model_label，让 EvalResult.model 在多 seed run 间可区分
+            # Label the seed to model_label to make EvalResult.model distinguishable between multiple seed runs
             lm.name = f"{lm.name}{seed_suffix}"
         return lm
     if provider in EXTERNAL_PROVIDERS:
@@ -113,16 +111,15 @@ def parse_model_spec(spec: str, task) -> LM:  # noqa: ANN001 — Task 类型 for
     )
 
 
-# ---------- 输出格式化 ----------
+# ---------- Output formatting ----------
 
-def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v 可为 float / dict / int / None
-    """递归把 (key, value) 拍平成 'k=v' 列表；嵌套 dict 用 dot 连接.
+def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v can be float / dict / int / None
+    """Recursively flatten (key, value) into a 'k=v' list; nested dicts are connected with dot.
 
-    phase 6 起 aggregated 允许嵌套（efficiency 子组等）；老的 phase 1-5 平铺指标
-    走 isinstance 非 dict 分支，与原 `_fmt_row` 字节相同.
-    phase 7 audit P2：None 占位 stat（如 safety.judge_safety_score 未接 judge_lm 时）
-    渲染为 `<n/a>`，与"真 0"显式区分；落 result.json 仍是 null（dataclasses.asdict）.
-    """
+    aggregated allows nesting (efficiency subgroups, etc.) since phase 6; old phase 1-5 tiling metrics
+    Take the isinstance non-dict branch, which is the same as the original `_fmt_row` bytes.
+    phase 7 audit P2: None placeholder stat (for example, when safety.judge_safety_score is not connected to judge_lm)
+    Rendered as `<n/a>`, explicitly distinguished from "true 0"; still null in result.json (dataclasses.asdict)."""
     full = f"{prefix}{k}"
     if v is None:
         return [f"{full}=<n/a>"]
@@ -137,7 +134,7 @@ def _fmt_kv(k: str, v, prefix: str = "") -> list[str]:  # noqa: ANN001 — v 可
 
 
 def _fmt_row(r: dict) -> str:
-    """一行 index row → 可读短行（phase 6 起支持嵌套 aggregated 子组）."""
+    """One row index row → short readable row (nested aggregated subgroups are supported since phase 6)."""
     agg = r.get("aggregated", {})
     parts: list[str] = []
     for k, v in agg.items():
@@ -149,7 +146,7 @@ def _fmt_row(r: dict) -> str:
     )
 
 
-# ---------- 子命令 handlers ----------
+# ---------- Subcommand handlers ----------
 
 def cmd_list_tasks(_args: argparse.Namespace) -> int:
     for name in list_tasks():
@@ -158,12 +155,11 @@ def cmd_list_tasks(_args: argparse.Namespace) -> int:
 
 
 class _RetrieverOnlyLM(LM):
-    """name-only LM stub for `output_type='none'` tasks（phase 4 引入；rag_retrieval 用）.
+    """name-only LM stub for `output_type='none'` tasks (introduced in phase 4; used by rag_retrieval).
 
-    runner 在 output_type='none' 分支不会调 generate_until——本 stub 只承担落
-    EvalResult.model 字段的"人类可读 model 标签"职责（如 'retriever:panel:hybrid'）.
-    若被意外调用 → AssertionError，捕捉 runner 分支错误.
-    """
+    The runner will not adjust generate_until in the output_type='none' branch - this stub is only responsible for dropping
+    The "human-readable model tag" responsibility for the EvalResult.model field (e.g. 'retriever:panel:hybrid').
+    If accidentally called → AssertionError, catch runner branch errors."""
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -184,15 +180,14 @@ def _build_task_with_optional_deps(
     retrieve_mode: str = "hybrid",
     rerank: bool = False,
 ):
-    """get_task(name) + 可选依赖注入（judge_lm / retrieve_fn / run_fn）.
+    """get_task(name) + optional dependency injection (judge_lm / retrieve_fn / run_fn).
 
-    - `judge_model_spec` 给定 → parse 为 LM 注入相应 task（qa_open / rag_qa / agent_traj）
-    - `vdb` 给定 → make_retrieve_fn 注入 RAG task（rag_retrieval / rag_qa）
-    - agent_traj：永远注入 make_run_fn（cheap closure；score 路径不会触发 subprocess）
-    - 不匹配的 task × flag 组合 → SystemExit fail-fast
+    - `judge_model_spec` is given → parse injects the corresponding task into LM (qa_open / rag_qa / agent_traj)
+    - `vdb` given → make_retrieve_fn injects RAG task (rag_retrieval/rag_qa)
+    - agent_traj: always inject make_run_fn (cheap closure; score path will not trigger subprocess)
+    - Unmatched task × flag combination → SystemExit fail-fast
 
-    扩展新 task 支持时在此处加 dispatch 分支.
-    """
+    Add dispatch branch here when extending new task support."""
     from .tasks.agent_traj import AgentTraj
     from .tasks.nudge_fire_rate import NudgeFireRate
     from .tasks.qa_open import QAOpen
@@ -263,7 +258,7 @@ def _build_task_with_optional_deps(
             return base_task
         return QAOpen(judge_lm=judge_lm)
 
-    # 其它 task：拒绝 RAG / judge flag
+    # Other tasks: reject RAG / judge flag
     if judge_lm is not None:
         raise SystemExit(
             f"--judge-model only supported by qa_open / rag_qa / agent_traj / safety (got task={task_name!r}); "
@@ -280,7 +275,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     task = _build_task_with_optional_deps(
         args.task,
         judge_model_spec=args.judge_model,
-        # score 路径不需要 retrieve_fn（contexts/retrieved_ids 已在 predictions JSONL）
+        # The score path does not require retrieve_fn (contexts/retrieved_ids is already in predictions JSONL)
     )
     result = evaluate_score(
         task,
@@ -294,13 +289,12 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
-def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数值 leaf / None
-    """递归判断嵌套 dict 所有 leaf 数值是否都为 0（None 视为零类信号；非数值 leaf → False）.
+def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d may be dict / numeric leaf / None
+    """Recursively determine whether all leaf values of the nested dict are 0 (None is regarded as a zero-type signal; non-numeric leaf → False).
 
-    phase 7 audit P2：safety stat 用 None 占位"未测得"，None 与 0 在折叠语义上等价
-    （都属于"无 metric 信号"），但 trait gate（_should_fold_when_all_zero）仍按 dim
-    决定是否真折叠——content class（safety）即使全 None 也不折叠，让 <n/a> 显式渲染.
-    """
+    phase 7 audit P2: safety stat uses None to place "not measured", None and 0 are equivalent in folding semantics
+    (both belong to "no metric signal"), but the trait gate (_should_fold_when_all_zero) still presses dim
+    Determines whether to actually collapse - the content class (safety) will not collapse even if it is None, allowing <n/a> to be rendered explicitly."""
     if d is None:
         return True
     if isinstance(d, dict):
@@ -310,23 +304,22 @@ def _is_all_zero_nested(d) -> bool:  # noqa: ANN001 — d 可能是 dict / 数�
     return False
 
 
-# cross-cutting dim → metric module 路径映射，用于查询 module-level
+# cross-cutting dim → metric module path mapping, used to query module-level
 # FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
 #
-# wave 3（DECISIONS §7.2）：safety 退出 cross-cutting（回归 standalone task），
-# 此映射只剩 efficiency。加新 cross-cutting 维度（calibration 等）在此注册.
+# wave 3 (DECISIONS §7.2): safety exits cross-cutting (returns to standalone task),
+# This mapping leaves only efficiency. Add new cross-cutting dimensions (calibration, etc.) registered here.
 _DIM_MODULES: dict[str, str] = {
     "efficiency": "evals.metrics.efficiency",
 }
 
 
 def _should_fold_when_all_zero(dim: str) -> bool:
-    """查询 cross-cutting dim 模块的 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait.
+    """Query the FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO trait of the cross-cutting dim module.
 
-    未注册 dim → 默认 True（与 phase 6 audit §1.7 立的折叠默认行为一致——
-    新 cross-cutting 维度若想退出折叠须在自身模块显式声明 trait=False）.
-    详见 metrics/efficiency.py / metrics/safety.py 的 trait 常量声明.
-    """
+    Unregistered dim → Default True (consistent with phase 6 audit §1.7 independent collapse default behavior -
+    If the new cross-cutting dimension wants to exit folding, it must explicitly declare trait=False in its own module).
+    See the trait constant declarations in metrics/efficiency.py / metrics/safety.py for details."""
     mod_path = _DIM_MODULES.get(dim)
     if not mod_path:
         return True
@@ -336,24 +329,23 @@ def _should_fold_when_all_zero(dim: str) -> bool:
 
 
 def _print_aggregated(agg: dict) -> None:
-    """嵌套友好打印：phase 6 起 aggregated 含 efficiency 子组，递归走 _fmt_kv.
+    """Nested friendly printing: phase 6 and above aggregated contains efficiency subgroup, recursively go to _fmt_kv.
 
-    audit §1.7：cross-cutting dim 嵌套子组若所有 leaf 数值全 0/None 且该 dim 在 trait 表里
-    声明 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True，折叠为 `<dim>: <not measured>` 单行避免
-    视觉误导. None 占位的 stat 走 _fmt_kv 的 `<n/a>` 渲染.
-    顶层 task-specific 指标（accuracy=0 等）保持显式 0 输出（task 信号不折叠）.
+    audit §1.7: cross-cutting dim nested subgroup if all leaf values are all 0/None and the dim is in the trait table
+    Declare FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO=True, collapse to `<dim>: <not measured>` single line avoidance
+    Visually misleading. None placeholder stat takes away from _fmt_kv's `<n/a>` rendering.
+    Top-level task-specific metrics (accuracy=0, etc.) remain with an explicit 0 output (task signals are not folded).
 
-    DECISIONS §7.3 wave 3：嵌套二级折叠——cross-cutting 子树（如 efficiency）顶层非全 0 但
-    内部子子组（如 efficiency.judge：task 没接 judge_lm / mock judge / 价格表未命中）全 0 时，
-    按同 trait gate 单独折叠为 `<dim>.<sub>: <not measured>` 单行.
-    """
+    DECISIONS §7.3 wave 3: Nested second-level folding - cross-cutting subtree (such as efficiency) top level is not all 0 but
+    When the internal sub-subgroups (such as efficiency.judge: task missed judge_lm / mock judge / price list missed) are all 0,
+    Folded into a single line with the same trait gate as `<dim>.<sub>: <not measured>`."""
     for k, v in agg.items():
-        # 顶层折叠：cross-cutting dim 全 0 → 单行 `<dim>: <not measured>`
+        # Top fold: cross-cutting dim all 0 → single line `<dim>: <not measured>`
         if isinstance(v, dict) and _is_all_zero_nested(v) and _should_fold_when_all_zero(k):
             print(f"  {k:<28} <not measured (no LM signal)>")
             continue
 
-        # 嵌套二级折叠（DECISIONS §7.3）：cross-cutting dim 顶层非全 0 但内部子子组全 0
+        # Nested second-level folds (DECISIONS §7.3): cross-cutting dim The top level is not all 0 but the internal sub-subgroups are all 0
         if k in _DIM_MODULES and isinstance(v, dict) and _should_fold_when_all_zero(k):
             for sub_k, sub_v in v.items():
                 if isinstance(sub_v, dict) and _is_all_zero_nested(sub_v):
@@ -365,7 +357,7 @@ def _print_aggregated(agg: dict) -> None:
                     print(f"  {key:<28} {val}")
             continue
 
-        # 顶层 task scalar（含 safety task 自身的 refusal_rate 等 wave 3 平铺 metric）
+        # Top-level task scalar (including the safety task's own refusal_rate and other wave 3 tile metrics)
         for line in _fmt_kv(k, v):
             key, _, val = line.partition("=")
             print(f"  {key:<28} {val}")
@@ -386,7 +378,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         rerank=rerank,
     )
 
-    # output_type='none' task（rag_retrieval / agent_traj）允许省 --model：用代表性 label 占位
+    # output_type='none' task (rag_retrieval / agent_traj) allows to save --model: use representative label placeholder
     if task.output_type == "none":
         if args.model:
             lm: LM = parse_model_spec(args.model, task)
@@ -449,66 +441,66 @@ def cmd_show(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m evals",
-        description="双模式 LLM 评测 harness（score: 文件打分 / run: 驱动 LM）",
+        description="Dual-mode LLM evaluation harness (score: file scoring / run: drive LM)",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    p_list = sub.add_parser("list-tasks", help="列出所有已注册 task")
+    p_list = sub.add_parser("list-tasks", help="List all registered tasks")
     p_list.set_defaults(func=cmd_list_tasks)
 
-    p_score = sub.add_parser("score", help="score 模式：读 predictions JSONL 打分，不驱动 LM")
-    p_score.add_argument("--task", required=True, help="task 名，如 sentiment_clf")
-    p_score.add_argument("--predictions", required=True, help="predictions JSONL 路径 {id, prediction}")
-    p_score.add_argument("--source-label", default=None, help="显示用的 model 标签（默认取文件 basename）")
+    p_score = sub.add_parser("score", help="Score mode: read predictions JSONL and score; does not drive LM")
+    p_score.add_argument("--task", required=True, help="Task name, e.g. sentiment_clf")
+    p_score.add_argument("--predictions", required=True, help="Predictions JSONL path {id, prediction}")
+    p_score.add_argument("--source-label", default=None, help="Display model label (default: file basename)")
     p_score.add_argument(
         "--judge-model",
         default=None,
-        help="judge LM spec（仅 qa_open 接 judge_pointwise，e.g. ollama:qwen3.6:27b）；不传则只跑 lexical baseline",
+        help="Judge LM spec (qa_open uses judge_pointwise, e.g. ollama:qwen3.6:27b); omit for lexical baseline only",
     )
-    p_score.add_argument("--limit", type=int, default=None, help="只跑前 N 条")
-    p_score.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR, help="run 结果落盘目录")
+    p_score.add_argument("--limit", type=int, default=None, help="Run only first N items")
+    p_score.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR, help="Directory to write run results")
     p_score.set_defaults(func=cmd_score)
 
-    p_run = sub.add_parser("run", help="run 模式：驱动 LM 跑 prompt")
+    p_run = sub.add_parser("run", help="Run mode: drive LM over prompts")
     p_run.add_argument("--task", required=True)
     p_run.add_argument(
         "--model",
         default=None,
         help=(
-            "model spec，如 mock:gold / mock:noisy:0.3 / ollama:qwen3.6:27b. "
-            "task.output_type='none'（rag_retrieval）时可省，由 --vdb 自动派生 retriever 标签."
+            "Model spec, e.g. mock:gold / mock:noisy:0.3 / ollama:qwen3.6:27b. "
+            "Optional when task.output_type='none' (rag_retrieval); --vdb derives retriever label."
         ),
     )
     p_run.add_argument(
         "--judge-model",
         default=None,
         help=(
-            "judge LM spec（qa_open / rag_qa 接，e.g. ollama:qwen3.6:27b）；"
-            "不传则跑 lexical baseline（rag_qa 仅 em + rouge_l）"
+            "Judge LM spec (qa_open / rag_qa; e.g. ollama:qwen3.6:27b); "
+            "omit for lexical baseline (rag_qa: em + rouge_l only)"
         ),
     )
-    # phase 4 RAG 专属 flags（仅 rag_retrieval / rag_qa 接）
+    # phase 4 RAG exclusive flags (only accessed by rag_retrieval / rag_qa)
     p_run.add_argument(
         "--vdb",
         default=None,
-        help="VDB 目录路径（如 ../rag/vdb/panel）；指定后 RAG task 在 process_docs 自动 retrieve. 仅 rag_retrieval / rag_qa 接.",
+        help="VDB directory (e.g. ../rag/vdb/panel); RAG tasks auto-retrieve in process_docs. rag_retrieval / rag_qa only.",
     )
     p_run.add_argument(
         "--retrieve-top-k",
         type=int,
         default=5,
-        help="检索返回的 top-K 文档数（注入 doc.metadata 用）",
+        help="Top-K documents from retrieval (injected into doc.metadata)",
     )
     p_run.add_argument(
         "--retrieve-mode",
         choices=["dense", "bm25", "hybrid"],
         default="hybrid",
-        help="检索策略：dense / bm25 / hybrid（RRF 融合）",
+        help="Retrieval strategy: dense / bm25 / hybrid (RRF fusion)",
     )
     p_run.add_argument(
         "--rerank",
         action="store_true",
-        help="启用 cross-encoder rerank（首次加载 ~1.2GB 模型；显著提升 precision@k）",
+        help="Enable cross-encoder rerank (first load ~1.2GB model; boosts precision@k)",
     )
     p_run.add_argument("--limit", type=int, default=None)
     p_run.add_argument("--seed", type=int, default=0)
@@ -516,23 +508,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--num-fewshot",
         type=int,
         default=0,
-        help="prompt 前拼 K 条 example（lm-eval 风格 K-shot）；0=zero-shot 与 Phase 1 字节相同",
+        help="Prepend K examples to prompt (lm-eval K-shot); 0 = zero-shot, byte-identical to Phase 1",
     )
     p_run.add_argument(
         "--fewshot-seed",
         type=int,
         default=0,
-        help="few-shot 抽样 RNG seed；只控 example 抽样不影响其它路径",
+        help="Few-shot sampling RNG seed; controls example sampling only",
     )
     p_run.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     p_run.set_defaults(func=cmd_run)
 
-    p_show = sub.add_parser("show", help="查 run 结果（跨 run 索引 / 单 run drill-down）")
-    p_show.add_argument("--run-id", default=None, help="具体 run_id，不传则列跨 run 索引")
-    p_show.add_argument("--task", default=None, help="过滤 task")
-    p_show.add_argument("--mode", default=None, choices=["score", "run"], help="过滤 mode")
-    p_show.add_argument("--last", type=int, default=None, help="只显示最近 N 条")
-    p_show.add_argument("--samples", type=int, default=0, help="单 run 展示前 N 条样例")
+    p_show = sub.add_parser("show", help="Query run results (cross-run index / single-run drill-down)")
+    p_show.add_argument("--run-id", default=None, help="Specific run_id; omit to list cross-run index")
+    p_show.add_argument("--task", default=None, help="Filter by task")
+    p_show.add_argument("--mode", default=None, choices=["score", "run"], help="Filter by mode")
+    p_show.add_argument("--last", type=int, default=None, help="Show only last N entries")
+    p_show.add_argument("--samples", type=int, default=0, help="For single run, show first N samples")
     p_show.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     p_show.set_defaults(func=cmd_show)
 

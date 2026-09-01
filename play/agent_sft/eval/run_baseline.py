@@ -1,18 +1,18 @@
-"""Phase 1 baseline runner: M models × N seeds × K tasks 的 cross product.
+"""Phase 1 baseline runner: cross product of M models × N seeds × K tasks.
 
-默认 80 runs（2 model × 10 seed × 4 task）。M4 Pro 48GB + Ollama 32B 估 ~3-4h；
-32B 单 inference 10-20s。单 run 崩不影响后续——总数 / 成功 / 失败汇总在末尾。
+Default 80 runs (2 model × 10 seed × 4 tasks). M4 Pro 48GB + Ollama 32B estimated ~3-4h;
+32B single inference 10-20s. A single run crash does not affect the follow-up - the total number/success/failure is summarized at the end.
 
-用法：
-    python play/agent_sft/eval/run_baseline.py                             # 全跑
-    python play/agent_sft/eval/run_baseline.py --models qwen3.5:9b         # 只跑 9b
-    python play/agent_sft/eval/run_baseline.py --seeds 0 1 2               # 只跑 3 seed
-    python play/agent_sft/eval/run_baseline.py --tasks mmlu_slice          # 只跑一个 task
-    python play/agent_sft/eval/run_baseline.py --seeds 0 --tasks mmlu_slice --dry-run  # 只打印不执行
+Usage:
+    python play/agent_sft/eval/run_baseline.py # Full run
+    python play/agent_sft/eval/run_baseline.py --models qwen3.5:9b # run only 9b
+    python play/agent_sft/eval/run_baseline.py --seeds 0 1 2 # run only 3 seeds
+    python play/agent_sft/eval/run_baseline.py --tasks mmlu_slice # run only one task
+    python play/agent_sft/eval/run_baseline.py --seeds 0 --tasks mmlu_slice --dry-run # Only print but not execute
 
-重入：evals 用 (task, model_label, seed) 哈希成 run_id；同 spec 重跑会落不同 run_id
-（`--seed` 也进哈希），不会覆盖；aggregate_seeds.py 取最新 N 条按时间窗过滤。
-"""
+Reentrancy: evals is hashed into run_id using (task, model_label, seed); rerunning the same spec will result in a different run_id.
+(`--seed` is also hashed) and will not be overwritten; aggregate_seeds.py takes the latest N items and filters them according to the time window."""
+(`--seed` is also hashed) and will not be overwritten; aggregate_seeds.py takes the latest N items and filters them according to the time window."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PLAY_DIR = HERE.parent.parent
 
-DEFAULT_MODELS = ["qwen3.5:9b", "qwen3.6:27b"]  # v1.5 起切到 qwen3.x（DECISIONS §10）
+DEFAULT_MODELS = ["qwen3.5:9b", "qwen3.6:27b"]  # Switch to qwen3.x from v1.5 (DECISIONS §10)
 DEFAULT_SEEDS = list(range(10))
 DEFAULT_TASKS = ["nudge_fire_rate", "agent_traj", "bfcl_slice", "mmlu_slice"]
 
@@ -35,14 +35,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__.split("\n", 1)[0],
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="跑完后用 `python play/agent_sft/eval/aggregate_seeds.py` 聚合出报告。",
+        epilog="After runs, aggregate with `python play/agent_sft/eval/aggregate_seeds.py`.",
     )
     parser.add_argument(
         "--models",
         nargs="+",
         default=DEFAULT_MODELS,
         metavar="OLLAMA_TAG",
-        help=f"ollama 模型 tag 列表（空格分隔），默认 {' '.join(DEFAULT_MODELS)}",
+        help=f"Ollama model tags (space-separated); default {' '.join(DEFAULT_MODELS)}",
     )
     parser.add_argument(
         "--seeds",
@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_SEEDS,
         metavar="N",
-        help=f"seed 整数列表（空格分隔），默认 {' '.join(map(str, DEFAULT_SEEDS))}",
+        help=f"Seed integers (space-separated); default {' '.join(map(str, DEFAULT_SEEDS))}",
     )
     parser.add_argument(
         "--tasks",
@@ -58,12 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TASKS,
         choices=DEFAULT_TASKS,
         metavar="TASK",
-        help=f"task 名列表（空格分隔），默认全 4 个：{' '.join(DEFAULT_TASKS)}",
+        help=f"Task names (space-separated); default all 4: {' '.join(DEFAULT_TASKS)}",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="只打印将要执行的 spec，不真跑（用于核对组合）",
+        help="Print specs only; do not run (verify combinations)",
     )
     return parser
 

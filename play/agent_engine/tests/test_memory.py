@@ -1,17 +1,16 @@
-"""Memory 投影规则单测（DECISIONS §2 / §4 / §5）.
+"""Memory projection rule tests (DECISIONS §2 / §4 / §5).
 
-锁 `memory.py` 的对外契约——任一 backend client / agent.respond / discussion
-循环里对 history 形态做的假设都依赖这些投影规则：
+Locks `memory.py` public contract — backend client / agent.respond / discussion
+loop assumptions about history shape depend on these rules:
 
-  - `FullHistory`：全量；speaker == owner 投 assistant，其它投 `<message from>`
-  - `WindowMemory`：保留所有 pinned (topic/turn/artifact_event) + 最近 N 条 speech
-  - `SummaryMemory`：stale_new >= max_recent 时调用一次 client.chat
-    summarizer；产物以 `<summary>` block 注入消息流
-  - `ToolCallEntry.visible=False` 一律被投影跳过
-  - 各 entry 类型对应的 wrapping tag（topic / turn / artifact_event / summary
-    / tool_call）字节稳定，evals / agent_sft 离线回放靠这些 tag 切段
+  - `FullHistory`: full history; speaker == owner → assistant, else `<message from>`
+  - `WindowMemory`: all pinned (topic/turn/artifact_event) + last N speeches
+  - `SummaryMemory`: when stale_new >= max_recent, one client.chat summarizer call;
+    product injected as `<summary>` block
+  - `ToolCallEntry.visible=False` always skipped in projection
+  - Wrapping tags per entry type stable for evals / agent_sft offline replay
 
-任何对 entry 类型 / 投影逻辑 / pinned 集合的破坏性改动都会让本测试失败.
+Breaking changes to entry types / projection / pinned set fail this test.
 """
 from __future__ import annotations
 
@@ -54,7 +53,7 @@ def _art(tool: str, caller: str) -> ArtifactEventEntry:
 
 
 class _RecordingClient:
-    """`SummaryMemory` 注入用 stub. 收集每次 chat() 调用 + 返回固定文本."""
+    """Stub for SummaryMemory injection. Collects chat() calls + returns fixed text."""
 
     def __init__(self, reply: str = "fake-summary") -> None:
         self.reply = reply
@@ -80,7 +79,7 @@ class _RecordingClient:
 # ---------- FullHistory -----------------------------------------------
 
 def test_full_history_owner_speech_becomes_assistant_others_user():
-    """owner 自己的 SpeakerEntry → role=assistant；他人 → role=user 包 <message from>."""
+    """Owner SpeakerEntry → role=assistant; others → role=user wrapped in <message from>."""
     history = [_spk("A", "hi"), _spk("B", "ho")]
     msgs = FullHistory().build_messages(history, owner="A")
     assert msgs == [
@@ -106,8 +105,8 @@ def test_full_history_topic_turn_artifact_event_wrap_with_tag():
 
 
 def test_full_history_skips_tool_call_with_visible_false():
-    """`ToolTracer` 写入的 ToolCallEntry 默认 visible=False —— memory 必须跳过，
-    否则会把内部工具调用回喂给 LLM 污染 context."""
+    """ToolCallEntry from `ToolTracer` defaults visible=False — memory must skip,
+    else internal tool calls pollute LLM context."""
     invisible = ToolCallEntry(
         caller="A", tool="retrieve_docs", arguments={"q": "x"},
         result="...", visible=False,
@@ -117,7 +116,7 @@ def test_full_history_skips_tool_call_with_visible_false():
     )
     history = [_spk("A", "hi"), invisible, visible]
     msgs = FullHistory().build_messages(history, owner="A")
-    assert len(msgs) == 2  # invisible 被跳过
+    assert len(msgs) == 2  # invisible skipped
     assert msgs[1] == {"role": "user", "content": "<tool_call>\nr\n</tool_call>"}
 
 
@@ -129,7 +128,7 @@ def test_full_history_summary_entry_wraps_with_tag():
 # ---------- WindowMemory ----------------------------------------------
 
 def test_window_memory_keeps_pinned_and_last_n_speech():
-    """topic / turn / artifact_event 全保留；speech 只留最近 max_recent 条."""
+    """topic / turn / artifact_event all kept; speech only last max_recent."""
     history = [
         _topic("话题"),
         _turn("turn 1 of 5"),
@@ -147,11 +146,11 @@ def test_window_memory_keeps_pinned_and_last_n_speech():
     msgs = WindowMemory(max_recent=2).build_messages(history, owner="A")
     contents = [m["content"] for m in msgs]
     # pinned: topic + 5 turn marker + artifact_event = 7
-    # speech: 最近 2 条 (B's "4", A's "5") = 2
+    # speech: last 2 (B's "4", A's "5") = 2
     assert sum("<topic>" in c for c in contents) == 1
     assert sum("<turn>" in c for c in contents) == 5
     assert sum("<artifact_event>" in c for c in contents) == 1
-    # speech: 只剩 "4" / "5"，老的 "1" "2" "3" 不见
+    # speech: only "4" / "5"; old "1" "2" "3" gone
     speech_msgs = [
         c for c in contents
         if c in {"5", '<message from="B">\n4\n</message>'}
@@ -164,13 +163,13 @@ def test_window_memory_keeps_pinned_and_last_n_speech():
 def test_window_memory_speech_fewer_than_window_keeps_all():
     history = [_topic(), _spk("A", "x"), _spk("B", "y")]
     msgs = WindowMemory(max_recent=10).build_messages(history, owner="A")
-    assert len(msgs) == 3  # 全保留
+    assert len(msgs) == 3  # all kept
 
 
 # ---------- SummaryMemory ---------------------------------------------
 
 def test_summary_memory_no_trigger_when_speech_under_max_recent():
-    """speech 数 <= max_recent → 走全量分支，不调 summarizer."""
+    """speech count <= max_recent → full branch, no summarizer."""
     client = _RecordingClient()
     mem = SummaryMemory(
         max_recent=3, client=client, summary_model="m",
@@ -184,7 +183,7 @@ def test_summary_memory_no_trigger_when_speech_under_max_recent():
 
 
 def test_summary_memory_triggers_summarizer_when_stale_reaches_threshold():
-    """stale_new >= max_recent → 调用一次 summarizer，<summary> block 注入消息流."""
+    """stale_new >= max_recent → one summarizer call, <summary> block injected."""
     client = _RecordingClient(reply="MERGED")
     mem = SummaryMemory(
         max_recent=2, client=client, summary_model="model-x",
@@ -202,18 +201,18 @@ def test_summary_memory_triggers_summarizer_when_stale_reaches_threshold():
     assert call["system_prompt"] == DEFAULT_SUMMARIZER_PROMPT
     assert call["temperature"] == 0.5
     assert call["max_tokens"] == 99
-    # 最后一条 messages 是 summarize instruction
+    # last message is summarize instruction
     assert call["messages"][-1]["content"] == (
         f"<instruction>\n{DEFAULT_SUMMARIZE_INSTRUCTION}\n</instruction>"
     )
-    # build_messages 输出含 <summary>MERGED</summary>
+    # build_messages output contains <summary>MERGED</summary>
     contents = [m["content"] for m in msgs]
     assert any("<summary>\nMERGED\n</summary>" == c for c in contents)
 
 
 def test_summary_memory_drain_usage_returns_summarizer_token_usage_once():
-    """summarizer 产生的 TokenUsage 通过 drain_usage 暴露给 Agent.respond；
-    drain 后清空，与 ToolTracer.drain 同语义."""
+    """Summarizer TokenUsage exposed via drain_usage to Agent.respond;
+    cleared after drain, same semantics as ToolTracer.drain."""
     client = _RecordingClient()
     mem = SummaryMemory(
         max_recent=1, client=client, summary_model="m",
@@ -229,8 +228,8 @@ def test_summary_memory_drain_usage_returns_summarizer_token_usage_once():
 
 
 def test_summary_memory_reuses_previous_summary_with_previous_summary_block():
-    """二次 build_messages 仍 stale → summarizer 收到 <previous_summary> block，
-    增量折叠语义（详见 memory.py::_run_summarizer）."""
+    """Second build_messages still stale → summarizer gets <previous_summary> block,
+    incremental fold semantics (see memory.py::_run_summarizer)."""
     client = _RecordingClient(reply="MERGED2")
     mem = SummaryMemory(
         max_recent=1, client=client, summary_model="m",
@@ -238,18 +237,18 @@ def test_summary_memory_reuses_previous_summary_with_previous_summary_block():
     )
     h1 = [_spk("A", "1"), _spk("B", "2"), _spk("A", "3")]
     mem.build_messages(h1, owner="A")
-    # 第二次扩张，让 stale_new 再次触发
+    # second expansion to trigger stale_new again
     h2 = h1 + [_spk("B", "4"), _spk("A", "5")]
     mem.build_messages(h2, owner="A")
     second = client.calls[-1]
     assert second["messages"][0]["content"].startswith("<previous_summary>")
 
 
-# ---------- 跨投影规则的小不变量 ---------------------------------------
+# ---------- cross-projection invariants --------------------------------
 
 def test_owner_attribution_consistent_across_memory_strategies():
-    """同一 history 三种 memory 投影下，"owner 视角识别"都成立：
-    A 在自己的 messages 里看到 'mine-msg' 是 assistant，看不到 from='A' wrap."""
+    """Same history under three memory projections: owner perspective holds:
+    A sees 'mine-msg' as assistant in own messages, not from='A' wrap."""
     history = [_spk("A", "mine-msg"), _spk("B", "other")]
     full = FullHistory().build_messages(history, owner="A")
     window = WindowMemory(max_recent=5).build_messages(history, owner="A")

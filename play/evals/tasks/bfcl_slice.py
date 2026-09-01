@@ -1,27 +1,27 @@
-"""Phase 1 OOD function-calling baseline：BFCL `simple_python` slice (50 例).
+"""Phase 1 OOD function-calling baseline: BFCL `simple_python` slice (50 examples).
 
-数据来源：[`data/bfcl_slice/SOURCE.md`](../data/bfcl_slice/SOURCE.md)（钉版 commit + 抓取脚本）.
+Data source: [`data/bfcl_slice/SOURCE.md`](../data/bfcl_slice/SOURCE.md) (pinned commit + fetch script).
 
-教学定位（agent_sft 视角）：
-  - in-dist: nudge_fire_rate / agent_traj 测"被 SFT 影响的能力"
-  - **OOD here**: bfcl_slice 测"原本会的能力（公开基准 function-calling）有没有掉"
-  - 配合 mmlu_slice 形成"防回归"双保险：function-calling 能力 + 通用能力都不能崩
+Teaching role (agent_sft view):
+  - in-dist: nudge_fire_rate / agent_traj measure "capabilities affected by SFT"
+  - **OOD here**: bfcl_slice measures "whether original function-calling (public benchmark) regressed"
+  - Together with mmlu_slice forms a regression-guard pair: function-calling + general capability must not collapse
 
-度量函数 **内联**（不抽到 metrics/）：单一消费者 + 函数简单（~80 行），按 plan §2 \"YAGNI\"
-原则，等第二个 function-call task 出现（如 agent_engine 测 ToolTracer）再抽到
-`metrics/function_call.py`，移动 + 改 import 大约 10 行变更.
+Metric functions **inlined** (not extracted to metrics/): single consumer + simple (~80 lines); per plan §2 YAGNI,
+extract to `metrics/function_call.py` when a second function-call task appears (e.g. agent_engine ToolTracer) —
+move + import change is ~10 lines.
 
-打分维度（4 项标量，全部越高越好）：
+Scoring dimensions (4 scalars, all higher is better):
 
-|metric|含义|何时 = 1.0|
+|metric|meaning|when = 1.0|
 |---|---|---|
-|`exact_match`|name + 所有 required arg 名 + arg 值都满足|完美调用|
-|`name_match`|函数名命中（含 `math.factorial` 这类 dotted）|至少调对函数|
-|`arg_set_f1`|预测 arg 名集合 vs GT required arg 名集合 F1|argument completeness|
-|`arg_value_match`|每个预测出的 arg 值 ∈ GT acceptable_values 列表 比例|argument correctness|
+|`exact_match`|name + all required arg names + arg values satisfied|perfect call|
+|`name_match`|function name hit (including dotted like `math.factorial`)|at least correct function|
+|`arg_set_f1`|predicted arg name set vs GT required arg name set F1|argument completeness|
+|`arg_value_match`|fraction of predicted arg values ∈ GT acceptable_values list|argument correctness|
 
-`exact_match` 是上面 3 项的合取上界——单挑一个就够看 baseline 强弱，4 项一起看可
-归因失败原因（name 错、漏 arg、值错）。
+`exact_match` is the conjunctive upper bound of the other 3 — one metric suffices for baseline strength;
+all 4 together attribute failure (wrong name, missing arg, wrong value).
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ PROMPT_TEMPLATE = (
 
 @register_task("bfcl_slice")
 class BfclSlice(Task):
-    """BFCL simple_python OOD slice，50 例 generate_until."""
+    """BFCL simple_python OOD slice, 50 examples generate_until."""
 
     name: ClassVar[str] = "bfcl_slice"
     output_type: ClassVar[str] = "generate_until"
@@ -121,20 +121,20 @@ class BfclSlice(Task):
         }
 
 
-# ---- 内联度量函数（plan §2：bfcl/mmlu 内联，YAGNI 等第二消费者再抽到 metrics/） ----
+# ---- Inline measurement function (plan §2: bfcl/mmlu inline, YAGNI waits for the second consumer to extract metrics/) ----
 
 
 def parse_function_call(text: str) -> dict[str, Any] | None:
-    """文本 → {'func': 'name.dotted', 'args': [...], 'kwargs': {...}}.
+    """text → {'func': 'name.dotted', 'args': [...], 'kwargs': {...}}.
 
-    宽容策略（按真实 LLM 输出常见污染脏度排序，逐层剥）：
-      1. 截掉 markdown code fence (```python ... ```)
-      2. 截掉首个 `Call:` / `Answer:` 等模板回声前缀
-      3. 多行 → 取第一行非空（generate_until 已 stop on \\n，但 score 路径输入不限）
-      4. 去尾随的 `;` / 逗号 / `.` 句末
-      5. ast.parse(mode='eval') → 期 Expression(body=Call)；非 Call 返 None
+    Lenient parsing (strip common LLM output pollution, in order):
+      1. Strip markdown code fence (```python ... ```)
+      2. Strip first template echo prefix like `Call:` / `Answer:`
+      3. Multi-line → take first non-empty line (generate_until stops on \\n, but score path input may not)
+      4. Strip trailing `;` / comma / `.`
+      5. ast.parse(mode='eval') → expect Expression(body=Call); non-Call returns None
 
-    返回 None 仅在彻底 unparseable 时——score 函数据此判定 0 分.
+    Returns None only when completely unparseable — scoring functions treat as 0.
     """
     if not text:
         return None
@@ -143,7 +143,7 @@ def parse_function_call(text: str) -> dict[str, Any] | None:
     # markdown fence
     if "```" in s:
         seg = s.split("```")
-        # `... ```python\nFOO``` ...` → 三段，取奇数索引内容；只用第一个
+        # `... ```python\nFOO``` ...` → Three paragraphs, take odd index content; only use the first one
         for i in range(1, len(seg), 2):
             inner = seg[i]
             if inner.startswith(("python\n", "py\n")):
@@ -151,12 +151,12 @@ def parse_function_call(text: str) -> dict[str, Any] | None:
             if inner.strip():
                 s = inner.strip()
                 break
-    # 模板回声前缀
+    # template echo prefix
     for prefix in ("Call:", "call:", "Answer:", "answer:", "Output:", "output:"):
         if s.startswith(prefix):
             s = s[len(prefix):].strip()
             break
-    # 第一行非空
+    # The first line is not empty
     for line in s.splitlines():
         line = line.strip()
         if line:
@@ -187,7 +187,7 @@ def parse_function_call(text: str) -> dict[str, Any] | None:
     kwargs: dict[str, Any] = {}
     for kw in call.keywords:
         if kw.arg is None:
-            continue  # **kwargs 解包，跳过
+            continue  # **kwargs unpack, skip
         try:
             kwargs[kw.arg] = ast.literal_eval(kw.value)
         except (ValueError, SyntaxError):
@@ -197,7 +197,7 @@ def parse_function_call(text: str) -> dict[str, Any] | None:
 
 
 def _extract_func_name(node: ast.AST) -> str | None:
-    """`ast.Name` → id；`ast.Attribute` → 递归拼 dotted；其它返 None."""
+    """`ast.Name` → id; `ast.Attribute` → recursively spell dotted; otherwise return None."""
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -207,7 +207,7 @@ def _extract_func_name(node: ast.AST) -> str | None:
 
 
 def _unparse_safe(node: ast.AST) -> str:
-    """ast.literal_eval 失败时退回 unparse——保留原文（如 var 引用 / 函数调用结果）."""
+    """ast.literal_eval returns unparse on failure - retains the original text (such as var reference / function call result)."""
     try:
         return ast.unparse(node)
     except Exception:
@@ -219,11 +219,10 @@ def score_function_call(
     gt_dict: dict,
     schema: dict,
 ) -> dict[str, Any]:
-    """对单条预测算 4 项指标 + 解析诊断.
+    """Precalculate 4 indicators + analytical diagnosis for a single line.
 
-    GT 形如 `{func_name: {arg: [acceptable_v1, ...]}}`（BFCL 简化：simple 子集只 1 个函数）；
-    `""` 出现在 acceptable list 即代表该 arg 可省略.
-    """
+    GT is in the form of `{func_name: {arg: [acceptable_v1, ...]}}` (BFCL simplification: the simple subset has only 1 function);
+    `""` appearing in the acceptable list means that the arg can be omitted."""
     out: dict[str, Any] = {
         "exact_match": 0.0,
         "name_match": 0.0,
@@ -245,7 +244,7 @@ def score_function_call(
     if parsed["func"] == gt_func:
         out["name_match"] = 1.0
 
-    # 把 positional → keyword 投影（按 schema.properties 出现顺序）
+    # Project positional → keyword (in order of appearance of schema.properties)
     pred_kwargs = dict(parsed["kwargs"])
     if parsed["args"]:
         prop_names = list(schema.get("parameters", {}).get("properties", {}).keys())
@@ -253,7 +252,7 @@ def score_function_call(
             if i < len(prop_names) and prop_names[i] not in pred_kwargs:
                 pred_kwargs[prop_names[i]] = v
 
-    # required arg 集合（acceptable 不含 ""）
+    # required arg collection (acceptable does not contain "")
     required_args = {a for a, accs in gt_args.items() if "" not in accs}
     pred_arg_set = set(pred_kwargs.keys())
 
@@ -270,12 +269,12 @@ def score_function_call(
                 else 0.0
             )
     else:
-        # 全是 optional 或无 arg：pred 也无 arg → 满分；pred 多传 → 0
+        # All optional or no arg: pred also has no arg → full score; pred multi-pass → 0
         out["arg_set_f1"] = 1.0 if not pred_arg_set else 0.0
 
-    # arg 值匹配率：每个 GT arg 单独看
-    #  - GT arg required: pred 必须出现 + 值 ∈ acceptable
-    #  - GT arg optional ("" in accs): pred 没出现 ✓ ；pred 出现 + 值 ∈ acceptable ✓
+    # Arg value matching rate: each GT arg is viewed individually
+    # - GT arg required: pred must appear + value ∈ acceptable
+    # - GT arg optional ("" in accs): pred does not appear ✓; pred appears + value ∈ acceptable ✓
     matches = 0
     total = 0
     for arg_name, accs in gt_args.items():
@@ -291,7 +290,7 @@ def score_function_call(
             matches += 1
     out["arg_value_match"] = matches / total if total > 0 else 1.0
 
-    # exact_match: name 对 + arg 值匹配率 = 1.0 + 没多传 unknown arg
+    # exact_match: name pair + arg value matching rate = 1.0 + no more unknown arg
     unknown_args = pred_arg_set - set(gt_args.keys())
     if (
         out["name_match"] == 1.0
@@ -304,13 +303,13 @@ def score_function_call(
 
 
 def _value_in_acceptable(pred_v: Any, acceptable: list) -> bool:
-    """逐个比对——数字宽容（int/float 互通）；字符串大小写敏感（BFCL 默认）；其它 ==.
+    """Compare value-by-value — numeric leniency (int/float interchangeable); strings case-sensitive (BFCL default); else ==.
 
-    bool↔int 不互通：Python 原生 `True == 1` 为真，但 BFCL 语义上 `a=True` 不能蒙混
-    `a=1`——所以入口先排除 \"一边 bool 一边非 bool\" 的混类型对 .
+    bool↔int not interchangeable: Python `True == 1` is true, but BFCL semantics forbid
+    `a=True` masquerading as `a=1` — reject mixed bool/non-bool pairs at entry.
     """
     for acc in acceptable:
-        # bool 严格匹配（同 type 才许等）；混类型（如 pred=True / acc=1）拒
+        # bool strict matching (only if the same type is allowed); mixed types (such as pred=True / acc=1) are rejected
         if isinstance(pred_v, bool) != isinstance(acc, bool):
             continue
         if pred_v == acc:
@@ -318,7 +317,7 @@ def _value_in_acceptable(pred_v: Any, acceptable: list) -> bool:
         if isinstance(pred_v, (int, float)) and isinstance(acc, (int, float)):
             if float(pred_v) == float(acc):
                 return True
-        # 数字字符串 → 数字
+        # numeric string → number
         if isinstance(pred_v, str) and isinstance(acc, (int, float)):
             try:
                 if float(pred_v) == float(acc):

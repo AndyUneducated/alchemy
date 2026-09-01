@@ -1,16 +1,15 @@
-"""编排层：双入口（score / run）+ 共享尾段.
+"""Orchestration layer: dual entry (score/run) + shared tail segment.
 
-关键不变量：
-  - Runner 不看 task 内部类型，只通过 Task ABC 调方法
-  - Runner 不看 lm 是谁，只通过三种 request_type 调
-  - Runner 不 import metrics/，所有指标调用通过 task.aggregation() 间接进入
-  - Task.process_results 不区分 run/score 来源：统一吃 Response；score 路径用
-    JSONL 查表顶替 LM 调用，其它完全一致
+Key invariants:
+  - Runner does not look at the internal type of task and only calls methods through Task ABC.
+  - Runner does not look at who lm is, and only adjusts it through three request_types.
+  - Runner does not import metrics/, all indicator calls are entered indirectly through task.aggregation()
+  - Task.process_results does not distinguish run/score source: unified response; score path is used
+    JSONL lookup table replaces LM call, everything else is exactly the same
 
-等价性：
+Equivalence:
   evaluate_score(task, preds) ≡ evaluate_run(task, PrerecordedLM(preds))
-  具体由 test_runner_run.py::test_run_gold_equals_score_perfect 验证。
-"""
+  Specifically verified by test_runner_run.py::test_run_gold_equals_score_perfect."""
 
 from __future__ import annotations
 
@@ -35,15 +34,14 @@ from .tasks.base import Task
 
 
 def _load_predictions(path: str | Path) -> dict[str, dict]:
-    """读 predictions JSONL → {doc_id: row}（整行 dict）.
+    """Read predictions JSONL → {doc_id: row} (whole row dict).
 
-    Phase 4 起 row 是完整 dict，不再只取 `row['prediction']`——"如何从 row 提取字段"
-    的责任下放给 `task.load_prediction(doc, row)`，让 RAG / agent task 能定义自己的
-    row schema（含 contexts / retrieved_ids / transcript / usage 等额外字段）.
+    From Phase 4, row is a complete dict, no longer just `row['prediction']` - "How to extract fields from row"
+    Responsibility is delegated to `task.load_prediction(doc, row)`, allowing RAG / agent task to define its own
+    row schema (including additional fields such as contexts / retrieved_ids / transcript / usage etc.).
 
-    `Task.load_prediction` 默认实现仅取 `row['prediction']`——分类 / 翻译类 task 的
-    最小行为；override 时把 row 里的 pipeline 数据注入 `doc.metadata` + Response.
-    """
+    The default implementation of `Task.load_prediction` only takes `row['prediction']` - classification/translation task
+    Minimal behavior; when overriding, inject pipeline data in row into `doc.metadata` + Response."""
     p = Path(path)
     preds: dict[str, dict] = {}
     with p.open("r", encoding="utf-8") as f:
@@ -57,7 +55,7 @@ def _load_predictions(path: str | Path) -> dict[str, dict]:
 
 
 def _collect_docs(task: Task, limit: int | None) -> list[Doc]:
-    """取数据：全内存（Phase 1），Phase 2+ 改流式."""
+    """Fetching data: full memory (Phase 1), Phase 2+ changed to streaming."""
     it: Iterable[Doc] = task.docs()
     if limit is not None:
         it = islice(it, limit)
@@ -71,13 +69,13 @@ def _build_prompt(
     pool: list[Doc],
     rng: random.Random,
 ) -> str:
-    """拼出最终 prompt：N 段 example + query.
+    """Build final prompt: N example segments + query.
 
-    `num_fewshot=0` 直接返回 `task.doc_to_text(doc)`，与 Phase 1 字节相同
-    （旧 parity test 的根基）。`>0` 时从 pool 抽 K 条**非自身** example，
-    用 `task.format_fewshot_example` 格式化，"\\n\\n" 分隔后拼到 query 前。
+    `num_fewshot=0` returns `task.doc_to_text(doc)` byte-identical to Phase 1
+    (foundation of old parity tests). When `>0`, sample K **non-self** examples from pool,
+    format with `task.format_fewshot_example`, join with \"\\n\\n\" before query.
 
-    抽样耗尽（pool 不够）时不报错，能抽几条算几条——避免小 dataset 边界 case。
+    If pool exhausted (too small), do not error — use however many examples were sampled.
     """
     if num_fewshot <= 0:
         return task.doc_to_text(doc)
@@ -90,7 +88,7 @@ def _build_prompt(
 
 
 def _build_request(task: Task, doc: Doc, prompt: str) -> Request:
-    """根据 task.output_type + 已拼好的 prompt 构造 Request。Phase 1 只处理 generate_until."""
+    """Construct Request based on task.output_type + assembled prompt. Phase 1 only handles generate_until."""
     if task.output_type == "generate_until":
         return Request(
             doc_id=doc.id,
@@ -99,14 +97,14 @@ def _build_request(task: Task, doc: Doc, prompt: str) -> Request:
             until=("\n",),
             max_tokens=64,
         )
-    # Phase 4 MCQ 再加 multiple_choice / loglikelihood 分支
+    # Phase 4 MCQ plus multiple_choice/loglikelihood branches
     raise NotImplementedError(
         f"output_type={task.output_type!r} not supported in phase 1"
     )
 
 
 def _generate_run_id(task_name: str, model: str, seed: int | None) -> str:
-    """{yyyymmdd-hhmmss}-{8-char hash}：时间可排序 + 同参复跑能辨识."""
+    """{yyyymmdd-hhmmss}-{8-char hash}: time can be sorted + multiple runs with the same parameters can be identified."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     key = f"{task_name}|{model}|{seed}"
     h = hashlib.sha256(key.encode()).hexdigest()[:8]
@@ -129,37 +127,36 @@ def _evaluate_inner(
     run_id: str,
     num_fewshot: int = 0,
 ) -> EvalResult:
-    """Response 之后的双模式合流中段（phase 7 立的架构合流点）.
+    """The middle section of the dual-mode convergence after Response (the independent architectural convergence point of phase 7).
 
-    步骤（cross-cutting 二分：被测物 call class / 评估工具 call class / DECISIONS §7.2 + §7.3）：
-      1. task.process_results per-sample 评分
-      2. 被测物 call class injector（仅 run 跑；数据源 = task LM 调用副产品 usage/latency）
-         - inject_per_sample_efficiency: latency / tokens / cost              [phase 6]
-         - phase 9 calibration 在此续接                                        [planned]
-      3. aggregated 打包：
-         a) task.aggregation() 字典 → 顶层平铺
-         b) 仅 run：被测物 efficiency 子组（phase 6）
-         c) 双路径：评估工具 efficiency.judge 子组（DECISIONS §7.3 wave 3）
-      4. 末尾测端到端 elapsed_ms
+    Steps (cross-cutting dichotomy: object under test call class / evaluation tool call class / DECISIONS §7.2 + §7.3):
+      1. task.process_results per-sample scoring
+      2. The object under test call class injector (only run; data source = task LM call by-product usage/latency)
+         - inject_per_sample_efficiency: latency / tokens / cost [phase 6]
+         - phase 9 calibration continue here [planned]
+      3. aggregated packaging:
+         a) task.aggregation() dictionary → top tile
+         b) Run only: DUT efficiency subgroup (phase 6)
+         c) Dual path: Evaluation tool efficiency.judge subgroup (DECISIONS §7.3 wave 3)
+      4. End-to-end elapsed_ms test
 
-    挂载规则（DECISIONS §7.A 部分 superseded by §7.2 / §7.3）：
-      - safety 不再 cross-cutting：`Safety` task 自己 own metrics["refusal_detected" /
-        "jailbreak_attempted" / "judge_safety_score"]（flat 平铺）+ aggregation 4 stat；
-        非 safety task 不再有 sample.metrics["safety"] / aggregated["safety"] 占位
-      - aggregated["efficiency"]（被测物 call class）仅 run 挂（保留：基础设施 cross-cutting）
-      - aggregated["efficiency"]["judge"]（评估工具 call class，§7.3 新增）：score / run
-        双路径都挂——judge 在两路径都被调用，与被测物 task LM 仅在 run 调用不同
-      - phase 10 robustness 等未来横切按 lm-eval-harness 主流走独立 task 路径，不再
-        AOP 注入
+    Mounting rules (DECISIONS §7.A section superseded by §7.2 / §7.3):
+      - safety no longer cross-cutting: `Safety` task has its own metrics["refusal_detected" /
+        "jailbreak_attempted" / "judge_safety_score"] (flat tile) + aggregation 4 stat;
+        Non-safety tasks no longer have sample.metrics["safety"] / aggregated["safety"] placeholders
+      - aggregated["efficiency"] (the object under test call class) only run hangs (reserved: infrastructure cross-cutting)
+      - aggregated["efficiency"]["judge"] (evaluation tool call class, new in §7.3): score / run
+        Both paths are hung - judge is called in both paths, which is different from the object under test, task LM, which is only called in run
+      - phase 10 robustness and other future cross-cutting will follow the independent task path according to lm-eval-harness, no longer
+        AOP injection
 
-    时序约定（DECISIONS §7.1.1）：
-      - `t0 = perf_counter()` 由调用方在入口最早处取，传进来；本函数在末尾算
-        `elapsed_ms = (perf_counter() - t0) * 1000`，确保覆盖 process_results +
-        injectors + aggregation 全段（含 judge LM 调用 / RAG retrieve 等子调用）.
+    Timing conventions (DECISIONS §7.1.1):
+      - `t0 = perf_counter()` is taken by the caller at the earliest entrance and passed in; this function calculates at the end
+        `elapsed_ms = (perf_counter() - t0) * 1000`, make sure to overwrite process_results +
+        injectors + aggregation entire section (including judge LM call / RAG retrieve and other sub-calls).
 
-    See: README §命名约定 cross-cutting 表 / DECISIONS §7.B `_evaluate_inner` 中段重构 +
-    §7.1.1 elapsed_ms 端到端 + §7.2 safety 回归 standalone task + §7.3 efficiency.judge.* ADR.
-    """
+    See: README §Naming convention cross-cutting table / DECISIONS §7.B `_evaluate_inner` Mid-section reconstruction +
+    §7.1.1 elapsed_ms end-to-end + §7.2 safety regression standalone task + §7.3 efficiency.judge.* ADR."""
     if len(docs) != len(responses):
         raise RuntimeError(
             f"doc/response length mismatch: docs={len(docs)} responses={len(responses)}"
@@ -173,15 +170,15 @@ def _evaluate_inner(
     aggregated: dict[str, Any] = {
         name: fn(sample_results) for name, fn in task.aggregation().items()
     }
-    # 被测物 call class（仅 run）：task LM 的 efficiency
+    # Object under test call class (run only): efficiency of task LM
     if mode == "run":
         aggregated["efficiency"] = efficiency_aggregated(sample_results)
 
-    # 评估工具 call class（双路径，DECISIONS §7.3）：judge LM 的 efficiency
+    # Evaluation tool call class (dual path, DECISIONS §7.3): efficiency of judge LM
     judge_responses, judge_label = task.collect_judge_responses()
     if judge_responses:
         if "efficiency" not in aggregated:
-            # score 路径无被测物 efficiency 子树，但有 judge → 创建子树仅含 judge 子组
+            # The score path has no measured object efficiency subtree, but there is judge → create a subtree containing only the judge subgroup
             aggregated["efficiency"] = {}
         aggregated["efficiency"]["judge"] = efficiency_judge_aggregated(
             judge_responses, judge_label
@@ -197,9 +194,9 @@ def _evaluate_inner(
         per_sample=tuple(sample_results),
         run_id=run_id,
         created_at=started_at,
-        # phase 7 audit P6：端到端跑分时间 round 到千分之一毫秒，避免落 result.json
-        # 时浮点精度泄露（实测 0.9334170026704669 这类 15 位小数对人无价值）.
-        # 不动 efficiency.latency_ms / cost_usd 等 LM 报值——dashboard / cost 累计真用得到亚 ms / 亚 cent 精度.
+        # phase 7 audit P6: The end-to-end running time is rounded to one thousandth of a millisecond to avoid missing result.json
+        # When the floating point precision is leaked (actually measured 0.9334170026704669, such 15 decimal places are of no value to people).
+        # Do not move efficiency.latency_ms / cost_usd and other LM reported values ​​- dashboard / cost accumulation is really used to get sub-ms / sub-cent accuracy.
         elapsed_ms=round(elapsed_ms, 3),
         num_fewshot=num_fewshot,
     )
@@ -212,15 +209,14 @@ def evaluate_score(
     limit: int | None = None,
     source_label: str | None = None,
 ) -> EvalResult:
-    """score 路径：读 predictions JSONL，直接喂进 task.process_results，绕过 LM 层.
+    """Score path: Read predictions JSONL and feed it directly into task.process_results, bypassing the LM layer.
 
-    步骤（3 步）：
-      1. 取数据：task.docs()
-      2. 读预测 + 直接评分：preds[doc.id] → Response(text=pred) → process_results
-      3. 合流：_evaluate_inner（process_results + cross-cutting injectors + 打包）
+    Steps (3 steps):
+      1. Get data: task.docs()
+      2. Read prediction + direct scoring: preds[doc.id] → Response(text=pred) → process_results
+      3. Confluence: _evaluate_inner (process_results + cross-cutting injectors + packaging)
 
-    语义等价于 evaluate_run(task, PrerecordedLM(predictions_path))。
-    """
+    Semantically equivalent to evaluate_run(task, PrerecordedLM(predictions_path))."""
     started_at = _iso_now()
     t0 = time.perf_counter()
 
@@ -235,8 +231,8 @@ def evaluate_score(
                 f"predictions file missing doc_id={doc.id!r} "
                 f"(found {len(preds)} preds for {len(docs)} docs); strict join required"
             )
-        # phase 4：让 task 自定 row → (doc', response) 翻译.
-        # 默认 Task.load_prediction 只取 row['prediction']，与 phase 1 字节相同.
+        # Phase 4: Let task customize row → (doc', response) translation.
+        # By default, Task.load_prediction only takes row['prediction'], which is the same as phase 1 bytes.
         enriched_doc, response = task.load_prediction(doc, preds[doc.id])
         docs_for_eval.append(enriched_doc)
         responses.append(response)
@@ -265,28 +261,27 @@ def evaluate_run(
     num_fewshot: int = 0,
     fewshot_seed: int = 0,
 ) -> EvalResult:
-    """run 路径：harness 6 步.
+    """run path: harness 6 steps.
 
-      1. 取数据
-      2. 建请求（按 num_fewshot 拼 prompt）
-      3. 批调模型  <-- 未来并发在这里：asyncio.gather + semaphore
-      4. 合流：_evaluate_inner（process_results + cross-cutting injectors + 打包）
+      1. Get data
+      2. Create a request (press num_fewshot spell prompt)
+      3. Batch model <-- Future concurrency is here: asyncio.gather + semaphore
+      4. Confluence: _evaluate_inner (process_results + cross-cutting injectors + packaging)
 
-    `num_fewshot=0` 时 prompt 与 Phase 1 字节相同（_build_prompt 早 return）。
-    `num_fewshot>0` 时从 `task.fewshot_docs()` 抽 K 条**非自身** example 拼到前面。
-    `fewshot_seed` 只控抽样，不影响其它路径——便于 sweep 不同 N 但保持其它一致。
-    """
+    When `num_fewshot=0` prompt is the same as Phase 1 bytes (_build_prompt returns earlier).
+    When `num_fewshot>0`, extract K **non-self** examples from `task.fewshot_docs()` and put them to the front.
+    `fewshot_seed` only controls sampling and does not affect other paths - convenient for sweeps with different N but keeping everything else consistent."""
     started_at = _iso_now()
     t0 = time.perf_counter()
 
     docs = _collect_docs(task, limit)
-    # phase 4：LM 调用前的 docs 前置加工 hook（默认 identity 透传，老 task 不影响）。
-    # 典型用法：RAG task 在此 batch 调 retrieve_fn，把 retrieved_ids/contexts pin 进 doc.metadata.
+    # Phase 4: Docs pre-processing hook before LM call (default identity transparent transmission, old tasks are not affected).
+    # Typical usage: RAG task calls retrieve_fn in this batch and pin retrieved_ids/contexts into doc.metadata.
     docs = list(task.process_docs(docs))
 
     if task.output_type == "none":
-        # phase 4：声明无 LM 调用的 task（如 rag_retrieval）——直接生成占位 Response.
-        # 不走 _build_prompt / _build_request / lm.generate_until 任何一步.
+        # Phase 4: Declare tasks without LM calls (such as rag_retrieval) - directly generate placeholder Response.
+        # Do not take any of the _build_prompt / _build_request / lm.generate_until steps.
         responses: list[Response] = [Response(doc_id=d.id) for d in docs]
         model_label = lm.name
     else:
@@ -297,7 +292,7 @@ def evaluate_run(
             for doc in docs
         ]
 
-        # Phase 1 串行。Phase 2+ 在此处做 asyncio.gather / thread pool / rate-limit。
+        # Phase 1 Serial. Phase 2+ does asyncio.gather/thread pool/rate-limit here.
         responses = lm.generate_until(requests)
         model_label = lm.name
 

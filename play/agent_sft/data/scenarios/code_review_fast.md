@@ -1,9 +1,9 @@
-# PR 评审 fast 副本（agent_sft Phase 2 mining 专用）
+# code_review fast copy (agent_sft Phase 2 mining only)
 
 # ============================================================================
-# 派生自 [`agent_engine/scenarios/code_review.md`](../../../agent_engine/scenarios/code_review.md)。
-# 同 `tool_chain_fast.md` 的 4 项优化（max_retries 0 / max_tokens 80 / 删 open+
-# finalize / vdb_dir 路径修正），上游不动，只服务 mine_triples.py.
+# Derived from [`agent_engine/scenarios/code_review.md`](../../../agent_engine/scenarios/code_review.md).
+# Same four optimizations as `tool_chain_fast.md` (max_retries 0 / max_tokens 80 / drop open+
+# finalize / vdb_dir path fix); upstream unchanged; serves mine_triples.py only.
 # ============================================================================
 
 ---
@@ -109,7 +109,7 @@ steps:
 
 ## 待审 PR：项目代号模块重构
 
-### PR 背景
+### PR Background
 
 后端 SDK 中"项目代号"模块（`project_codename/`）有 3 处实现散落，本 PR 将其
 统一为单一入口，影响：
@@ -118,7 +118,7 @@ steps:
 - 前端：调用方 import path 变更（`from sdk.codename import ...` → `from sdk.project import codename`）
 - 测试：3 个 module 各自的单元测试合并为一组集成测试
 
-### 关键关注点
+### Key Points of Interest
 
 | 维度 | 风险 |
 |---|---|
@@ -126,7 +126,7 @@ steps:
 | 性能 | 单一入口加了一层间接，benchmark 显示无明显差异 |
 | 测试覆盖 | 集成测试覆盖率 87%，比合并前的加权平均 92% 略低 |
 
-### 决策选项
+### Decision options
 
 1. **合入**：接受短期测试覆盖率下降，赢得长期可维护性
 2. **退回**：要求作者补齐集成测试覆盖率到 90%+ 再合入

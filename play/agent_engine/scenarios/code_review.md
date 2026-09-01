@@ -1,19 +1,18 @@
-# PR 代码评审会议（agent_sft Phase 1 require_tool 密集场景之一）
+# PR code review meeting (agent_sft Phase 1 require_tool-dense scenario)
 
 # ============================================================================
-# 设计目标（agent_sft Phase 1 baseline / Phase 2 SFT 数据采集）：
-#   - **多 agent / 上下文复杂**：3 名 senior engineer + 1 名主审，互相 context
-#     相关，模型在多个角色间做工具决策；与 `tool_chain.md` 的"单 agent 强工具链"
-#     形成正交对照。
-#   - **5 个 require_tool step entry**（plan §1.B 落点）：
+# Design goals (agent_sft Phase 1 baseline / Phase 2 SFT data collection):
+#   - **Multi-agent / rich context**: 3 senior engineers + 1 lead reviewer with
+#     interdependent context; model makes tool decisions across roles. Orthogonal to
+#     `tool_chain.md` "single-agent strong tool chain".
+#   - **5 require_tool step entries** (plan §1.B):
 #       retrieve_docs × 2 + append_section × 2 + cast_vote × 1
-#     展开 turn 数：2 (retrieve) + 1 (append A) + 2 (append B,C member) + 3 (vote member)
-#                 = 8 require_tool turn
-#   - **真实场景**：3 工程师审一个跨模块 PR，必须先 retrieve 相关 commit/doc，
-#     再写 review section，最后投票决定是否合入。
+#     Expanded turns: 2 (retrieve) + 1 (append A) + 2 (append B,C member) + 3 (vote member)
+#                 = 8 require_tool turns
+#   - **Realistic scene**: 3 engineers review a cross-module PR; must retrieve related
+#     commit/doc first, write review sections, then vote on merge.
 #
-# 复用 example.md 的 vdb 路径（test_vdb），不引新数据集；如 vdb 不存在请按
-# play/rag README 的 ingest 流程跑一次。
+# Reuses example.md vdb path (test_vdb); if missing, run ingest per play/rag README.
 # ============================================================================
 
 ---
@@ -33,123 +32,122 @@ artifact:
     - {name: review_a, mode: replace}
     - {name: review_b, mode: replace}
     - {name: review_c, mode: replace}
-    - {name: 决策, mode: replace}
+    - {name: Decision, mode: replace}
   tool_owners:
     propose_vote: moderator
     finalize_artifact: moderator
 
 agents:
-  - name: 主审
+  - name: Lead Reviewer
     role: moderator
     prompt: |
-      你是主审工程师。职责：开场介绍 PR 范围、组织三位 senior 评审、最后宣布合入决议。
-      每次发言不超过 60 字。用中文。需要时调 propose_vote / finalize_artifact / write_section。
+      You are the lead reviewer. Duties: open with PR scope, organize three senior reviews, announce merge decision.
+      ≤ 60 words per turn. English. Call propose_vote / finalize_artifact / write_section when needed.
     temperature: 0.3
     max_tokens: 200
 
-  - name: 工程师A
+  - name: Engineer A
     role: member
     prompt: |
-      你是后端 senior 工程师。先 retrieve_docs 查相关 commit/doc 再下结论；
-      用 append_section("review_a", ...) 提交评审意见。每次 ≤ 60 字。用中文。
+      You are backend senior engineer. retrieve_docs for related commit/doc before concluding;
+      submit via append_section("review_a", ...). ≤ 60 words. English.
     max_tokens: 200
 
-  - name: 工程师B
+  - name: Engineer B
     role: member
     prompt: |
-      你是前端 senior 工程师。先 retrieve_docs 查接口约定再下结论；
-      用 append_section("review_b", ...) 提交评审意见。每次 ≤ 60 字。用中文。
+      You are frontend senior engineer. retrieve_docs for API contracts before concluding;
+      submit via append_section("review_b", ...). ≤ 60 words. English.
     max_tokens: 200
 
-  - name: 工程师C
+  - name: Engineer C
     role: member
     prompt: |
-      你是 QA senior 工程师。综合 A/B 评审，append_section("review_c", ...) 提交风险评估，
-      最后 cast_vote 决定是否合入。每次 ≤ 60 字。用中文。
+      You are QA senior engineer. Synthesize A/B reviews, append_section("review_c", ...) with risk assessment,
+      then cast_vote on merge. ≤ 60 words. English.
     max_tokens: 200
 
 steps:
   - id: open
     who: moderator
     instruction: |
-      一句话介绍本 PR 的范围（涉及"项目代号"模块）和今天评审会的目标：3 人评审后投票决定是否合入。
+      One sentence on PR scope ("项目代号" module) and today's goal: 3 reviews then vote on merge.
 
   - id: ctx_a
-    who: [工程师A]
+    who: [Engineer A]
     require_tool: retrieve_docs
     max_retries: 1
     instruction: |
-      调用 retrieve_docs 查询「项目代号」相关历史 commit / 设计文档，
-      不超过 30 字一句话总结你检索到的关键信息。
+      Call retrieve_docs for "项目代号" related commits / design docs;
+      ≤ 30 words summarizing key findings.
 
   - id: ctx_b
-    who: [工程师B]
+    who: [Engineer B]
     require_tool: retrieve_docs
     max_retries: 1
     instruction: |
-      调用 retrieve_docs 查询「项目代号」相关接口契约 / 测试用例，
-      不超过 30 字一句话总结你检索到的关键信息。
+      Call retrieve_docs for "项目代号" API contracts / test cases;
+      ≤ 30 words summarizing key findings.
 
   - id: review_a
-    who: [工程师A]
+    who: [Engineer A]
     require_tool: append_section
     max_retries: 1
     instruction: |
-      append_section("review_a", "- <一句话评审结论>")
-      把你基于检索到的内容的评审意见写入 artifact。
+      append_section("review_a", "- <one-line review conclusion>")
+      Write your review into artifact based on retrieval.
 
   - id: review_bc
-    who: [工程师B, 工程师C]
+    who: [Engineer B, Engineer C]
     require_tool: append_section
     max_retries: 1
     instruction: |
-      你是工程师B → append_section("review_b", "- ...")。
-      你是工程师C → append_section("review_c", "- 综合 A/B 风险一句话")。
+      Engineer B → append_section("review_b", "- ...").
+      Engineer C → append_section("review_c", "- one-line A/B risk summary").
 
   - id: vote_setup
     who: moderator
     instruction: |
-      调用 propose_vote(question="是否合入此 PR?", options=["合入","退回"])，
-      然后用一句话邀请大家投票。
+      Call propose_vote(question="Merge this PR?", options=["Merge","Reject"]),
+      then one sentence inviting votes.
 
   - id: ballot
     who: member
     require_tool: cast_vote
     max_retries: 1
     instruction: |
-      cast_vote(vote_id="v1", option="合入" 或 "退回", rationale="一句话理由")
-      表达你的最终立场。
+      cast_vote(vote_id="v1", option="Merge" or "Reject", rationale="one sentence")
+      State your final position.
 
   - id: finalize
     who: moderator
     instruction: |
-      根据 <artifact> 投票结果，先 write_section("决策", "<合入/退回> + 一句话总结")，
-      再 finalize_artifact(decision="合入" 或 "退回", rationale="一句话")。
+      From <artifact> vote results, write_section("Decision", "<Merge/Reject> + one-line summary"),
+      then finalize_artifact(decision="Merge" or "Reject", rationale="one sentence").
 
 ---
 
-## 待审 PR：项目代号模块重构
+## PR under review: project codename module refactor
 
-### PR 背景
+### PR background
 
-后端 SDK 中"项目代号"模块（`project_codename/`）有 3 处实现散落，本 PR 将其
-统一为单一入口，影响：
+Backend SDK "项目代号" module (`project_codename/`) had 3 scattered implementations; this PR unifies to single entry, affecting:
 
-- 后端：合并 3 个 module 为 1 个；新增 facade API；老 API 加 deprecation warning
-- 前端：调用方 import path 变更（`from sdk.codename import ...` → `from sdk.project import codename`）
-- 测试：3 个 module 各自的单元测试合并为一组集成测试
+- Backend: merge 3 modules → 1; new facade API; deprecation warnings on old API
+- Frontend: import path change (`from sdk.codename import ...` → `from sdk.project import codename`)
+- Tests: per-module unit tests merged into one integration suite
 
-### 关键关注点
+### Key concerns
 
-| 维度 | 风险 |
+| Dimension | Risk |
 |---|---|
-| 兼容性 | 老 import path 仍工作，但 deprecation warning 会污染下游日志 |
-| 性能 | 单一入口加了一层间接，benchmark 显示无明显差异 |
-| 测试覆盖 | 集成测试覆盖率 87%，比合并前的加权平均 92% 略低 |
+| Compatibility | Old import path still works; deprecation warnings may pollute downstream logs |
+| Performance | Single entry adds indirection; benchmarks show no meaningful difference |
+| Test coverage | Integration coverage 87%, vs weighted pre-merge average 92% |
 
-### 决策选项
+### Options
 
-1. **合入**：接受短期测试覆盖率下降，赢得长期可维护性
-2. **退回**：要求作者补齐集成测试覆盖率到 90%+ 再合入
+1. **Merge**: Accept short-term coverage drop for long-term maintainability
+2. **Reject**: Require author to raise integration coverage to 90%+ before merge
 
-主审请按 steps 流程组织评审。
+Lead reviewer: follow steps to run the review.

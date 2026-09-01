@@ -1,21 +1,20 @@
-"""extractor.py vs synthesize.py — 同 envelope 双跑后元数据应一致.
+"""extractor.py vs synthesize.py — The same metadata should be consistent after running both envelopes.
 
-两个 mining 路径独立演化（[DECISIONS §5](../DECISIONS.md) 给的 1k 数据用 synthesize
-per-fire 策略；extractor 走 "first-fail + later-success" 真自纠）。但凡 require_tool
-触发 nudge fire，两条路径应该:
-  - 锚定相同 (turn_idx, step_id, agent, required_tool, failure_mode)
-  - 抓相同的 failed_response（first attempt 的第一句 SpeakerEntry）
-  - 抓相同的 instruction（scenario YAML 透传）
-  - 抓相同的 context 切点（first speaker entry 之前的 prefix）
+The two mining paths evolve independently ([DECISIONS §5](../DECISIONS.md) gives 1k data using synthesize
+per-fire strategy; extractor adopts "first-fail + later-success" (true self-correction). Whenever require_tool
+To trigger nudge fire, the two paths should be:
+  - Anchoring the same (turn_idx, step_id, agent, required_tool, failure_mode)
+  - Catch the same failed_response (the first sentence of first attempt SpeakerEntry)
+  - Capture the same instruction (scenario YAML transparent transmission)
+  - Grab the same context cut point (prefix before first speaker entry)
 
-唯一允许分歧的字段：**corrected_response**——
-  - extractor 取后续 attempt 真实成功的 SpeakerEntry.content
-  - synthesize 走 _extract_call_template 程序合成 `tool(args)` 字面量
+The only field that allows disagreement: **corrected_response**——
+  - extractor retrieves the actual successful SpeakerEntry.content of subsequent attempts
+  -synthesize _extract_call_template program to synthesize `tool(args)` literal
 
-本测套用 test_extractor.py 同款 typed fixture（max_retries=1，让 extractor 也产
-triple），跑双路径后 zip 比对共有字段；catch 两脚本分头改 metadata semantics
-导致 train 数据矛盾的事故.
-"""
+This test uses the same typed fixture as test_extractor.py (max_retries=1, so that the extractor can also produce
+triple), after running dual paths, zip compares the common fields; the catch two scripts change the metadata semantics separately
+Accidents resulting in conflicting train data."""
 
 from __future__ import annotations
 
@@ -69,7 +68,7 @@ def _envelope(entries):
 
 
 def test_extractor_and_synthesize_agree_on_metadata(tmp_path):
-    """missed-then-success 场景下，两路径产同一锚点的 triple，metadata 全一致."""
+    """In the missed-then-success scenario, the two paths produce triples of the same anchor point, and the metadata is completely consistent."""
     scen = _write_scenario(tmp_path)
     transcript = [
         TopicEntry(content="demo", ts=0.0),
@@ -88,35 +87,44 @@ def test_extractor_and_synthesize_agree_on_metadata(tmp_path):
 
     e, s = e_trips[0], s_trips[0]
 
-    # 锚点 5 元组应严格一致
+    # anchor 5-tuple must match exactly
+    # anchor 5-tuple must match exactly
     for field in ("run_id", "scenario", "turn_idx", "step_id", "agent", "required_tool"):
         assert getattr(e, field) == getattr(s, field), (
             f"metadata divergence on `{field}`: extractor={getattr(e, field)!r} "
             f"vs synthesize={getattr(s, field)!r}"
         )
 
-    # failure_mode 必须一致（两路径都走 classify_failure_mode on first attempt）
+# failure_mode must be consistent (both paths use classify_failure_mode on first attempt)
+# failure_mode must be consistent (both paths use classify_failure_mode on first attempt)
     assert e.failure_mode == s.failure_mode == "missed"
 
-    # failed_response: 都是 first SpeakerEntry.content
+# failed_response: both are first SpeakerEntry.content
+# failed_response: both are first SpeakerEntry.content
     assert e.failed_response == s.failed_response == "我先想想"
 
-    # instruction: scenario YAML 透传，必须 byte-identical
+# instruction: scenario YAML transparent transmission, must be byte-identical
+# instruction: scenario YAML transparent transmission, must be byte-identical
     assert e.instruction == s.instruction
     assert e.instruction.startswith("调用 foo_tool")
 
-    # context: prefix until first speaker entry，两路径切点应同
+# context: prefix until first speaker entry, the two path cut points should be the same
+# context: prefix until first speaker entry, the two path cut points should be the same
     assert e.context == s.context, (
         "context divergence — first-speaker-entry 切点定义两路径不一致"
     )
 
-    # nudge: 同 NUDGE_TEMPLATE.format(tool=required_tool)
+# nudge: Same as NUDGE_TEMPLATE.format(tool=required_tool)
+# nudge: Same as NUDGE_TEMPLATE.format(tool=required_tool)
     assert e.nudge == s.nudge
 
-    # corrected_response 允许分歧（这是两路径的核心区别），但都必须非空
+# corrected_response allows differences (this is the core difference between the two paths), but both must be non-empty
+# corrected_response allows differences (this is the core difference between the two paths), but both must be non-empty
     assert e.corrected_response, "extractor corrected must be non-empty"
     assert s.corrected_response, "synthesize corrected must be non-empty"
-    # extractor 取真 speaker.content；synthesize 取程序合成
+# extractor gets true speaker.content; synthesizesize gets program synthesis
+# extractor gets true speaker.content; synthesizesize gets program synthesis
     assert e.corrected_response == '好 foo_tool(arg="x")'
-    # synthesize 合成必须含 required_tool 名（call template 抽取）
+#synthesize must contain required_tool name (call template extraction)
+#synthesize must contain required_tool name (call template extraction)
     assert "foo_tool" in s.corrected_response

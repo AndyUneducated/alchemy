@@ -15,19 +15,19 @@ from .result import (
 
 
 def _is_pinned(entry: TranscriptEntry) -> bool:
-    """`topic` / `turn` / `artifact_event` 在 window/summary 截断后仍要保留."""
+    """`topic` / `turn` / `artifact_event` must survive window/summary truncation."""
     return isinstance(entry, (TopicEntry, TurnEntry, ArtifactEventEntry))
 
 
 def _is_visible(entry: TranscriptEntry) -> bool:
-    """ToolCallEntry 默认 visible=False（tracer 内部记录），其它 entry 一律可见."""
+    """ToolCallEntry defaults to visible=False (tracer internal); all other entries visible."""
     if isinstance(entry, ToolCallEntry):
         return entry.visible
     return True
 
 
 def _render(entries: Iterable[TranscriptEntry], owner: str) -> list[dict]:
-    """typed entry → LLM messages 的 `[{role, content}, ...]` 投影."""
+    """Project typed entries to LLM messages `[{role, content}, ...]`."""
     messages: list[dict] = []
     for entry in entries:
         if not _is_visible(entry):
@@ -73,10 +73,11 @@ class ConversationMemory:
         raise NotImplementedError
 
     def drain_usage(self) -> list[TokenUsage]:
-        """Memory 子类如内部触发了 LLM 调用（如 SummaryMemory），返该批次产生的 usage.
+        """If a Memory subclass triggered an internal LLM call (e.g. SummaryMemory),
+        return usage from that batch.
 
-        默认无内部 LLM 调用，返空 list. `Agent.respond` 在 `build_messages` 之后
-        drain，把 usage append 到主 LLM 调用的 usage 之前一并交给 Discussion.
+        Default: no internal LLM call, empty list. `Agent.respond` drains after
+        `build_messages` and prepends usage before the main LLM call usage for Discussion.
         """
         return []
 

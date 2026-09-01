@@ -1,16 +1,15 @@
-"""extractor.py — 6 行为边界 + helper unit 覆盖.
+"""extractor.py — 6 behavioral bounds + helper unit overrides.
 
-合成 transcript fixture（不依赖真 Ollama）覆盖 plan §Critical edge cases:
-  - missed       → 1 triple, failure_mode='missed'
-  - wrong_tool   → 1 triple, failure_mode='wrong_tool'
-  - 2nd success  → 与 missed 共享路径（first_attempt_success_no_triple 验证负面）
+Synthetic transcript fixture (does not rely on true Ollama) overrides plan §Critical edge cases:
+  - missed → 1 triple, failure_mode='missed'
+  - wrong_tool → 1 triple, failure_mode='wrong_tool'
+  - 2nd success → share path with missed (first_attempt_success_no_triple validation negative)
   - 2nd fail drop → 0 triple
-  - multi-nudge  → 1 triple，failure_mode 看 first attempt，corrected = 最终成功
+  - multi-nudge → 1 triple, failure_mode looks at first attempt, corrected = final success
   - no require_tool → 0 triple
 
-§16 起 envelope/transcript 全 typed dataclass entry：fixture 用 helper 工厂构造
-`SpeakerEntry / TurnEntry / ToolCallEntry / TopicEntry`，不再内联裸 dict.
-"""
+Starting from §16, envelope/transcript is fully typed dataclass entry: fixture is constructed using helper factory
+`SpeakerEntry/TurnEntry/ToolCallEntry/TopicEntry`, no longer inline bare dict."""
 
 from __future__ import annotations
 
@@ -60,7 +59,7 @@ def write_scenario(tmp_path, yaml_text=SCENARIO_YAML):
 
 
 def envelope(transcript_entries):
-    """typed entries → envelope dict (asdict 回 dict 形态，让 Result.from_dict 重建 typed)."""
+    """typed entries → envelope dict (asdict returns to dict form, letting Result.from_dict reconstruct typed)."""
     return {
         "transcript": [dataclasses.asdict(e) for e in transcript_entries],
         "artifact": {},
@@ -111,7 +110,8 @@ def test_missed_first_attempt_then_success(tmp_path):
     assert t.step_id == "s1"
     assert t.scenario == "scen"
     assert t.instruction.startswith("调用 foo_tool")
-    # context 包含 topic + turn marker；不包含 first speaker entry
+# context contains topic + turn marker; does not contain first speaker entry
+# context contains topic + turn marker; does not contain first speaker entry
     assert any(isinstance(e, TopicEntry) for e in t.context)
     assert any(isinstance(e, TurnEntry) for e in t.context)
     assert all(
@@ -151,7 +151,7 @@ def test_all_attempts_fail_drops_triple(tmp_path):
     transcript = [
         turn_marker(1),
         speaker("A", "想想"),
-        speaker("A", "再想想"),  # max_retries=1 → 2 attempts，都没调 foo_tool
+        speaker("A", "再想想"),  # max_retries=1 → 2 attempts, neither foo_tool is adjusted
     ]
     triples = extract_triples(envelope(transcript), scen, run_id=0, scenario_name="scen")
     assert triples == []
@@ -171,7 +171,7 @@ def test_multi_nudge_picks_first_failed_and_eventual_success(tmp_path):
     triples = extract_triples(envelope(transcript), scen, run_id=0, scenario_name="scen")
     assert len(triples) == 1
     t = triples[0]
-    assert t.failure_mode == "missed"  # 看 first attempt
+    assert t.failure_mode == "missed"  # See first attempt
     assert t.failed_response == "missed"
     assert t.corrected_response == "got it"
 
@@ -190,16 +190,16 @@ steps:
       闲聊一句即可
 ---
 """)
-    scen = write_scenario(tmp_path, yaml_text=yaml_text)
+    scenario = write_scenario(tmp_path, yaml_text=yaml_text)
     transcript = [turn_marker(1), speaker("A", "hi")]
-    triples = extract_triples(envelope(transcript), scen, run_id=0, scenario_name="scen")
+    triples = extract_triples(envelope(transcript), scenario, run_id=0, scenario_name="scen")
     assert triples == []
 
 
-# --- robustness tests -----------------------------------------------------
+# --- robustness tests --------------------------------------------------
 
 def test_segment_count_less_than_expected_skips_turn(tmp_path):
-    """subprocess 中途崩 → segments 不够 expected_turns → 该 turn skip 不报错."""
+    """The subprocess crashes in the middle → segments are not enough expected_turns → the turn skip does not report an error."""
     yaml_text = textwrap.dedent("""\
 ---
 agents:
@@ -219,21 +219,23 @@ steps:
     instruction: t2
 ---
 """)
-    scen = write_scenario(tmp_path, yaml_text=yaml_text)
-    # 只跑了 turn 1 就崩了；turn 2 无 segment
+    scenario = write_scenario(tmp_path, yaml_text=yaml_text)
+    # run only, turn 1 will crash; turn 2 has no segment
+    # run only, turn 1 will crash; turn 2 has no segment
     transcript = [
         turn_marker(1),
         speaker("A", "miss"),
         speaker("A", "ok"),
         tool_call("A", "foo_tool"),
     ]
-    triples = extract_triples(envelope(transcript), scen, run_id=0, scenario_name="scen")
-    # turn 1 产 1 triple，turn 2 因 segment 不存在被跳
-    assert len(triples) == 1
+    triples = extract_triples(envelope(transcript), scenario, run_id=0, scenario_name="scen")
+    # turn 1 produces 1 triple, turn 2 is jumped because segment does not exist
+    # turn 1 produces 1 triple, turn 2 is jumped because segment does not exist
+    assertlen(triples) == 1
     assert triples[0].turn_idx == 1
 
 
-# --- helper unit tests ----------------------------------------------------
+# --- helper unit tests --------------------------------------------------
 
 def test_parse_envelope_name():
     assert _parse_envelope_name("tool_chain-r3") == ("tool_chain", 3)
@@ -245,6 +247,6 @@ def test_parse_envelope_name():
 
 
 def test_extract_returns_empty_on_empty_transcript(tmp_path):
-    scen = write_scenario(tmp_path)
-    triples = extract_triples(envelope([]), scen, run_id=0, scenario_name="scen")
-    assert triples == []
+    scenario = write_scenario(tmp_path)
+    triples = extract_triples(envelope([]), scenario, run_id=0, scenario_name="scen")
+    assert triples == []"""

@@ -1,44 +1,43 @@
-"""Phase 6 efficiency 横切维度 metric 模块.
+"""Phase 6 efficiency crosscutting dimension metric module.
 
-按 README 指导原则 #3 触发新建：横切维度跨所有 task，runner 注入需要数学/价格表 helper.
+Trigger new as per README guideline #3: cross-cutting dimensions span all tasks, math/price list helper required for runner injection.
 
-设计要点：
-  - **runner 自动采集**（cross-cutting AOP 风格）：task 不改 process_results / aggregation；
-    runner._evaluate_inner 在 run 模式时挂 `aggregated["efficiency"] = efficiency_aggregated(srs)`
-    （phase 7 起 _finalize 合并入 _evaluate_inner，cross-cutting injectors + 聚合 + 打包统一在中段）.
-  - **嵌套子组**：`aggregated["efficiency"]` 子树为 phase 7+ 横切（safety / calibration /
-    robustness）预留扩展位（HELM 7 维度作 ontology）；与 OpenAI / Anthropic / inspect_ai
-    SDK 的 nested usage object 风格对齐.
-  - **schema-on-write 两层一致**（phase 6 audit follow-up；phase 7 §7.D 起 nested 派统一）：
-    `aggregated["efficiency"]` 子组永远挂 4 子组、`SampleResult.metrics["efficiency"]` 子组永远
-    写 4 efficiency 键；缺失值 0.0 占位（语义"未测得"），让下游 drill-down（CLI / dashboard /
-    SQL）写一份 schema 不需分支判 KeyError. CLI 渲染层判断"全 0"折叠为 `<not measured>` 一行，
-    避免视觉误导.
-  - **per 1M tokens 单位**（与 OpenAI / Anthropic / Together / Fireworks 公开报价同单位，
-    entry 直接复制粘贴免人脑除 1000）.
-  - **fail-loud unknown model**（phase 6 audit follow-up）：`compute_cost_usd` 在 model 不在
-    `_PRICE_PER_1M_TOKENS` 时 `warnings.warn`（lru_cache 防刷屏）；区分"真免费 / 未测得 /
-    不在表里"三种 cost=0 状态.
-  - **stdlib 算 percentile**：`statistics.quantiles(data, n=100, method='inclusive')`，
-    不引 numpy（项目 phase 1-5 现有代码 0 处显式 import numpy）.
+Design points:
+  - **runner automatic collection** (cross-cutting AOP style): task does not change process_results / aggregation;
+    runner._evaluate_inner hangs in run mode `aggregated["efficiency"] = efficiency_aggregated(srs)`
+    (Starting from phase 7, _finalize is merged into _evaluate_inner, and cross-cutting injectors + aggregation + packaging are unified in the middle).
+  - **Nested subgroup**: `aggregated["efficiency"]` subtree is phase 7+ crosscut (safety/calibration/
+    robustness) reserved extension bits (HELM 7 dimensions for ontology); and OpenAI / Anthropic / inspect_ai
+    SDK's nested usage object style alignment.
+  - **schema-on-write two-layer consistency** (phase 6 audit follow-up; phase 7 §7.D from nested faction unification):
+    `aggregated["efficiency"]` subgroup always hangs 4 subgroups, `SampleResult.metrics["efficiency"]` subgroup always
+    Write 4 efficiency keys; missing value 0.0 placeholder (semantic "not measured"), let downstream drill-down (CLI/dashboard/
+    SQL) write a schema without branch judgment KeyError. The CLI rendering layer judges "all 0" and folds it into a line of `<not measured>`.
+    Avoid visual misleading.
+  - **per 1M tokens unit** (same unit as OpenAI / Anthropic / Together / Fireworks public offer,
+    entry directly copy and paste without brain deletion 1000).
+  - **fail-loud unknown model** (phase 6 audit follow-up): `compute_cost_usd` is not in model
+    `_PRICE_PER_1M_TOKENS` when `warnings.warn` (lru_cache anti-swipe); distinguish between "true free / untested /
+    There are three cost=0 states not in the table.
+  - **stdlib calculates percentile**: `statistics.quantiles(data, n=100, method='inclusive')`,
+    Do not import numpy (project phase 1-5 existing code 0 explicitly imports numpy).
 
-数据契约（per-sample，phase 7 §7.D nested 派）：
-  inject_per_sample_efficiency 用 dataclasses.replace 把以下 4 键写进
-  SampleResult.metrics["efficiency"] 嵌套子组（永远 4 键，None / 缺失值 0.0 占位）：
-    - latency_ms     来自 Response.latency_ms
-    - tokens_in      来自 Response.usage.tokens_in
-    - tokens_out     来自 Response.usage.tokens_out
-    - cost_usd       由 compute_cost_usd(model_label, tokens_in, tokens_out) 派生
+Data contract (per-sample, phase 7 §7.D nested faction):
+  inject_per_sample_efficiency Use dataclasses.replace to write the following 4 keys
+  SampleResult.metrics["efficiency"] Nested subgroups (always 4 keys, None / 0.0 placeholder for missing values):
+    - latency_ms from Response.latency_ms
+    - tokens_in from Response.usage.tokens_in
+    - tokens_out from Response.usage.tokens_out
+    - cost_usd is derived from compute_cost_usd(model_label, tokens_in, tokens_out)
 
-  访问路径：`s.metrics["efficiency"]["latency_ms"]`（phase 6 初版是 flat `s.metrics["latency_ms"]`，
-  phase 7 §7.D supersede 为 nested 子组，与 aggregated["efficiency"] / Response.usage 三层一致）.
+  Access path: `s.metrics["efficiency"]["latency_ms"]` (the first version of phase 6 is flat `s.metrics["latency_ms"]`,
+  phase 7 §7.D supersede is a nested subgroup, consistent with aggregated["efficiency"] / Response.usage three layers).
 
-行业对标：
-  - HELM efficiency 维度：mean / p50 / p95 / max 是标配（本模块 latency_ms 子组 4 stat）
-  - inspect_ai ModelUsage：input_tokens / output_tokens 平铺（本模块用 tokens_in / tokens_out 子组）
-  - tokencost / litellm：cost lookup table 全模型；本模块 stub 4 entry，phase 3+ 启用 external
-    provider 时考虑切 tokencost
-"""
+Industry Benchmarking:
+  - HELM efficiency dimensions: mean / p50 / p95 / max are standard (latency_ms subgroup 4 stat of this module)
+  - inspect_ai ModelUsage: input_tokens / output_tokens tiling (this module uses tokens_in / tokens_out subgroups)
+  - tokencost / litellm: cost lookup table full model; this module stub 4 entry, phase 3+ enabled external
+    Consider cutting tokencost when providing provider"""
 
 from __future__ import annotations
 
@@ -48,41 +47,41 @@ import warnings
 
 from ..api import Response, SampleResult
 
-# CLI 渲染层折叠协议（phase 7 audit P1，trait 派）：
-#   True  = 全 0 子组折叠为 `<dim>: <not measured>` 单行，避免视觉误导
-#   False = 全 0 是合法 metric 值（content class），不折叠
-# efficiency 是 call class——全 0 几乎等价 mock / output_type='none' 路径，
-# 折叠是诚实 UX；safety 等 content class 走 False（heuristic 真跑出 0 是合法值）。
-# CLI _print_aggregated 通过 evals.cli._should_fold_when_all_zero 查询本常量。
+# CLI rendering layer folding protocol (phase 7 audit P1, trait faction):
+# True = all 0 subgroups are collapsed into a single line of `<dim>: <not measured>` to avoid visual misleading
+# False = all 0 is a legal metric value (content class) and does not fold
+# efficiency is call class - all 0 is almost equivalent to mock / output_type='none' path,
+# Folding is honest UX; safety and other content classes go False (heuristic really runs out of 0 which is a legal value).
+# CLI _print_aggregated queries this constant via evals.cli._should_fold_when_all_zero.
 FOLD_AS_NOT_MEASURED_WHEN_ALL_ZERO = True
 
 
-# ---------- 价格表（per 1M tokens） ----------
+# ---------- Price list (per 1M tokens) ----------
 
 # tuple = (input_price_per_1M, output_price_per_1M) USD
-# 行业惯例 input != output（output 是 autoregressive decode，4-5x input 价；开源平台 1:1）
-# 数据 as of 2026-05；价变时手动同步或考虑切 tokencost
+# Industry practice input != output (output is autoregressive decode, 4-5x input price; open source platform 1:1)
+# Data as of 2026-05; manual synchronization or consider cutting tokencost when price changes
 # (https://github.com/AgentOps-AI/tokencost)
 _PRICE_PER_1M_TOKENS: dict[str, tuple[float, float]] = {
-    # ollama 本地推理：用 Together AI / Fireworks 公开报价做 "如果在 cloud 跑会花多少" 类比
-    # 保留 conftest.py 历史 DEFAULT_TEST_MODEL + 当前 qwen3.x 默认对（plan A：env-driven default
-    # 切换到 qwen3.5:9b / qwen3.6:27b，旧 qwen2.5:32b 保留兼容 agent_sft v1 历史 result.json）；
-    # 其它本地 tag 通过 EVALS_TEST_OLLAMA_MODEL override 时未命中 → 走 0 分支（无伤；按需自加）
+    # ollama Local Reasoning: Using Together AI/Fireworks public quotes as a "how much does it cost to run on the cloud" analogy
+    # Keep conftest.py history DEFAULT_TEST_MODEL + current qwen3.x default pair (plan A: env-driven default
+    # Switch to qwen3.5:9b / qwen3.6:27b, the old qwen2.5:32b remains compatible with agent_sft v1 history result.json);
+    # Other local tags miss when passing EVALS_TEST_OLLAMA_MODEL override → take 0 branch (no damage; add as needed)
     "ollama:qwen3.6:27b": (0.80, 0.80),
     "ollama:qwen3.5:9b": (0.80, 0.80),
     "ollama:qwen2.5:32b": (0.80, 0.80),
-    # 外部 provider 各留一个调试用 SKU（最便宜 SKU；phase 3 NotImplementedError 暂跑不到，
-    # 但 entry 在不破坏，phase 3+ 启用时即用；cli.py::EXTERNAL_PROVIDERS 三家全覆盖）
+    # Each external provider leaves one SKU for debugging (the cheapest SKU; phase 3 NotImplementedError cannot be run yet.
+    # But the entry is not damaged and can be used when phase 3+ is enabled; cli.py::EXTERNAL_PROVIDERS covers all three companies)
     "openai:gpt-4o-mini": (0.15, 0.60),
     "anthropic:claude-3-5-haiku-20241022": (1.00, 5.00),
     "gemini:gemini-1.5-flash": (0.075, 0.30),
-    # mock:* 不预填——设计上永远 0；compute_cost_usd 未命中 → 0.0
+    # mock:* not prefilled - always 0 by design; compute_cost_usd miss → 0.0
 }
 
 
 @functools.lru_cache(maxsize=128)
 def _warn_unknown_pricing_model(model: str) -> None:
-    """对每个未命中 model 同进程内只 warn 一次（lru_cache 防刷屏）."""
+    """Warn only once for each missed model in the same process (lru_cache prevents screen refresh)."""
     warnings.warn(
         f"unknown pricing model {model!r} (not in _PRICE_PER_1M_TOKENS); cost reported as 0.0. "
         f"Add an entry to _PRICE_PER_1M_TOKENS to enable cost tracking.",
@@ -96,19 +95,18 @@ def compute_cost_usd(
     tokens_in: int | None,
     tokens_out: int | None,
 ) -> float | None:
-    """根据 PRICE_TABLE 派生 cost_usd.
+    """Derive cost_usd from PRICE_TABLE.
 
-    返回值约定：
-      - tokens_in / tokens_out 任一 None → None（未测得，保持 None 不污染）
-      - model 不在 table → 0.0 + UserWarning（fail-loud）：让用户区分"真免费 vs 未配置定价"；
-        warning 用 lru_cache 防刷屏，每个 unknown model 同进程内只 warn 一次
-      - 命中 → (tokens_in * in_price + tokens_out * out_price) / 1_000_000
+    Return value convention:
+      - tokens_in / tokens_out either None → None (unmeasured, keep None untainted)
+      - model is not in table → 0.0 + UserWarning (fail-loud): Let users distinguish "real free vs unconfigured pricing";
+        warning uses lru_cache to prevent screen refresh. Each unknown model is only warned once in the same process.
+      - hit → (tokens_in * in_price + tokens_out * out_price) / 1_000_000
 
-    注意（phase 7 audit P3）：score 路径在 ontology 二分（DECISIONS §7.A call class
-    仅 run 挂）下不挂 efficiency 子组 → 不调本函数，故 `preds:*` 等 score 路径
-    model_label 永不进入价格表查询，不会触发 unknown-model warning。这是正确行为
-    （preds:* 是文件 label 不是 LM）而非 fail-silent.
-    """
+    Note (phase 7 audit P3): The score path is divided into ontology bisections (DECISIONS §7.A call class
+    Only run (only run) does not hang the efficiency subgroup → this function is not adjusted, so `preds:*` and other score paths
+    model_label will never enter the price list query and will not trigger the unknown-model warning. This is correct behavior
+    (preds:* is the file label, not LM) instead of fail-silent."""
     if tokens_in is None or tokens_out is None:
         return None
     if model not in _PRICE_PER_1M_TOKENS:
@@ -117,34 +115,32 @@ def compute_cost_usd(
     return (tokens_in * in_per_m + tokens_out * out_per_m) / 1_000_000.0
 
 
-# ---------- 聚合 helpers（stdlib only） ----------
+# ---------- Aggregation helpers (stdlib only) ----------
 
 def _percentile(data: list[float], pct: float) -> float:
-    """linear interpolation percentile（与 numpy 默认 'linear' method 一致）.
+    """linear interpolation percentile (consistent with numpy's default 'linear' method).
 
-    `statistics.quantiles(data, n=100, method='inclusive')[i-1]` 在 i ∈ [1,99] 时
-    与 numpy.percentile(data, i) 等价，但要求 len(data) >= 2；本 helper 兜底
-    单元素 / 空列表场景，保证 efficiency_aggregated 在小 batch 下不爆.
-    """
+    `statistics.quantiles(data, n=100, method='inclusive')[i-1]` when i ∈ [1,99]
+    Equivalent to numpy.percentile(data, i), but requires len(data) >= 2; this helper covers the details
+    Single element/empty list scenario ensures that efficiency_aggregated does not explode in small batches."""
     if not data:
         return 0.0
     if len(data) == 1:
         return float(data[0])
     if not 0.0 <= pct <= 100.0:
         raise ValueError(f"pct must be in [0, 100], got {pct!r}")
-    # method='inclusive' 在 n=100 时给 99 cutpoints；index = round(pct) - 1
-    # 但精确 linear interp 需要 (n-1) * pct/100 二次插值；statistics 已实现.
+    # method='inclusive' gives 99 cutpoints at n=100; index = round(pct) - 1
+    # But exact linear interp requires (n-1) * pct/100 quadratic interpolation; statistics is implemented.
     quantiles = statistics.quantiles(sorted(data), n=100, method="inclusive")
     idx = max(0, min(98, int(round(pct)) - 1))
     return float(quantiles[idx])
 
 
 def _collect(srs: list[SampleResult], key: str) -> list[float]:
-    """从 SampleResult.metrics["efficiency"] 嵌套子组收集非 None 值（phase 7 §7.D nested 派）.
+    """Collect non-None values from SampleResult.metrics["efficiency"] nested subgroups (phase 7 §7.D nested pie).
 
-    phase 6 初版是 flat `s.metrics.get(key)`；§7.D supersede 为 nested 路径
-    `s.metrics.get("efficiency", {}).get(key)`，与 inject 写入路径对称.
-    """
+    The first version of phase 6 is flat `s.metrics.get(key)`; §7.D supersede is nested path
+    `s.metrics.get("efficiency", {}).get(key)`, symmetrical with the inject writing path."""
     out: list[float] = []
     for s in srs:
         sub = s.metrics.get("efficiency")
@@ -156,36 +152,35 @@ def _collect(srs: list[SampleResult], key: str) -> list[float]:
     return out
 
 
-# ---------- run-only 入口（runner._evaluate_inner 调用） ----------
+# ---------- run-only entry (runner._evaluate_inner call) ----------
 
 def efficiency_aggregated(sample_results: list[SampleResult]) -> dict[str, dict[str, float | int]]:
-    """生成 `aggregated["efficiency"]` 嵌套子树.
+    """Generates `aggregated["efficiency"]` nested subtrees.
 
-    返回固定 4 子组形态（即使全缺失也保留 schema）：
+    Return fixed 4-subgroup schema (retain schema even if all are missing):
 
         {
           "latency_ms": {"mean": ..., "p50": ..., "p95": ..., "max": ...},
-          "tokens_in":  {"total": <int>, "mean": <float>},
+          "tokens_in": {"total": <int>, "mean": <float>},
           "tokens_out": {"total": <int>, "mean": <float>},
-          "cost_usd":   {"total": <float>, "mean": <float>},
+          "cost_usd": {"total": <float>, "mean": <float>},
         }
 
-    类型约定（phase 6 audit follow-up）：
-      - tokens.total 用 `int`（token 是离散计数）；mean 仍 float（avg 可有小数）
-      - latency_ms / cost_usd 全 float
+    Type convention (phase 6 audit follow-up):
+      - tokens.total uses `int` (token is a discrete count); mean is still float (avg can have decimals)
+      - latency_ms / cost_usd all float
 
-    覆盖范围（HELM efficiency 维度对标）：
-      - latency_ms 4 stat：mean / p50 / p95 / **max**（小 N 下 worst-case 暴露入口；HELM /
-        inspect_ai 都报 max；audit §1.2）
-      - cost_usd 双 stat：total / **mean**（per-call 平均成本，与 tokens.{total,mean} 体例
-        对齐；audit §1.1）
+    Coverage (HELM efficiency dimension benchmarking):
+      - latency_ms 4 stat: mean/p50/p95/**max** (small N for worst-case exposed entry; HELM/
+        inspect_ai all reports max; audit §1.2)
+      - cost_usd double stat: total / **mean** (per-call average cost, with tokens.{total,mean} format
+        Alignment; audit §1.1)
 
-    缺失值（MockLM 报 None / output_type='none' task / score 模式被跳过）→ 子组键值 0.0；
-    保证 run 模式的 efficiency schema 始终一致，下游消费（CLI _fmt_row 递归打印 / W&B
-    dashboard / cross-run JSON_EXTRACT）不需要分支判 None.
+    Missing value (MockLM reports None / output_type='none' task / score mode is skipped) → subgroup key value 0.0;
+    Ensure that the efficiency schema of the run mode is always consistent, and downstream consumption (CLI _fmt_row recursive printing / W&B
+    dashboard / cross-run JSON_EXTRACT) does not require branch judgment None.
 
-    score 模式不调用本函数（runner._evaluate_inner 只在 mode='run' 分支 update 子树）.
-    """
+    This function is not called in score mode (runner._evaluate_inner is only in the update subtree of the mode='run' branch)."""
     latency = _collect(sample_results, "latency_ms")
     tokens_in = _collect(sample_results, "tokens_in")
     tokens_out = _collect(sample_results, "tokens_out")
@@ -213,32 +208,31 @@ def efficiency_aggregated(sample_results: list[SampleResult]) -> dict[str, dict[
     }
 
 
-# ---------- judge 子组聚合（DECISIONS §7.3 wave 3：评估工具 call class，双路径都挂） -
+# ---------- judge subgroup aggregation (DECISIONS §7.3 wave 3: evaluation tool call class, both paths hang) -
 
 def efficiency_judge_aggregated(
     judge_responses: list[Response],
     judge_model_label: str | None,
 ) -> dict[str, dict[str, float | int]]:
-    """生成 `aggregated["efficiency"]["judge"]` 嵌套子树.
+    """Generates `aggregated["efficiency"]["judge"]` nested subtrees.
 
-    与 `efficiency_aggregated` 同形 4 子组（latency_ms / tokens_in / tokens_out / cost_usd），
-    但来源不同：
-      - efficiency_aggregated 从 `sample.metrics["efficiency"]` 嵌套子组收集（被测物 task LM）
-      - efficiency_judge_aggregated 从 `task.collect_judge_responses()` 直接收 list[Response]
-        （评估工具 judge LM 调用记录）
+    Same shape as `efficiency_aggregated` 4 subgroups (latency_ms / tokens_in / tokens_out / cost_usd),
+    But the sources are different:
+      - efficiency_aggregated collected from `sample.metrics["efficiency"]` nested subgroup (task LM)
+      - efficiency_judge_aggregated directly collects list[Response] from `task.collect_judge_responses()`
+        (Evaluation tool judge LM call record)
 
-    为什么 judge 不挂 sample 层？因为 judge 调用与 sample 是 N:M 关系——一条 sample 可能触发
-    多次 judge call（如 RAG faithfulness：claim extract + per-claim NLI = 1 + N 次；g_eval
-    多维度多采样 = D × n_samples 次），不像被测物 task LM 与 sample 是 1:1 关系适合摊到
-    sample.metrics. 所以 judge efficiency 仅在 aggregated 层暴露.
+    Why doesn't the judge attach the sample layer? Because the judge call and sample have an N:M relationship - a sample may trigger
+    Multiple judge calls (such as RAG faithfulness: claim extract + per-claim NLI = 1 + N times; g_eval
+    Multi-dimensional multi-sampling = D × n_samples times), unlike the object under test, task LM and sample have a 1:1 relationship, which is suitable for sharing
+    sample.metrics. So judge efficiency is only exposed in the aggregated layer.
 
-    DECISIONS §7.3 评估工具 call class（与被测物 call class 二分）：score / run 双路径都挂.
+    DECISIONS §7.3 Evaluation tool call class (divided into the call class of the object under test): both score / run paths are hung.
 
-    缺失值处理：
-      - judge_responses 为空 / model_label 为 None → 4 子组全 0 占位（与 efficiency_aggregated
-        的 schema-on-write 协议一致；CLI 折叠协议据此可折叠为 `<not measured>`）
-      - 单条 response 缺 latency_ms / usage → 跳过（与 _collect None-skipping 一致）
-    """
+    Missing value handling:
+      - judge_responses is empty / model_label is None → 4 subgroups are all 0 placeholders (with efficiency_aggregated
+        The schema-on-write protocol is consistent; the CLI folding protocol can be folded accordingly to `<not measured>`)
+      - Single response missing latency_ms / usage → skip (consistent with _collect None-skipping)"""
     if not judge_responses or judge_model_label is None:
         return {
             "latency_ms": {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
@@ -288,34 +282,33 @@ def efficiency_judge_aggregated(
     }
 
 
-# ---------- runner injector（避免 runner.py 直接 import dataclasses.replace） ----------
+# ---------- runner injector (avoid runner.py import dataclasses.replace directly) ----------
 
 def inject_per_sample_efficiency(
     sample_results: list[SampleResult],
     responses: list[Response],
     model_label: str,
 ) -> list[SampleResult]:
-    """run 路径 _evaluate_inner 中段调用，把 per-sample efficiency 写进 SampleResult.metrics["efficiency"] 子组.
+    """Called in the middle of the run path _evaluate_inner, write per-sample efficiency into the SampleResult.metrics["efficiency"] subgroup.
 
-    nested 派写位置（phase 7 §7.D supersede phase 6 audit §1.5）：
+    nested dispatch position (phase 7 §7.D supersede phase 6 audit §1.5):
       `metrics={..., "efficiency": {"latency_ms": ..., "tokens_in": ..., "tokens_out": ..., "cost_usd": ...}}`
-    与 `aggregated["efficiency"]` 嵌套子组 / `Response.usage` nested object 三层完全一致
-    （OpenAI / Anthropic / inspect_ai 派对齐）.
+    Exactly the same as `aggregated["efficiency"]` nested subgroup / `Response.usage` nested object three levels
+    (OpenAI/Anthropic/inspect_ai parties aligned).
 
-    schema-on-write（audit §1.3 选项 A + §7.D nested 统一）：永远写 `metrics["efficiency"]` 子组
-    含 4 efficiency 键，None / 缺失值 0.0 占位（语义"未测得"），与 aggregated.efficiency 子组永远
-    4 子组的 schema 哲学一致；下游 drill-down `s.metrics["efficiency"]["latency_ms"]` 不需要分支
-    判 KeyError.
+    schema-on-write (audit §1.3 option A + §7.D nested unified): always write `metrics["efficiency"]` subgroup
+    Contains 4 efficiency keys, None / 0.0 placeholder for missing values (semantic "unmeasured"), with aggregated.efficiency subgroup always
+    The schema philosophy of the 4 subgroups is consistent; downstream drill-down `s.metrics["efficiency"]["latency_ms"]` does not require branches
+    throw KeyError.
 
-    CLI 渲染层 `_print_aggregated` 对全 0 efficiency 子组折叠为 `<not measured>` 单行避免视觉
-    误导（audit §1.7；递归形态对 phase 7+ 横切子组通用）.
+    CLI rendering layer `_print_aggregated` collapses all 0 efficiency subgroups into `<not measured>` single lines to avoid visual
+    Misleading (audit §1.7; recursive form common to phase 7+ crosscutting subgroups).
 
-    用 dataclasses.replace 保持 SampleResult frozen 语义.
-    顺序约定：sample_results[i] ↔ responses[i]（与 runner._build_request 同序）.
+    Use dataclasses.replace to maintain SampleResult frozen semantics.
+    Sequence convention: sample_results[i] ↔ responses[i] (same order as runner._build_request).
 
-    去掉 phase 6 初版的 getattr 防御（audit §1.6）：Response 是 frozen dataclass 字段固定，
-    `resp.latency_ms` 直接取；schema rename 时 AttributeError 即时暴露而非 silent None.
-    """
+    Remove the getattr defense of the first version of phase 6 (audit §1.6): Response is a frozen dataclass field fixed,
+    `resp.latency_ms` is taken directly; when schema is renamed, AttributeError will be exposed immediately instead of silent None."""
     from dataclasses import replace as _replace
 
     if len(sample_results) != len(responses):

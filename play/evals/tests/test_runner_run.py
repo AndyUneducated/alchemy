@@ -1,14 +1,13 @@
-"""run 路径 e2e + **双模式等价性 test**.
+"""run path e2e + **dual-mode equivalence test**.
 
-test_run_gold_equals_score_perfect 是整个架构的定海神针：
-它把"score 和 run 共享 task.process_results / aggregation 尾段"这句话
-变成了可执行的 assert。绿 = 两路径在 task 层真正交汇、没有分支偷偷分叉。
+test_run_gold_equals_score_perfect is the anchor of the entire architecture:
+It puts the sentence "score and run share the task.process_results / aggregation tail section"
+Became an executable assert. Green = The two paths truly intersect at the task layer, and there are no branches secretly diverging.
 
-phase 6 起 run 模式额外注入 `aggregated["efficiency"]` 横切子组（score 路径无 LM
-调用故不注入），所以 parity 断言改为"task-specific keys 子集相等" + 显式断言
-score 不含 efficiency 子组；架构等价性保留：efficiency 是 cross-cutting AOP 增量，
-不是 task 尾段路径分叉.
-"""
+Starting from phase 6, the run mode additionally injects `aggregated["efficiency"]` to cross-cut subgroups (score path has no LM
+(so it is not injected), so the parity assertion is changed to "subsets of task-specific keys are equal" + explicit assertion
+score does not contain the efficiency subgroup; architectural equivalence is preserved: efficiency is the cross-cutting AOP delta,
+It is not a fork at the end of the task path."""
 
 from __future__ import annotations
 
@@ -23,20 +22,20 @@ PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "pred
 MT_PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
 
 
-# wave 3（DECISIONS §7.2）撤销 safety cross-cutting AOP；仅 efficiency 仍是 cross-cutting
-# 嵌套子组（基础设施指标，与 HELM efficiency 维度同精神，行业一致）.
+# wave 3 (DECISIONS §7.2) withdraws safety cross-cutting AOP; only efficiency remains cross-cutting
+# Nested subgroups (infrastructure indicators, in the same spirit as the HELM efficiency dimension, consistent with the industry).
 _CROSS_CUTTING_SUBGROUPS = {"efficiency"}
 
 
 def _task_agg(agg: dict) -> dict:
-    """剥离 cross-cutting 子组，只保留 task-specific 顶层指标."""
+    """Strip away cross-cutting subgroups, leaving only task-specific top-level metrics."""
     return {k: v for k, v in agg.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
 def _task_metrics(metrics: dict) -> dict:
-    """剥离 phase 7 §7.D nested 派的 cross-cutting 嵌套子组（efficiency / safety），只留 task-specific metrics.
-    run 路径写 cross-cutting 子组（0 占位或真实数值），score 路径只写 content class 子组（safety），
-    剥离后 task 层 parity 仍成立."""
+    """Strip away the cross-cutting nested subgroup (efficiency/safety) of phase 7 §7.D nested, leaving only task-specific metrics.
+    The run path writes the cross-cutting subgroup (0 placeholder or real value), the score path only writes the content class subgroup (safety),
+    After stripping off the task layer parity still exists."""
     return {k: v for k, v in metrics.items() if k not in _CROSS_CUTTING_SUBGROUPS}
 
 
@@ -49,15 +48,15 @@ def test_run_gold_runs_full_accuracy():
     assert r.model == "mock:gold"
     assert r.n == 30
     assert _task_agg(r.aggregated) == {"accuracy": 1.0, "f1_macro": 1.0, "cohens_kappa": 1.0}
-    # phase 6 横切子组：MockLM 不报 → 子组键值全 0（schema 永远存在）
+    # Phase 6 cross-cutting subgroups: MockLM does not report → the subgroup key values ​​​​are all 0 (schema always exists)
     assert "efficiency" in r.aggregated
     assert r.aggregated["efficiency"]["latency_ms"]["p50"] == 0.0
     assert r.aggregated["efficiency"]["cost_usd"]["total"] == 0.0
 
 
 def test_run_gold_equals_score_perfect():
-    """架构承诺：evaluate_run(task, MockLM(gold)) ≡ evaluate_score(task, perfect.jsonl)
-    在 task-specific 指标层面相等；phase 6 起 run 多一个 efficiency 子组（score 没有）."""
+    """Architecture commitment: evaluate_run(task, MockLM(gold)) ≡ evaluate_score(task, perfect.jsonl)
+    They are equal at the task-specific indicator level; starting from phase 6, run has an additional efficiency subgroup (score does not have one)."""
     task = SentimentClf()
     docs = list(task.docs())
 
@@ -66,17 +65,17 @@ def test_run_gold_equals_score_perfect():
 
     assert _task_agg(r_run.aggregated) == _task_agg(r_score.aggregated)
     assert "efficiency" in r_run.aggregated
-    assert "efficiency" not in r_score.aggregated  # score 路径无 LM 调用
+    assert "efficiency" not in r_score.aggregated  # Score path has no LM call
     assert r_run.n == r_score.n
-    # per_sample 的 (doc_id, prediction, target, task-only metrics) 也应该一样
-    # （phase 6 audit §1.3A 起 run 路径 sample.metrics 多 4 efficiency 占位，剥离后比对）
+    # The (doc_id, prediction, target, task-only metrics) of per_sample should also be the same
+    # (Starting from phase 6 audit §1.3A, the run path sample.metrics has 4 more efficiency occupancies, which will be compared after stripping)
     a_pairs = [(s.doc_id, s.prediction, s.target, _task_metrics(s.metrics)) for s in r_run.per_sample]
     o_pairs = [(s.doc_id, s.prediction, s.target, _task_metrics(s.metrics)) for s in r_score.per_sample]
     assert a_pairs == o_pairs
 
 
 def test_run_noisy_matches_predictions_file():
-    """MockLM(noisy, seed=0) 和 predictions/noisy_0.3.jsonl 是同一份（生成时两侧 seed 对齐）."""
+    """MockLM(noisy, seed=0) and predictions/noisy_0.3.jsonl are the same (the seeds on both sides are aligned when generated)."""
     task = SentimentClf()
     docs = list(task.docs())
 
@@ -107,10 +106,10 @@ def test_run_rule_matches_predictions_file():
 
 
 def test_run_mt_gold_equals_score_perfect():
-    """族 2 (mt) 上的 parity：mock:gold ≡ score predictions/perfect.jsonl.
+    """parity on family 2 (mt):mock:gold ≡ score predictions/perfect.jsonl.
 
-    族 1 已有同名测试，但 mt 引入了 6 个生成指标（含 BERTScore）和不同 task schema，
-    在新 task 上重新焊一次双模式等价性，避免回归。"""
+    Family 1 already has a test with the same name, but mt introduces 6 generated indicators (including BERTScore) and different task schemas.
+    Re-weld the dual-mode equivalence on the new task to avoid regression."""
     task = MT()
     docs = list(task.docs())
 
@@ -127,26 +126,25 @@ def test_run_mt_gold_equals_score_perfect():
 
 
 def test_run_mt_with_fewshot_records_num_fewshot():
-    """num_fewshot=2 时 EvalResult.num_fewshot 字段被正确记录."""
+    """When num_fewshot=2, the EvalResult.num_fewshot field is recorded correctly."""
     task = MT()
     docs = list(task.docs())
 
     r = evaluate_run(task, MockLM(mode="gold", docs=docs), num_fewshot=2, fewshot_seed=0)
     assert r.num_fewshot == 2
-    # gold mode 下答案和 target 一字不差，K-shot 不影响 perfect score
+    # In gold mode, the answer is exactly the same as the target, and the K-shot does not affect the perfect score.
     assert r.aggregated["exact_match"] == 1.0
 
 
 def test_elapsed_ms_covers_process_results_phase():
-    """DECISIONS §7.1.1 端到端 elapsed_ms 锁：
+    """DECISIONS §7.1.1 End-to-end elapsed_ms lock:
 
-    旧实现 elapsed_ms 在 _evaluate_inner 调用前测，process_results / injectors /
-    aggregation 全段被排除——judge-heavy 路径漏算 6 个数量级（rag_qa 实测 0.137ms vs
-    125s wall time）.
+    Old implementation of elapsed_ms in _evaluate_inner call pretest, process_results/injectors/
+    The entire aggregation section is excluded - the judge-heavy path is missed by 6 orders of magnitude (rag_qa measured 0.137ms vs
+    125s wall time).
 
-    本测试在 process_results 里塞 50ms sleep，断言 elapsed_ms >= 50 * n（per-sample
-    sleep 累加）—— 旧实现下 elapsed_ms 接近 0；新实现下 elapsed_ms 必含 sleep 段.
-    """
+    This test inserts 50ms sleep into process_results and asserts that elapsed_ms >= 50 * n (per-sample
+    sleep accumulation) - under the old implementation, elapsed_ms is close to 0; under the new implementation, elapsed_ms must contain the sleep segment."""
     import time
 
     from evals.api import Doc, Response, SampleResult
@@ -154,24 +152,24 @@ def test_elapsed_ms_covers_process_results_phase():
     sleep_ms = 50
 
     class _SlowSentimentClf(SentimentClf):
-        """process_results 内塞 sleep 模拟 judge-heavy 子调用."""
+        """process_results is embedded in sleep to simulate a judge-heavy subcall."""
 
         def process_results(self, doc: Doc, response: Response) -> SampleResult:  # type: ignore[override]
             time.sleep(sleep_ms / 1000.0)
             return super().process_results(doc, response)
 
     task = _SlowSentimentClf()
-    docs = list(task.docs())[:3]  # 限 3 条避免单测过慢
-    # 用 MockLM gold 模式 + 限 3 条 docs；evaluate_run limit=3 让 runner 也只处理这 3 条
+    docs = list(task.docs())[:3]  # Limit to 3 items to avoid single test being too slow
+    # Use MockLM gold mode + limit 3 docs; evaluate_run limit=3 allows the runner to only process these 3 docs
     r = evaluate_run(task, MockLM(mode="gold", docs=docs), limit=3)
-    # 3 条 × 50ms sleep ≥ 150ms；留 30ms buffer 防 CI 抖动
+    # 3 items × 50ms sleep ≥ 150ms; leave 30ms buffer to prevent CI jitter
     assert r.elapsed_ms >= 3 * sleep_ms - 30, (
         f"elapsed_ms={r.elapsed_ms} 应 >= {3 * sleep_ms - 30}ms（含 process_results sleep）"
     )
 
 
 def test_elapsed_ms_score_path_covers_process_results_phase():
-    """同上锁，覆盖 score 路径——judge-heavy 失真核心场景（rag_qa + 5 维度 judge）."""
+    """Same as the above lock, covering the score path - judge-heavy distortion core scene (rag_qa + 5-dimensional judge)."""
     import time
 
     from evals.api import Doc, Response, SampleResult

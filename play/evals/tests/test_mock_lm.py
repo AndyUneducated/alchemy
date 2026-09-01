@@ -1,4 +1,4 @@
-"""MockLM 四种 mode 的行为 + seed 确定性."""
+"""The behavior of MockLM's four modes + seed determinism."""
 
 from __future__ import annotations
 
@@ -48,10 +48,9 @@ def test_mode_rule_uses_keywords():
 
 
 def test_mode_noisy_deterministic_same_seed():
-    """同一 seed 跑两次 MockLM 必须得到完全一致的输出.
+    """Running MockLM twice with the same seed must yield exactly the same output.
 
-    这是整个 README 预期数值能复现的根。
-    """
+    This is the root of the expected value of the entire README to be reproduced."""
     docs = _fake_docs()
     lm1 = MockLM(mode="noisy", docs=docs, noise=0.5, seed=42)
     lm2 = MockLM(mode="noisy", docs=docs, noise=0.5, seed=42)
@@ -61,12 +60,12 @@ def test_mode_noisy_deterministic_same_seed():
 
 
 def test_mode_noisy_different_seeds_differ():
-    docs = _fake_docs() * 5  # 放大样本数增加区分率
+    docs = _fake_docs() * 5  # Enlarging the number of samples increases the discrimination rate
     lm1 = MockLM(mode="noisy", docs=_fake_docs(), noise=0.8, seed=0)
     lm2 = MockLM(mode="noisy", docs=_fake_docs(), noise=0.8, seed=999)
     r1 = [r.text for r in lm1.generate_until(_reqs(_fake_docs()))]
     r2 = [r.text for r in lm2.generate_until(_reqs(_fake_docs()))]
-    # 两个不同 seed 至少有一个位置不一样
+    # Two different seeds have at least one different position.
     assert r1 != r2
 
 

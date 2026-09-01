@@ -1,53 +1,53 @@
 # play/rag
 
-本地优先的两阶段 RAG 工具集：**dense (Ollama embedding) + BM25 + RRF 融合**做召回，可选 **cross-encoder（`bge-reranker-v2-m3`）** 精排。CLI 与程序化 API 两用，可被外部工具（如 [`play/agent_engine/`](../agent_engine/) 的 retrieve_docs 工具、[`play/evals/`](../evals/) 的 RAG 评测任务）通过 subprocess + JSON envelope 消费。
+Local-first two-stage RAG toolkit: **dense (Ollama embedding) + BM25 + RRF fusion** for recall, optional **cross-encoder (`bge-reranker-v2-m3`)** reranking. Dual CLI and programmatic API; consumable by external tools (e.g. [`play/agent_engine/`](../agent_engine/) `retrieve_docs`, [`play/evals/`](../evals/) RAG eval tasks) via subprocess + JSON envelope.
 
-## 特性
+## Features
 
-- **本地零运维**：embedded ChromaDB，VDB 就是一个目录，`cp -r` 即迁移
-- **VDB 自描述**：`metadata.json` 哨兵随 VDB 走，query 端默认沿用 ingest 时的 model / chunker / tokenizer，详见 [§VDB 目录解剖](#vdb-目录解剖)
-- **段落感知 chunker**：按 `\n\n` 切段，贪心打包，回带保持完整段落不破语义
-- **Hybrid 召回（默认）**：dense + BM25 双路 → **RRF**（`k=60`，只用排名）融合；BM25 tokenizer 与 embedding 同款 Qwen3 BPE，跨语言（CJK / 拉丁 / 代码 / emoji）切分同源
-- **Cross-encoder reranker（可选）**：`BAAI/bge-reranker-v2-m3` lazy-load + `lru_cache(1)` 单例，`--rerank` 显式开启
-- **Provider-agnostic 返回值**：`SearchResult` 用 `content / score / source / metadata`，每条 hit 标 `metadata.retrieval` / `metadata.reranked` 来源
-- **`--json` envelope 契约**：stdout 输出 `{query, data, meta}`，对齐 OpenAI Vector Store / Pinecone / Cohere 共同子集；warnings/进度走 stderr
-- **多格式输入**：支持 `.txt / .md / .pdf`（PDF 走 pymupdf）
+- **Local zero-ops**: embedded ChromaDB; VDB is one directory; `cp -r` to migrate
+- **Self-describing VDB**: `metadata.json` sentinel travels with VDB; query side defaults to ingest-time model / chunker / tokenizer — see [§VDB directory anatomy](#vdb-directory-anatomy)
+- **Paragraph-aware chunker**: split on `\n\n`, greedy pack, overlap via full trailing paragraphs to preserve semantics
+- **Hybrid recall (default)**: dense + BM25 dual path → **RRF** (`k=60`, rank-only); BM25 tokenizer same Qwen3 BPE as embedding; cross-language (CJK / Latin / code / emoji) tokenization aligned
+- **Cross-encoder reranker (optional)**: `BAAI/bge-reranker-v2-m3` lazy-load + `lru_cache(1)` singleton; `--rerank` explicit opt-in
+- **Provider-agnostic return values**: `SearchResult` uses `content / score / source / metadata`; each hit tagged `metadata.retrieval` / `metadata.reranked`
+- **`--json` envelope contract**: stdout `{query, data, meta}` aligned with OpenAI Vector Store / Pinecone / Cohere common subset; warnings/progress on stderr
+- **Multi-format input**: `.txt / .md / .pdf` (PDF via pymupdf)
 
-## 指导原则
+## Guiding principles
 
-贯穿本项目的 4 条原则：
+Four principles throughout this project:
 
-|#|原则|说明|
+|#|Principle|Notes|
 |---|---|---|
-|1|**VDB 自描述**|embedding-model / chunk 参数 / tokenizer 跟数据走，消除"用错模型查对的库"的静默失败|
-|2|**Library API 先于 CLI**|先设计可被程序化调用的函数，CLI 是薄包装|
-|3|**抽象滞后于第二个使用者**|单 backend 就不留 `if/elif` 分支|
-|4|**优先库自带能力，不造轮子**|ChromaDB 官方提供的就不自写|
+|1|**Self-describing VDB**|embedding-model / chunk params / tokenizer travel with data; eliminates silent "wrong model, right index" failures|
+|2|**Library API before CLI**|design programmatic functions first; CLI is thin wrapper|
+|3|**Abstraction lags second consumer**|single backend → no `if/elif` branches|
+|4|**Prefer library capabilities, don't reinvent**|use what ChromaDB officially provides|
 
-## 架构总览
+## Architecture overview
 
 ```mermaid
 flowchart LR
     docs["docs/<br/>(.txt/.md/.pdf)"] --> ingest["ingest.py"]
     ingest -->|chunk + embed| vdb[("VDB dir<br/>chroma.sqlite3<br/>bm25.pkl<br/>metadata.json")]
     vdb --> search["search()<br/>(query.py)"]
-    search --> cli["CLI 人类可读<br/>(query --query ...)"]
+    search --> cli["CLI human-readable<br/>(query --query ...)"]
     search --> jsonOut["--json envelope<br/>{query, data, meta}"]
-    search --> api["import: 调用方<br/>(list[SearchResult])"]
+    search --> api["import: caller<br/>(list[SearchResult])"]
     ollama(["Ollama<br/>(local HTTP)"]) -. embedding .- ingest
     ollama -. embedding .- search
     hf(["HF cache<br/>~/.cache/huggingface"]) -. tokenizer .- ingest
     hf -. tokenizer + reranker .- search
 ```
 
-## Ingest 数据流
+## Ingest data flow
 
-`ingest.py` 把文档转为可检索的 VDB 目录：dense 向量进 ChromaDB，BM25 倒排索引序列化到 `bm25.pkl`，自描述哨兵写 `metadata.json`。
+`ingest.py` turns documents into a searchable VDB directory: dense vectors in ChromaDB, BM25 inverted index serialized to `bm25.pkl`, self-describing sentinel in `metadata.json`.
 
 ```mermaid
 flowchart TB
-    docs["--docs<br/>(.txt/.md/.pdf 文件或目录)"] --> read["读取 + 解析<br/>(pymupdf for PDF)"]
-    read --> chunk["段落感知 chunker<br/>chunk_size=512<br/>overlap=64"]
+    docs["--docs<br/>(.txt/.md/.pdf files or dirs)"] --> read["read + parse<br/>(pymupdf for PDF)"]
+    read --> chunk["paragraph-aware chunker<br/>chunk_size=512<br/>overlap=64"]
     chunk --> chunks["chunks: list[str]<br/>+ source / chunk_index"]
 
     chunks --> embed["Ollama embedding<br/>(qwen3-embedding:8b)"]
@@ -65,71 +65,71 @@ flowchart TB
     chunks -. doc_count / chunk_count .-> meta
 ```
 
-## Query 数据流
+## Query data flow
 
-默认 hybrid 召回；`--rerank` 在召回池上叠一层 cross-encoder 精排。两路检索都在 `RERANK_CANDIDATES * HYBRID_OVERSAMPLE` 范围内 oversample，确保 RRF / 精排有足够候选。
+Default hybrid recall; `--rerank` adds cross-encoder reranking on the candidate pool. Both retrieval paths oversample within `RERANK_CANDIDATES * HYBRID_OVERSAMPLE` so RRF / rerank have enough candidates.
 
 ```mermaid
 flowchart TB
-    q["query 文本"] --> meta_read["读 metadata.json<br/>(embedding_model, tokenizer)"]
+    q["query text"] --> meta_read["read metadata.json<br/>(embedding_model, tokenizer)"]
     meta_read --> dispatch{"mode?"}
 
     dispatch -->|dense| dense["dense_search<br/>(Ollama embed + Chroma)"]
     dispatch -->|bm25| bm25Path["tokenize + bm25_search<br/>(BM25Okapi.get_scores)"]
-    dispatch -->|"hybrid (默认)"| dual["dense_search + bm25_search<br/>(各召 top_k * oversample)"]
+    dispatch -->|"hybrid (default)"| dual["dense_search + bm25_search<br/>(each recall top_k * oversample)"]
 
-    dual --> rrf["rrf_fuse<br/>(k=60, 只用排名)"]
+    dual --> rrf["rrf_fuse<br/>(k=60, rank-only)"]
 
     dense --> pool["candidate ids<br/>+ scores"]
     bm25Path --> pool
     rrf --> pool
 
-    pool --> mat["_materialize<br/>(取 content + metadata)"]
+    pool --> mat["_materialize<br/>(fetch content + metadata)"]
     mat --> rerankBranch{"rerank?"}
 
-    rerankBranch -->|"False (默认)"| hits["top_k SearchResults"]
+    rerankBranch -->|"False (default)"| hits["top_k SearchResults"]
     rerankBranch -->|True| ce["CrossEncoder.predict<br/>(query, content) pairs"]
     ce --> hits
 
-    hits --> ret["返回 list[SearchResult]<br/>每条带 metadata.retrieval / .reranked"]
+    hits --> ret["return list[SearchResult]<br/>each with metadata.retrieval / .reranked"]
 ```
 
-## 环境准备
+## Environment setup
 
 - Python 3.12+
-- `pip install -r requirements.txt`（`chromadb / pymupdf / ollama / rank-bm25 / tokenizers / sentence-transformers / torch`）
-- 安装并启动 [Ollama](https://ollama.com)，拉取 embedding 模型：
+- `pip install -r requirements.txt` (`chromadb / pymupdf / ollama / rank-bm25 / tokenizers / sentence-transformers / torch`)
+- Install and run [Ollama](https://ollama.com), pull embedding model:
 
 ```bash
-ollama pull qwen3-embedding:8b   # 默认，中文友好
-# 或更轻量替代：
+ollama pull qwen3-embedding:8b   # default, Chinese-friendly
+# or lighter alternative:
 ollama pull nomic-embed-text
 ```
 
-## 快速开始
+## Quick start
 
-仓库自带最小数据集 [`docs/test_vdb/`](docs/test_vdb)。在 `play/rag/` 目录下：
+Minimal dataset included: [`docs/test_vdb/`](docs/test_vdb). From `play/rag/`:
 
 ```bash
-# 0. (可选, 首次或换机) 一次性拉 HF 资产: BM25 tokenizer (~10MB) + reranker (~1.2GB)
-#    跳过也行——ingest/query 首次会自动下载, 只是测试现场会卡几秒
+# 0. (optional, first run or new machine) one-time HF assets: BM25 tokenizer (~10MB) + reranker (~1.2GB)
+#    skip OK — ingest/query auto-download on first use, but tests may pause briefly
 python prefetch.py
 
-# 1. 建库（hybrid 索引同时生成 chroma 向量 + bm25.pkl）
+# 1. Build index (hybrid generates chroma vectors + bm25.pkl)
 python ingest.py --docs docs/test_vdb --output vdb/test_vdb
 
-# 2. 检索（默认 hybrid，人类可读）
+# 2. Query (default hybrid, human-readable)
 python query.py --vdb vdb/test_vdb --query "项目代号"
 
-# 3. 高精度路径（候选池上叠 cross-encoder 精排）
+# 3. High-precision path (cross-encoder rerank on candidate pool)
 python query.py --vdb vdb/test_vdb --query "项目代号" --rerank
 
-# 4. 诊断模式（单路检索做对照）
+# 4. Diagnostic modes (single-path retrieval for comparison)
 python query.py --vdb vdb/test_vdb --query "项目代号" --mode dense
 python query.py --vdb vdb/test_vdb --query "项目代号" --mode bm25
 ```
 
-预期输出片段：
+Expected output fragment:
 
 ```
 Query: 项目代号
@@ -141,45 +141,45 @@ Top 5 results (mode=hybrid)
 ...
 ```
 
-机器消费模式（stdout 仅 JSON envelope，warnings 走 stderr）：
+Machine consumption (stdout JSON envelope only; warnings on stderr):
 
 ```bash
 python query.py --vdb vdb/test_vdb --query "项目代号" --json --rerank
 ```
 
-## CLI 速查
+## CLI quick reference
 
-> 完整说明与默认值见 `python ingest.py --help` / `python query.py --help`。
+> Full help and defaults: `python ingest.py --help` / `python query.py --help`.
 
 ### `ingest.py`
 
-|参数|必选|默认|说明|
+|Arg|Required|Default|Description|
 |---|---|---|---|
-|`--docs`|是|—|一个或多个文件/目录，递归收集 `.txt/.md/.pdf`|
-|`--output`|是|—|VDB 输出目录（自动创建）|
-|`--chunk-size`|否|`512`|单 chunk 目标字符数|
-|`--overlap`|否|`64`|相邻 chunk 段落级回带字符上限|
-|`--model`|否|`qwen3-embedding:8b`|Ollama embedding 模型，写入 metadata 作哨兵|
-|`--collection`|否|`basename(--output)`|ChromaDB collection 名|
+|`--docs`|yes|—|one or more files/dirs; recursively collects `.txt/.md/.pdf`|
+|`--output`|yes|—|VDB output directory (created if needed)|
+|`--chunk-size`|no|`512`|target characters per chunk|
+|`--overlap`|no|`64`|max paragraph-level overlap between adjacent chunks|
+|`--model`|no|`qwen3-embedding:8b`|Ollama embedding model; written to metadata sentinel|
+|`--collection`|no|`basename(--output)`|ChromaDB collection name|
 
 ### `query.py`
 
-|参数|必选|默认|说明|
+|Arg|Required|Default|Description|
 |---|---|---|---|
-|`--vdb`|是|—|VDB 目录（`ingest --output` 产物，必须含 `bm25.pkl`）|
-|`--query`|是|—|查询文本|
-|`--top-k`|否|`5`|返回前 N 个最相似 chunk|
-|`--mode`|否|`hybrid`|检索策略：`dense` / `bm25` / `hybrid`；后两者仅诊断用|
-|`--rerank`|flag|`False`|启用 cross-encoder 精排（首次 ~5s 加载 ~1.2GB）|
-|`--model`|否|metadata 中的 stored model|显式覆盖 embedding 模型；不一致仅 stderr WARNING|
-|`--collection`|否|第一个 collection|多 collection VDB 必须显式指定|
-|`--json`|flag|`False`|stdout 输出 `{query, data, meta}` envelope|
+|`--vdb`|yes|—|VDB directory (`ingest --output` artifact; must contain `bm25.pkl`)|
+|`--query`|yes|—|query text|
+|`--top-k`|no|`5`|return top N similar chunks|
+|`--mode`|no|`hybrid`|retrieval strategy: `dense` / `bm25` / `hybrid`; latter two diagnostic only|
+|`--rerank`|flag|`False`|enable cross-encoder rerank (first run ~5s loads ~1.2GB)|
+|`--model`|no|stored model in metadata|explicit embedding override; mismatch → stderr WARNING only|
+|`--collection`|no|first collection|multi-collection VDB requires explicit name|
+|`--json`|flag|`False`|stdout `{query, data, meta}` envelope|
 
 ### `prefetch.py`
 
-无参数。一次性拉取 HF tokenizer + reranker 到 `~/.cache/huggingface/`。
+No arguments. One-time fetch of HF tokenizer + reranker to `~/.cache/huggingface/`.
 
-## 编程式 API
+## Programmatic API
 
 ```python
 from query import search
@@ -188,25 +188,25 @@ hits = search(
     vdb_dir="vdb/test_vdb",
     query_text="项目代号",
     top_k=3,
-    mode="hybrid",   # "dense" / "bm25" / "hybrid"（默认）
-    rerank=False,    # True 时叠 cross-encoder 精排
+    mode="hybrid",   # "dense" / "bm25" / "hybrid" (default)
+    rerank=False,    # True adds cross-encoder rerank
 )
 for h in hits:
     print(h["source"], h["score"], h["metadata"]["retrieval"], h["content"][:60])
 ```
 
-返回 `list[SearchResult]`，字段：
+Returns `list[SearchResult]`:
 
-|字段|类型|说明|
+|Field|Type|Description|
 |---|---|---|
-|`content`|`str`|chunk 文本|
-|`score`|`float`|相似度分数；**跨 mode 不可比**（dense=`1/(1+dist)`、bm25=原始分、hybrid=RRF、rerank=CE logit）|
-|`source`|`str`|文件相对路径|
-|`metadata`|`dict`|含 `chunk_index / retrieval / reranked` 等|
+|`content`|`str`|chunk text|
+|`score`|`float`|similarity score; **not comparable across modes** (dense=`1/(1+dist)`, bm25=raw, hybrid=RRF, rerank=CE logit)|
+|`source`|`str`|relative file path|
+|`metadata`|`dict`|includes `chunk_index / retrieval / reranked`, etc.|
 
-三层薄封装：`search()` 纯函数 → `query()` pretty-print 包装 → CLI 在外面再裹 envelope 后 `print` 到 stdout。
+Three thin layers: `search()` pure function → `query()` pretty-print wrapper → CLI wraps envelope and `print`s to stdout.
 
-## `--json` envelope 契约
+## `--json` envelope contract
 
 ```jsonc
 {
@@ -234,46 +234,46 @@ for h in hits:
 }
 ```
 
-设计参照 OpenAI Vector Store search / Pinecone query / Cohere rerank 的共同子集——`data` 装业务对象、`meta` 装请求级元信息，未来加 pagination / timing / version 字段是加法式演化，不破契约。
+Design follows OpenAI Vector Store search / Pinecone query / Cohere rerank common subset — `data` holds business objects, `meta` holds request-level info; future pagination / timing / version fields are additive evolution without breaking contract.
 
-## VDB 目录解剖
+## VDB directory anatomy
 
 ```
 vdb/test_vdb/
-├── chroma.sqlite3              # ChromaDB 主存储（dense vectors）
-├── bm25.pkl                    # BM25 倒排索引（{ids, model} pickle）
-├── metadata.json               # 自描述哨兵（本仓库写入）
-└── <uuid>/                     # ChromaDB 内部数据
+├── chroma.sqlite3              # ChromaDB primary storage (dense vectors)
+├── bm25.pkl                    # BM25 inverted index ({ids, model} pickle)
+├── metadata.json               # self-describing sentinel (written by this repo)
+└── <uuid>/                     # ChromaDB internal data
 ```
 
-`metadata.json` 字段：
+`metadata.json` fields:
 
-|字段|含义|
+|Field|Meaning|
 |---|---|
-|`embedding_model`|ingest 时用的模型；query 默认沿用|
-|`tokenizer`|BM25 用的 HF tokenizer；query 默认沿用|
-|`chunk_size` / `chunk_overlap`|切分参数|
-|`doc_count` / `chunk_count`|入库统计|
-|`created_at`|UTC ISO 时间戳|
+|`embedding_model`|model used at ingest; query defaults to this|
+|`tokenizer`|HF tokenizer for BM25; query defaults to this|
+|`chunk_size` / `chunk_overlap`|chunking parameters|
+|`doc_count` / `chunk_count`|ingest statistics|
+|`created_at`|UTC ISO timestamp|
 
-> 缺 `bm25.pkl` 时 `query.py` 直接 `FileNotFoundError` 提示重 ingest——单人项目不为不存在的"老 VDB"付兼容税。
+> Missing `bm25.pkl` → `query.py` raises `FileNotFoundError` with re-ingest hint — solo project pays no compatibility tax for nonexistent "old VDB".
 
-## 项目结构
+## Project structure
 
 ```
 play/rag/
-├── README.md                   # 本文件
-├── DECISIONS.md                # ADR 归档（每条架构决策一个条目，含 Status / Date / 取舍）
-├── JOURNAL.md                  # 每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
+├── README.md                   # this file
+├── DECISIONS.md                # ADR archive (Status / Date / trade-offs per entry)
+├── JOURNAL.md                  # milestone progress (≤2/day, Functional + Technical, cross-link DECISIONS §N)
 ├── requirements.txt            # chromadb + pymupdf + ollama + rank-bm25 + tokenizers + sentence-transformers + torch
-├── config.py                   # EMBED_MODEL / CHUNK_SIZE / RRF_K / RERANKER_MODEL 等默认值
-├── chunker.py                  # 段落感知切分（split_text）
-├── tokenizer.py                # HF tokenizer 包装（lru_cache + special-token 过滤）
-├── bm25.py                     # dense_search / bm25_search / rrf_fuse 三个纯函数
-├── reranker.py                 # CrossEncoder lazy 单例 + rerank()
-├── ingest.py                   # 建库 CLI + ingest()：embed → chroma + bm25.pkl + metadata.json
-├── query.py                    # 检索 CLI + search() / query() API
-├── prefetch.py                 # 一次性拉 HF tokenizer + reranker 到本地 cache
-├── docs/                       # 示例文档
-└── vdb/                        # 示例 VDB 输出
+├── config.py                   # EMBED_MODEL / CHUNK_SIZE / RRF_K / RERANKER_MODEL defaults
+├── chunker.py                  # paragraph-aware split (split_text)
+├── tokenizer.py                # HF tokenizer wrapper (lru_cache + special-token filter)
+├── bm25.py                     # dense_search / bm25_search / rrf_fuse pure functions
+├── reranker.py                 # CrossEncoder lazy singleton + rerank()
+├── ingest.py                   # build-index CLI + ingest(): embed → chroma + bm25.pkl + metadata.json
+├── query.py                    # query CLI + search() / query() API
+├── prefetch.py                 # one-time HF tokenizer + reranker cache fetch
+├── docs/                       # sample documents
+└── vdb/                        # sample VDB output
 ```

@@ -1,14 +1,13 @@
-"""Result / ToolCall / TurnView 视图单测（DECISIONS §13 / §16）.
+"""Result / ToolCall / TurnView view tests (DECISIONS §13 / §16).
 
-覆盖：
-  - `Result.from_dict` / `Result.load_json`：envelope ↔ Result 双向同源（§16 严格，
-    缺字段直接 KeyError）
-  - `Result.tool_calls()` 同时识别 `ToolCallEntry` + `ArtifactEventEntry`
-  - `Result.turns()` 切段：连续 turn marker 间空段、turn 前杂物丢、turn_idx 1-based、start_offset 全局
-  - `TurnView.attempts(agent)`：SpeakerEntry 起新 attempt，沉默 → 0
-  - `Result.find_finalize_decision()` 命中 / 缺失 / strip / 多次取最后
-  - `Result.speakers()` 去重
-  - `TranscriptEntry` typed union（§16）：每个 entry 类型 frozen dataclass，含显式 type tag
+Covers:
+  - `Result.from_dict` / `Result.load_json`: envelope ↔ Result round-trip (§16 strict, KeyError on missing fields)
+  - `Result.tool_calls()` recognizes `ToolCallEntry` + `ArtifactEventEntry`
+  - `Result.turns()` segmentation: empty segments, pre-turn debris dropped, 1-based turn_idx, global start_offset
+  - `TurnView.attempts(agent)`: new attempt per SpeakerEntry, silence → 0
+  - `Result.find_finalize_decision()` hit / miss / strip / multiple takes last
+  - `Result.speakers()` dedup
+  - `TranscriptEntry` typed union (§16): frozen dataclass per entry type with explicit type tag
 """
 from __future__ import annotations
 
@@ -56,7 +55,7 @@ def _tool_call(tool: str, caller: str, arguments: dict | None = None) -> ToolCal
 # ---------- IO --------------------------------------------------------
 
 def test_from_dict_full_envelope_round_trips():
-    """asdict(Result) → from_dict 字节同源."""
+    """asdict(Result) → from_dict byte-identical round-trip."""
     r = Result(
         artifact={"sec": "body"},
         transcript=[_speaker("A", "hi")],
@@ -74,15 +73,15 @@ def test_from_dict_full_envelope_round_trips():
 
 
 def test_from_dict_strict_raises_on_missing_field():
-    """§16 起 Result.from_dict 严格——缺任何字段直接 KeyError."""
+    """§16 onward Result.from_dict strict — any missing field → KeyError."""
     with pytest.raises(KeyError):
-        Result.from_dict({"transcript": []})  # 缺 artifact / success / warnings / usage
+        Result.from_dict({"transcript": []})  # missing artifact / success / warnings / usage
     with pytest.raises(KeyError):
         Result.from_dict({})
 
 
 def test_from_dict_strict_raises_on_unknown_entry_type():
-    """transcript entry 必须有合法 `type` 字段；未注册 type 直接 KeyError."""
+    """transcript entry must have valid `type`; unregistered type → KeyError."""
     envelope = {
         "artifact": {}, "transcript": [{"type": "unknown_kind"}],
         "success": True, "warnings": [], "usage": [],
@@ -92,7 +91,7 @@ def test_from_dict_strict_raises_on_unknown_entry_type():
 
 
 def test_load_json_reads_save_result_json_format(tmp_path: Path):
-    """`cli.py --save-result-json` 写出的 JSON file 能被 load_json 还原."""
+    """JSON from `cli.py --save-result-json` round-trips via load_json."""
     r = Result(
         artifact={"x": "y"},
         transcript=[TopicEntry(content="hello")],
@@ -117,7 +116,7 @@ def test_load_json_reads_save_result_json_format(tmp_path: Path):
     ArtifactEventEntry(tool="cast_vote", caller="A", arguments={"option": "yes"}),
 ])
 def test_typed_entry_round_trips_through_envelope(entry):
-    """每种 typed entry 经 asdict → from_dict 还原同型."""
+    """Each typed entry round-trips asdict → from_dict with same type."""
     r = Result(transcript=[entry])
     envelope = dataclasses.asdict(r)
     r2 = Result.from_dict(envelope)
@@ -126,7 +125,7 @@ def test_typed_entry_round_trips_through_envelope(entry):
 
 
 def test_speaker_entry_carries_explicit_type_tag():
-    """§16：SpeakerEntry 必含显式 type='speaker'，与其它 entry 体例对齐."""
+    """§16: SpeakerEntry must include explicit type='speaker', aligned with other entries."""
     s = SpeakerEntry(speaker="A", content="hi")
     d = dataclasses.asdict(s)
     assert d["type"] == "speaker"
@@ -154,7 +153,7 @@ def test_tool_calls_recognizes_artifact_event():
 
 
 def test_tool_calls_recognizes_tracer_tool_call():
-    """ToolCallEntry → ToolCall(kind='tracer')；含非 artifact 工具如 retrieve_docs."""
+    """ToolCallEntry → ToolCall(kind='tracer'); non-artifact tools like retrieve_docs."""
     r = Result(transcript=[
         ToolCallEntry(tool="retrieve_docs", caller="B", arguments={"q": "..."}, ok=True),
     ])
@@ -166,7 +165,7 @@ def test_tool_calls_recognizes_tracer_tool_call():
 
 
 def test_tool_calls_skips_non_tool_entries():
-    """topic / turn / speaker entry 不是工具调用，必须被过滤."""
+    """topic / turn / speaker entries are not tool calls; must be filtered."""
     r = Result(transcript=[
         TopicEntry(content="..."),
         TurnEntry(content="turn 1 of 2"),
@@ -179,7 +178,7 @@ def test_tool_calls_skips_non_tool_entries():
 
 
 def test_tool_calls_preserves_order():
-    """tool_calls 顺序 = transcript 顺序，artifact_event 与 tool_call 混排不重排."""
+    """tool_calls order = transcript order; mixed artifact_event and tool_call not reordered."""
     r = Result(transcript=[
         _tool_call("retrieve_docs", "A"),
         _event("append_section", "A"),
@@ -193,7 +192,7 @@ def test_tool_calls_preserves_order():
 # ---------- turns ------------------------------------------------------
 
 def test_turns_partitions_by_marker_and_drops_pre_turn_entries():
-    """turn marker 切段；marker 自身丢；turn 前的 topic 等杂物丢."""
+    """Segment by turn marker; marker dropped; pre-turn topic debris dropped."""
     r = Result(transcript=[
         TopicEntry(content="话题"),
         _turn(1, 2), _speaker("A", "hi"),
@@ -208,7 +207,7 @@ def test_turns_partitions_by_marker_and_drops_pre_turn_entries():
 
 
 def test_turns_handles_consecutive_markers_yields_empty_segment():
-    """连续 turn marker 之间 → 中间空段（entries=()）；保留 turn_idx 单调递增."""
+    """Between consecutive turn markers → empty segment (entries=()); turn_idx monotonic."""
     r = Result(transcript=[_turn(1), _turn(2), _speaker("A")])
     turns = r.turns()
     assert len(turns) == 2
@@ -219,7 +218,7 @@ def test_turns_handles_consecutive_markers_yields_empty_segment():
 
 
 def test_turns_start_offset_maps_back_to_global_index():
-    """start_offset = 段内第一个 entry 在原 transcript 的 0-based 索引."""
+    """start_offset = 0-based index of segment first entry in original transcript."""
     transcript = [
         TopicEntry(content="x"),         # idx 0
         _turn(1),                        # idx 1
@@ -235,7 +234,7 @@ def test_turns_start_offset_maps_back_to_global_index():
 
 
 def test_turns_returns_empty_when_no_turn_marker():
-    """没有 turn marker → 空列表（pre-turn 内容全部丢）."""
+    """No turn marker → empty list (all pre-turn content dropped)."""
     r = Result(transcript=[_speaker("A"), _speaker("B")])
     assert r.turns() == []
 
@@ -243,7 +242,7 @@ def test_turns_returns_empty_when_no_turn_marker():
 # ---------- TurnView.attempts -----------------------------------------
 
 def test_attempts_each_speaker_starts_new_attempt():
-    """speaker 入栈起一个新 attempt；attempt 含其后到下一 speaker 之前的所有事件."""
+    """Speaker entry starts new attempt; attempt includes events until next speaker."""
     tv = TurnView(turn_idx=1, start_offset=0, entries=(
         _speaker("A", "first"),
         _event("read_artifact", "A"),
@@ -257,7 +256,7 @@ def test_attempts_each_speaker_starts_new_attempt():
 
 
 def test_attempts_silent_segment_returns_zero_attempts():
-    """没有任何 speaker entry → 0 attempts（caller 完全沉默）."""
+    """No speaker entries → 0 attempts (caller completely silent)."""
     tv = TurnView(turn_idx=1, start_offset=0, entries=(
         _event("read_artifact", "Other"),
     ))
@@ -265,7 +264,7 @@ def test_attempts_silent_segment_returns_zero_attempts():
 
 
 def test_attempts_drops_entries_before_first_speaker():
-    """speaker 之前的事件被丢弃（如本 turn 起首的 instruction marker）."""
+    """Events before first speaker dropped (e.g. instruction marker at turn start)."""
     tv = TurnView(turn_idx=1, start_offset=0, entries=(
         TopicEntry(content="..."),
         _speaker("A"),
@@ -277,7 +276,7 @@ def test_attempts_drops_entries_before_first_speaker():
 
 
 def test_turn_view_tool_calls_filters_to_segment():
-    """TurnView.tool_calls() 仅返回该段内的工具调用."""
+    """TurnView.tool_calls() returns only tool calls within segment."""
     tv = TurnView(turn_idx=1, start_offset=0, entries=(
         _speaker("A"),
         _event("cast_vote", "A"),
@@ -298,7 +297,7 @@ def test_find_finalize_decision_extracts_from_arguments():
 
 
 def test_find_finalize_decision_returns_none_when_absent():
-    """transcript 内无 finalize → None；finalize 但 decision 缺失 → None."""
+    """No finalize in transcript → None; finalize but missing decision → None."""
     r = Result(transcript=[_event("propose_vote", "M")])
     assert r.find_finalize_decision() is None
     r2 = Result(transcript=[_event("finalize_artifact", "M")])
@@ -313,7 +312,7 @@ def test_find_finalize_decision_strips_whitespace():
 
 
 def test_find_finalize_decision_returns_last_when_multiple():
-    """异常情况下出现多次成功 finalize → 返**最后**一次的 decision（最贴近封板态）."""
+    """Multiple successful finalize in edge case → return **last** decision (closest to sealed state)."""
     r = Result(transcript=[
         _event("finalize_artifact", "M", {"decision": "first"}),
         _event("finalize_artifact", "M", {"decision": "second"}),
@@ -329,7 +328,7 @@ def test_speakers_returns_distinct_set():
         _event("x", "C"),
         TopicEntry(content="..."),
     ])
-    assert r.speakers() == {"A", "B"}  # caller 不算 speaker
+    assert r.speakers() == {"A", "B"}  # caller not counted as speaker
 
 
 def test_speakers_empty_when_no_speech():

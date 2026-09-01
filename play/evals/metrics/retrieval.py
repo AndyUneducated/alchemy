@@ -1,18 +1,18 @@
-"""族 4 IR metrics：recall@k / precision@k / mrr / ndcg@k / map@k 的 ranx 直调封装.
+"""Family 4 IR metrics: ranx direct wrapper for recall@k / precision@k / mrr / ndcg@k / map@k.
 
-设计要点：
-  - **ranx 直调**：IR 指标是数学定义死的成熟领域（trec_eval 几十年沉淀），
-    无须自造轮子。`ranx` 是 trec_eval 的 numba JIT Python 包装，单调用 ms 级。
-  - **聚合形态**：返回 `Callable[[list[SampleResult]], float]`，与 task.aggregation()
-    的 dict-of-callable 协议同形，rag_retrieval.aggregation() 直接挂这些工厂.
-  - **数据契约**：从 `SampleResult.artifacts` 拉 `pred_ids: list[str]` / `gold_ids: list[str]`
-    （phase 4 引入的非标量产物 bucket）。约定：rag_retrieval.process_results 必填这两键，
-    其它 task 不会触发——契约耦合点显式标注，避免隐式依赖.
+Design points:
+  - **ranx direct adjustment**: IR indicator is a mature field with dead mathematical definition (trec_eval has accumulated for decades),
+    No need to reinvent the wheel. `ranx` is a numba JIT Python wrapper for trec_eval, with single-ms callback.
+  - **Aggregation form**: Return `Callable[[list[SampleResult]], float]`, same as task.aggregation()
+    The dict-of-callable protocol isomorphic, and rag_retrieval.aggregation() directly hooks these factories.
+  - **Data Contract**: Pull `pred_ids: list[str]` / `gold_ids: list[str]` from `SampleResult.artifacts`
+    (non-scalar product bucket introduced in phase 4). Convention: rag_retrieval.process_results requires these two keys.
+    Other tasks will not be triggered - the contract coupling points are explicitly marked to avoid implicit dependencies.
 
-为什么把 IR 指标放 metrics/ 而不放 tasks/rag_retrieval.py：
-  - 跨 task 复用面：未来 `rag_qa` 也要在 process_results 计 retrieval-side 指标
-    （contexts 的 recall/precision），retrieval.py 是天然复用点
-  - 与 judge_core / judge_rag 风格一致：都是"closure 工厂返回 (sample_results) → float"
+Why put IR indicators in metrics/ instead of tasks/rag_retrieval.py:
+  - Cross-task reuse: In the future, `rag_qa` will also calculate retrieval-side indicators in process_results
+    (recall/precision of contexts), retrieval.py is a natural reuse point
+  - Consistent with judge_core / judge_rag style: both "closure factory returns (sample_results) → float"
 """
 
 from __future__ import annotations
@@ -27,14 +27,13 @@ from ..api import SampleResult
 def _build_qrels_run(
     sample_results: Sequence[SampleResult],
 ) -> tuple[Qrels, Run] | None:
-    """从 SampleResult 列表抽 (qrels, run) 喂 ranx；若任意必填字段缺失 → None.
+    """Draw (qrels, run) from the SampleResult list and feed ranx; if any required fields are missing → None.
 
-    artifacts 契约（rag_retrieval.process_results 必填）：
-      - pred_ids: Sequence[str]   按 retrieval rank 排好的 doc_id 列表（top-k 截断后）
-      - gold_ids: Sequence[str]   该 query 的相关 doc_id 集合（顺序无关）
+    artifacts contract (rag_retrieval.process_results required):
+      - pred_ids: Sequence[str] doc_id list sorted by retrieval rank (after top-k truncation)
+      - gold_ids: Sequence[str] The related doc_id collection of this query (the order is irrelevant)
 
-    None 返回让 aggregation 函数能优雅降级到 0.0（防止空数据集 / 测试 stub 把全部 metric 拉爆）.
-    """
+    Returning None allows the aggregation function to gracefully degrade to 0.0 (to prevent empty data sets/test stubs from exploding all metrics)."""
     qrels_dict: dict[str, dict[str, int]] = {}
     run_dict: dict[str, dict[str, float]] = {}
 
@@ -44,10 +43,10 @@ def _build_qrels_run(
         if pred_ids is None or gold_ids is None:
             return None
         if not gold_ids:
-            # ranx 拒绝空 gold——这种样本我们直接跳过（视为不可评）
+            # ranx rejects empty gold - we skip this type of sample (deemed unevaluable)
             continue
         qrels_dict[sr.doc_id] = {gid: 1 for gid in gold_ids}
-        # rank 越靠前 score 越高；len(pred_ids) - i 给单调递减的 score（无需真分数）
+        # The higher the rank, the higher the score; len(pred_ids) - i gives a monotonically decreasing score (no real score required)
         run_dict[sr.doc_id] = {
             pid: float(len(pred_ids) - i) for i, pid in enumerate(pred_ids)
         }
@@ -59,7 +58,7 @@ def _build_qrels_run(
 
 
 def _make_metric_aggregator(metric_name: str) -> Callable[[list[SampleResult]], float]:
-    """工厂：把 ranx metric 名（'recall@5' / 'mrr' / 'ndcg@10' …）封成 aggregation 闭包."""
+    """Factory: Encapsulate ranx metric names ('recall@5' / 'mrr' / 'ndcg@10' ...) into aggregation closures."""
 
     def _aggregate(srs: list[SampleResult]) -> float:
         if not srs:
@@ -75,41 +74,36 @@ def _make_metric_aggregator(metric_name: str) -> Callable[[list[SampleResult]], 
 
 
 def recall_at_k(k: int = 10) -> Callable[[list[SampleResult]], float]:
-    """Recall@k：top-k 检出的 gold 比例.
+    """Recall@k: The proportion of gold detected by top-k.
 
-    经典 first-stage retrieval 主指标——告诉你"召回够不够"，不管 rank.
-    """
+    Classic first-stage retrieval main indicator - tells you "whether the recall is enough", regardless of rank."""
     return _make_metric_aggregator(f"recall@{k}")
 
 
 def precision_at_k(k: int = 10) -> Callable[[list[SampleResult]], float]:
-    """Precision@k：top-k 中 gold 的比例.
+    """Precision@k: The proportion of gold in top-k.
 
-    与 recall 互补，用在"top-k 里有多少噪声"的诊断；rerank 后通常应升.
-    """
+    Complementary to recall, it is used for diagnosis of "how much noise is there in top-k"; it should usually be upgraded after rerank."""
     return _make_metric_aggregator(f"precision@{k}")
 
 
 def mrr() -> Callable[[list[SampleResult]], float]:
-    """Mean Reciprocal Rank：第一条 gold 的 reciprocal rank 求均.
+    """Mean Reciprocal Rank: average the reciprocal rank of the first gold.
 
-    适合"只关心首条对不对"的场景（QA 上 grounding 通常只取 top-1 引用）.
-    """
+    Suitable for scenarios where "you only care about whether the first article is correct" (grounding on QA usually only takes the top-1 references)."""
     return _make_metric_aggregator("mrr")
 
 
 def ndcg_at_k(k: int = 10) -> Callable[[list[SampleResult]], float]:
-    """Normalized DCG@k：rank 敏感的 graded relevance 综合分.
+    """Normalized DCG@k: rank sensitive graded relevance comprehensive score.
 
-    rerank 学术对比的事实标准；当前实现 binary relevance（0/1），未来扩 graded
-    可在 _build_qrels_run 把 gold_ids 改 dict[str, int].
-    """
+    rerank The de facto standard for academic comparison; currently implements binary relevance (0/1), and will expand in the future graded
+    You can change gold_ids to dict[str, int] in _build_qrels_run."""
     return _make_metric_aggregator(f"ndcg@{k}")
 
 
 def map_at_k(k: int = 10) -> Callable[[list[SampleResult]], float]:
-    """Mean Average Precision@k：综合 recall + rank 的鸟瞰指标.
+    """Mean Average Precision@k: A bird’s-eye view indicator of comprehensive recall + rank.
 
-    对"前面 rank 越准 + 召回越全"双重奖励；TREC 老牌主指标.
-    """
+    Double reward for "the more accurate the previous rank + the more complete the recall"; TREC is the veteran main indicator."""
     return _make_metric_aggregator(f"map@{k}")

@@ -1,34 +1,33 @@
-# 工程维度评估词典
+# Engineering dimensions evaluation glossary
 
-跨 workshop 项目通用的 ADR / 决策评估框架。任一项目的 `DECISIONS.md` 里出现 `### 工程维度评估` 表格时，默认以下列 7 个维度为轴。底层标准沿用 ISO/IEC 25010，表格中并列给出本项目（LLM 应用为主）的本地化用词。
+Cross-workshop ADR / decision evaluation framework. When a `### Engineering dimensions evaluation` table appears in any project's `DECISIONS.md`, the following 7 dimensions are the default axes. Underlying standards follow ISO/IEC 25010; the table also gives localized terminology for this project (primarily LLM applications).
 
-## 7 个维度
+## 7 dimensions
 
 
-|#|ISO/IEC 25010 维度|本项目用词|关注什么|判定信号|
+|#|ISO/IEC 25010 dimension|Project term|What to focus on|Decision signals|
 |---|---|---|---|---|
-|1|Maintainability / Modularity (cohesion 视角)|**内聚度**|模块内相关职责是否聚拢|一个模块是不是只干一件事；改一个需求会不会散落到多处|
-|2|Maintainability / Modularity (coupling 视角)|**耦合度**|模块间依赖强度|替换/删除/mock 一个模块会牵连多少其他模块|
-|3|Maintainability / Analyzability|**可观测性 / 可审计性**|运行过程是否可见 + 事后是否可回放|有没有结构化 log / event / transcript|
-|4|Reliability / Fault tolerance (LLM 场景特化)|**LLM 不确定性容忍**|对 LLM 失控的包容度|遇到失控是 abort、静默错，还是 self-correct + 把违规记账|
-|5|Maintainability / Modifiability|**向后兼容 / 演化友好**|新增能力是否破坏旧场景|default 是否保老行为；schema 扩展是加法还是改法|
-|6|Usability / Learnability|**学习曲线**|使用者用起来要学多少|配置字段数、心智模型层数、对使用者知识的假设门槛|
-|7|Maintainability / Testability|**可测试性**|能否写回归测试 / 可复现实验|有无 DI 注入点、fixture 场景、确定性输入输出|
+|1|Maintainability / Modularity (cohesion)|**Cohesion**|Whether related responsibilities cluster within a module|Does one module do one thing; does a single requirement change scatter across many places|
+|2|Maintainability / Modularity (coupling)|**Coupling**|Strength of dependencies between modules|How many other modules are affected when replacing, removing, or mocking one module|
+|3|Maintainability / Analyzability|**Observability / auditability**|Whether runtime is visible and replayable after the fact|Structured logs / events / transcripts present or not|
+|4|Reliability / Fault tolerance (LLM-specific)|**LLM uncertainty tolerance**|How much LLM misbehavior is acceptable|On failure: abort, silent wrong answer, or self-correct + record the violation|
+|5|Maintainability / Modifiability|**Backward compatibility / evolution-friendly**|Whether new capabilities break old scenarios|Defaults preserve old behavior; schema extension is additive vs. breaking|
+|6|Usability / Learnability|**Learning curve**|How much a user must learn to operate it|Config field count, mental model layers, assumed prior knowledge|
+|7|Maintainability / Testability|**Testability**|Whether regression tests / reproducible experiments are feasible|DI injection points, fixture scenarios, deterministic I/O|
 
 
-## 主流框架有、本项目忽略
+## Common in mainstream frameworks, ignored in this project
 
-ISO 25010 / 通用 ADR 模板里常见，但在本项目（个人 vibe sandbox + LLM workshop）语境下统一忽略。如某项目从 `play/` 升 `grow/` 触及相关瓶颈，需在该 ADR 内单独评估。
+Dimensions commonly seen in ISO 25010 / generic ADR templates but uniformly ignored in this project (personal vibe sandbox + LLM workshop). If a project moves from `play/` to `grow/` and hits related bottlenecks, evaluate separately within that ADR.
 
 
-|ISO/IEC 25010 维度|中文|忽略理由|
+|ISO/IEC 25010 dimension|Term|Reason ignored|
 |---|---|---|
-|Functional Suitability|功能正确性|决策默认假定功能需求已满足，不作为权衡轴|
-|Performance Efficiency|性能 / 时延 / 资源占用|`play/` 阶段非瓶颈|
-|Security|安全性|个人 sandbox，无生产暴露面|
-|Reliability (Availability / Recoverability / Maturity)|可用性 / 可恢复性 / 成熟度|非生产服务，重跑成本低|
-|Portability|可移植性|单机本地运行，无跨平台/跨云需求|
-|Compatibility / Interoperability|互操作性|多数 standalone；跨工具协议需求由维度 5 部分覆盖|
-|(LLM 通用补充，非 ISO)|调用成本 / token 经济性|实验阶段不计；若成本是决策驱动因子需在该 ADR 内单独说明|
-
+|Functional Suitability|Functional correctness|Decisions assume functional requirements are met; not used as a trade-off axis|
+|Performance Efficiency|Performance / latency / resource use|Not a bottleneck in the `play/` phase|
+|Security|Security|Personal sandbox, no production exposure|
+|Reliability (Availability / Recoverability / Maturity)|Availability / recoverability / maturity|Not a production service; re-run cost is low|
+|Portability|Portability|Single-machine local runs; no cross-platform / cross-cloud requirement|
+|Compatibility / Interoperability|Interoperability|Mostly standalone; cross-tool protocol needs partially covered by dimension 5|
+|(LLM supplement, non-ISO)|Call cost / token economics|Not tracked in experiments; if cost drives a decision, note separately in that ADR|
 

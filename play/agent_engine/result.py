@@ -1,24 +1,25 @@
-"""Run result + transcript / scenario 解读视图（schema 解读权 SoT，DECISIONS §13 / §16）.
+"""Run result + transcript / scenario interpretation views (schema interpretation SoT, DECISIONS §13 / §16).
 
-`Result` 既是 `Engine.invoke()` 的返回类型，又是 `cli.py --save-result-json` 写出的
-envelope schema 来源（`dataclasses.asdict`）。
+`Result` is both the return type of `Engine.invoke()` and the envelope schema source
+written by `cli.py --save-result-json` (`dataclasses.asdict`).
 
-§13 立"transcript / scenario 解读 typed view 公开化"；§16 接着把 transcript entry 自身
-从 `list[dict]` 升级到 `list[TranscriptEntry]` typed dataclass union，并给 envelope 加
-逐次 LLM 调用的 `usage: list[TokenUsage]`. 老 envelope（pre-§16，speaker entry 无 type
-字段、无 usage 字段）一律不可读 —— 用户已 rerun mining 落新 schema.
+§13 establishes public typed views for transcript / scenario interpretation; §16 upgrades
+transcript entries themselves from `list[dict]` to a `list[TranscriptEntry]` typed dataclass
+union and adds per-LLM-call `usage: list[TokenUsage]` to the envelope. Old envelopes
+(pre-§16, speaker entries without a type field, no usage field) are unreadable — the user
+has rerun mining to produce the new schema.
 
-公开面：
-- `Result` envelope dataclass（5 字段：artifact / transcript / success / warnings / usage）
-- `TranscriptEntry` union：`TopicEntry | TurnEntry | SpeakerEntry | ToolCallEntry |
+Public surface:
+- `Result` envelope dataclass (5 fields: artifact / transcript / success / warnings / usage)
+- `TranscriptEntry` union: `TopicEntry | TurnEntry | SpeakerEntry | ToolCallEntry |
   ArtifactEventEntry | SummaryEntry`
-- `ToolCall` / `TurnView` typed view（§13）；`TokenUsage` per-LLM-call 明细（§16）
-- `Result.from_dict / load_json` envelope ↔ Result IO（缺字段 KeyError，无降级）
-- `Result.tool_calls() / turns() / speakers() / find_finalize_decision()` 解读视图
+- `ToolCall` / `TurnView` typed views (§13); `TokenUsage` per-LLM-call detail (§16)
+- `Result.from_dict / load_json` envelope ↔ Result IO (missing fields → KeyError, no downgrade)
+- `Result.tool_calls() / turns() / speakers() / find_finalize_decision()` interpretation views
 
-设计参照：OpenAI Agents SDK `RunResult.new_items`（typed `RunItem` union）/
-Anthropic `Message.content[ContentBlock]`（typed block union + `usage`）/
-inspect_ai `ChatMessage`（typed dispatch）.
+Design references: OpenAI Agents SDK `RunResult.new_items` (typed `RunItem` union) /
+Anthropic `Message.content[ContentBlock]` (typed block union + `usage`) /
+inspect_ai `ChatMessage` (typed dispatch).
 """
 from __future__ import annotations
 
@@ -31,16 +32,16 @@ ToolCallKind = Literal["artifact", "tracer"]
 
 
 # =========================================================================
-# Transcript entry typed dataclass union（§16）
+# Transcript entry typed dataclass union (§16)
 # =========================================================================
 #
-# 每条 transcript entry 都是 frozen dataclass 含显式 `type` Literal tag.
-# `dataclasses.asdict` 序列化为 dict 时 `type` 字段保留，envelope JSON 通过 `type`
-# 反向 dispatch 回正确的 typed class（`_entry_from_dict`）.
+# Each transcript entry is a frozen dataclass with an explicit `type` Literal tag.
+# When `dataclasses.asdict` serializes to dict, the `type` field is preserved; envelope
+# JSON reverse-dispatches to the correct typed class via `_entry_from_dict`.
 
 @dataclass(frozen=True)
 class TopicEntry:
-    """讨论起首注入的 topic（scenario body 文本），每个 transcript 第一条."""
+    """Topic injected at discussion start (scenario body text); first entry in every transcript."""
     type: Literal["topic"] = "topic"
     content: str = ""
     ts: float = 0.0
@@ -48,7 +49,7 @@ class TopicEntry:
 
 @dataclass(frozen=True)
 class TurnEntry:
-    """`<turn X of N>` marker，切 turn 用. 每个 (agent, step) 展开一条."""
+    """`<turn X of N>` marker used for turn segmentation. One per expanded (agent, step) turn."""
     type: Literal["turn"] = "turn"
     content: str = ""        # "turn N of M"
     ts: float = 0.0
@@ -56,7 +57,7 @@ class TurnEntry:
 
 @dataclass(frozen=True)
 class SpeakerEntry:
-    """agent 单次 LLM 回复. §16 起显式带 `type="speaker"` tag（与其它 entry 体例对齐）."""
+    """Single LLM reply from an agent. §16 adds explicit `type="speaker"` tag (aligned with other entries)."""
     type: Literal["speaker"] = "speaker"
     speaker: str = ""
     content: str = ""
@@ -65,7 +66,7 @@ class SpeakerEntry:
 
 @dataclass(frozen=True)
 class ToolCallEntry:
-    """非 artifact 工具调用记录（`ToolTracer` 写入），如 `retrieve_docs`."""
+    """Non-artifact tool call record (written by `ToolTracer`), e.g. `retrieve_docs`."""
     type: Literal["tool_call"] = "tool_call"
     caller: str = ""
     tool: str = ""
@@ -78,7 +79,7 @@ class ToolCallEntry:
 
 @dataclass(frozen=True)
 class ArtifactEventEntry:
-    """artifact 工具调用记录（`ArtifactStore` 写入），如 `write_section / cast_vote / finalize_artifact`."""
+    """Artifact tool call record (written by `ArtifactStore`), e.g. `write_section / cast_vote / finalize_artifact`."""
     type: Literal["artifact_event"] = "artifact_event"
     tool: str = ""
     caller: str = ""
@@ -89,7 +90,7 @@ class ArtifactEventEntry:
 
 @dataclass(frozen=True)
 class SummaryEntry:
-    """SummaryMemory 投影 LLM messages 时合并历史的占位，不进真 transcript（仅 build_messages 内部）."""
+    """Placeholder when SummaryMemory merges history while projecting LLM messages; not in real transcript (internal to build_messages only)."""
     type: Literal["summary"] = "summary"
     content: str = ""
 
@@ -111,10 +112,10 @@ _ENTRY_BY_TYPE: dict[str, type] = {
 
 
 def _entry_from_dict(d: dict) -> TranscriptEntry:
-    """envelope dict 的单条 entry → typed `TranscriptEntry`.
+    """Single envelope dict entry → typed `TranscriptEntry`.
 
-    严格 dispatch：缺 `type` 字段或 `type` 未注册都直接 raise；不再 fallback 到
-    "speaker 字段存在则视作 speaker" 这类隐式规则（§16 立 strict schema）.
+    Strict dispatch: missing `type` or unregistered `type` raises directly; no fallback to
+    implicit rules like "if speaker field exists, treat as speaker" (§16 strict schema).
     """
     entry_type = d["type"]
     cls = _ENTRY_BY_TYPE[entry_type]
@@ -122,18 +123,19 @@ def _entry_from_dict(d: dict) -> TranscriptEntry:
 
 
 # =========================================================================
-# Token usage（§16）
+# Token usage (§16)
 # =========================================================================
 
 @dataclass(frozen=True)
 class TokenUsage:
-    """单次 LLM 调用的 token / 时延明细.
+    """Token / latency detail for a single LLM call.
 
-    逐次明细而非 aggregate：消费者用 `sum(u.input_tokens for u in result.usage)`
-    自算 total 的同时，可按 `model` / `caller` 切分（per-agent / per-model 成本分析）.
+    Per-call detail rather than aggregate: consumers can `sum(u.input_tokens for u in result.usage)`
+    for totals while still slicing by `model` / `caller` (per-agent / per-model cost analysis).
 
-    流式调用未提供 usage 时（某些 backend stream 尾 chunk 缺字段）填 0；
-    `play/evals/metrics/efficiency.py` 在 cost 计算时降级到 0.0，与历史口径一致.
+    When streaming calls provide no usage (some backends lack fields on the final stream chunk),
+    fill 0; `play/evals/metrics/efficiency.py` degrades cost calculation to 0.0, consistent
+    with historical behavior.
     """
     model: str
     caller: str
@@ -145,17 +147,17 @@ class TokenUsage:
 
 
 # =========================================================================
-# §13 typed view（小调整以接 typed entry）
+# §13 typed views (minor adjustments for typed entries)
 # =========================================================================
 
 @dataclass(frozen=True)
 class ToolCall:
-    """transcript 中一次工具调用的 typed 视图.
+    """Typed view of one tool call in the transcript.
 
-    `kind="artifact"` 来自 `ArtifactStore` 写入的 `artifact_event`（六个 artifact
-    工具）；`kind="tracer"` 来自 `ToolTracer` 写入的 `tool_call`（非 artifact 工具
-    如 `retrieve_docs`）。两类事件的字段不同，但这一层规约让消费者只看 typed
-    `(tool, caller, arguments)`。
+    `kind="artifact"` comes from `ArtifactStore` `artifact_event` entries (six artifact
+    tools); `kind="tracer"` comes from `ToolTracer` `tool_call` entries (non-artifact tools
+    like `retrieve_docs`). The two event shapes differ, but this layer normalizes to typed
+    `(tool, caller, arguments)` for consumers.
     """
 
     tool: str
@@ -167,12 +169,12 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class TurnView:
-    """transcript 中一段 turn（`<turn X of N>` marker 之间的所有 entry）的 typed 视图.
+    """Typed view of one turn segment in the transcript (all entries between `<turn X of N>` markers).
 
-    `turn_idx` 1-based，与 `Discussion.run` 写入的 `turn N of M` marker 对齐。
-    `start_offset` 是该段第一个 entry 在原 `transcript` 列表里的 0-based 全局索引——
-    `play/agent_sft/data/extractor.py` 需要它把段内 local idx 映射回 transcript
-    全局位置以切 context；其它消费者可忽略。
+    `turn_idx` is 1-based, aligned with the `turn N of M` marker written by `Discussion.run`.
+    `start_offset` is the 0-based global index of the segment's first entry in the original
+    `transcript` list — `play/agent_sft/data/extractor.py` needs it to map local segment idx
+    back to global transcript positions for context slicing; other consumers may ignore it.
     """
 
     turn_idx: int
@@ -180,16 +182,16 @@ class TurnView:
     entries: tuple[TranscriptEntry, ...]
 
     def attempts(self, agent: str) -> list[list[TranscriptEntry]]:
-        """段内按 `agent` 的 SpeakerEntry 入栈切 attempt——每次 speaker 标志一次新 attempt 的开始.
+        """Split segment into attempts by `agent` SpeakerEntry — each speaker entry starts a new attempt.
 
-        与 `Discussion._run_turn` 的 retry 循环对齐：第一个 SpeakerEntry 是 attempt 0，
-        require_tool 未满足触发 nudge 后第二个 SpeakerEntry 是 attempt 1，依此类推。
+        Aligned with `Discussion._run_turn` retry loop: first SpeakerEntry is attempt 0;
+        after require_tool miss triggers nudge, second SpeakerEntry is attempt 1, and so on.
 
-        规约：
-          - 一个 turn 通常只属于一个 agent，所以"其他 speaker"很少出现；万一出现
-            会被作为前一 attempt 的 trailing 事件吞掉，不影响计数
-          - 没有任何 speaker entry 的段 → 0 attempts（caller 完全沉默）
-          - speaker 之前的事件会被丢弃
+        Conventions:
+          - A turn usually belongs to one agent, so "other speakers" are rare; if they appear
+            they are absorbed as trailing events of the previous attempt without affecting counts
+          - Segment with no speaker entries → 0 attempts (caller was completely silent)
+          - Events before the first speaker are dropped
         """
         out: list[list[TranscriptEntry]] = []
         current: list[TranscriptEntry] | None = None
@@ -205,12 +207,12 @@ class TurnView:
         return out
 
     def tool_calls(self) -> list[ToolCall]:
-        """段内的工具调用（`ToolCallEntry` + `ArtifactEventEntry`），同 `Result.tool_calls` 的规约."""
+        """Tool calls within the segment (`ToolCallEntry` + `ArtifactEventEntry`); same convention as `Result.tool_calls`."""
         return _entries_to_tool_calls(self.entries)
 
 
 def _entry_to_tool_call(entry: TranscriptEntry) -> ToolCall | None:
-    """把 typed `TranscriptEntry` 规约成 `ToolCall`；非工具事件返 None."""
+    """Normalize typed `TranscriptEntry` to `ToolCall`; returns None for non-tool events."""
     if isinstance(entry, ArtifactEventEntry):
         return ToolCall(
             tool=entry.tool, caller=entry.caller,
@@ -253,8 +255,8 @@ class Result:
     def from_dict(cls, data: dict) -> "Result":
         """envelope dict → Result.
 
-        §16 起严格：缺任何字段直接 `KeyError`. 老 envelope（pre-§16）不可读；如需消费
-        历史数据先重跑 mining 重建.
+        §16 onward is strict: any missing field raises `KeyError` directly. Old envelopes
+        (pre-§16) are unreadable; rerun mining to rebuild historical data first.
         """
         return cls(
             artifact=dict(data["artifact"]),
@@ -266,22 +268,21 @@ class Result:
 
     @classmethod
     def load_json(cls, path: str | Path) -> "Result":
-        """从 `cli.py --save-result-json` 写出的文件加载 Result."""
+        """Load Result from a file written by `cli.py --save-result-json`."""
         with open(path, encoding="utf-8") as f:
             return cls.from_dict(json.load(f))
 
     # ---- transcript views ----------------------------------------------
 
     def tool_calls(self) -> list[ToolCall]:
-        """transcript 内所有工具调用按时间顺序合并（`ToolCallEntry` ∪ `ArtifactEventEntry`）."""
+        """All tool calls in transcript merged in time order (`ToolCallEntry` ∪ `ArtifactEventEntry`)."""
         return _entries_to_tool_calls(self.transcript)
 
     def turns(self) -> list[TurnView]:
-        """按 `TurnEntry` marker 切段；`turn_idx` 从 1 起，marker 自身丢，turn 前杂物丢.
+        """Segment by `TurnEntry` markers; `turn_idx` starts at 1; markers themselves dropped; pre-turn debris dropped.
 
-        引擎在每个 (agent, step) 展开 turn 前 append 一个 turn marker
-        (`Discussion.run`)；段数 = 总 turn 数；segment 元素 tuple 化保持
-        immutability。
+        Engine appends a turn marker before each expanded (agent, step) turn (`Discussion.run`);
+        segment count = total turn count; segment entries are tupleized for immutability.
         """
         out: list[TurnView] = []
         current: list[TranscriptEntry] = []
@@ -312,15 +313,16 @@ class Result:
         return out
 
     def speakers(self) -> set[str]:
-        """transcript 里实际说过话的 speaker 名集合（去重）."""
+        """Set of speaker names that actually spoke in the transcript (deduplicated)."""
         return {e.speaker for e in self.transcript if isinstance(e, SpeakerEntry)}
 
     def find_finalize_decision(self) -> str | None:
-        """扫工具调用找最后一次 `finalize_artifact`，从 arguments['decision'] 取并 strip.
+        """Scan tool calls for the last `finalize_artifact`; strip `arguments['decision']`.
 
-        `finalize_artifact` 设计幂等（重入返 error），理论上 transcript 内最多一次成功调用；
-        若仍出现多次（如边界事故），返**最后**一次的 decision 更贴近"封板状态"语义.
-        decision 缺失 / 空 / 非 str 时该次返 None，继续往前找。
+        `finalize_artifact` is designed to be idempotent (re-entry returns error), so in theory
+        at most one successful call exists in the transcript; if multiple appear (edge case),
+        return the **last** decision — closest to "sealed state" semantics.
+        Returns None and continues searching when decision is missing / empty / non-str.
         """
         decision: str | None = None
         for tc in self.tool_calls():

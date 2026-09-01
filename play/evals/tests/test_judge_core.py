@@ -1,14 +1,13 @@
-"""metrics/judge_core.py 单元层：4 个 judge + 解析 + 去偏机制 共 12 条断言.
+"""metrics/judge_core.py unit layer: 4 judges + parsing + debiasing mechanism, a total of 12 assertions.
 
-零网络。FakeJudgeLM 接受 `list[str]`（按调用 cursor 推进）或 `Callable[[prompt], text]`
-（规则函数），保证测试完全确定性、CI 友好。
+Zero network. FakeJudgeLM accepts `list[str]` (advanced by calling cursor) or `Callable[[prompt], text]`
+(Rule function) to ensure that the test is completely deterministic and CI-friendly.
 
-按 plan §二.1 + §六（"主舞台分配"）：
-  - pointwise: task 层是主舞台，这里只锁 "mean" 形状契约
-  - pairwise: **本文件**是主舞台（swap 真去偏 / 一致 winner / 矛盾 tie）
-  - g_eval:   **本文件**是主舞台（多维加权 / 多采样替代 logprob 通路）
-  - self_consistency: **本文件**是主舞台（majority vote / tie 锁死 / 套 pointwise）
-"""
+According to plan §2.1 + §6 ("Main Stage Assignment"):
+  - pointwise: The task layer is the main stage, and only the "mean" shape contract is locked here.
+  - pairwise: **This document** is the main stage (swap true debiasing / consistent winner / contradictory tie)
+  - g_eval: **this file** is the main stage (multidimensional weighting/multisampling instead of logprob pass)
+  - self_consistency: **This file** is the main stage (majority vote / tie lock / set pointwise)"""
 
 from __future__ import annotations
 
@@ -29,13 +28,12 @@ from evals.models.base import LM
 
 
 class FakeJudgeLM(LM):
-    """确定性 LM stub。
+    """Deterministic LM stub.
 
-    构造选其一：
-      - `outputs=list[str]`：按调用顺序循环（cursor）
-      - `outputs=Callable[[prompt], text]`：规则函数，根据 prompt 内容决定输出
-    每个 generate_until call 内有 N 个 request → 推 N 步 cursor / 调 N 次规则.
-    """
+    Choose one of the structures:
+      - `outputs=list[str]`: loop in calling order (cursor)
+      - `outputs=Callable[[prompt], text]`: rule function, determines output based on prompt content
+    There are N requests in each generate_until call → push the cursor N steps / adjust the rules N times."""
 
     def __init__(self, outputs, *, name: str = "fake") -> None:
         self.name = name
@@ -68,10 +66,10 @@ def _resp(doc_id: str = "d0", text: str = "hyp") -> Response:
     return Response(doc_id=doc_id, text=text)
 
 
-# ---------- parse_pointwise_score（3 条）----------
+# ---------- parse_pointwise_score (3 items) ----------
 
 def test_parse_pointwise_score_extracts_int():
-    """常见 judge 输出格式都能解析到分数."""
+    """Common judge output formats can be parsed into scores."""
     assert parse_pointwise_score("Score: 4/5") == 4
     assert parse_pointwise_score("4") == 4
     assert parse_pointwise_score("My rating is 4 out of 5") == 4
@@ -79,27 +77,26 @@ def test_parse_pointwise_score_extracts_int():
 
 
 def test_parse_pointwise_score_invalid_raises():
-    """完全无 int 时抛异常，不静默 fallback——judge 解析鲁棒是最高频故障点."""
+    """Exceptions are thrown when there is no int at all, and there is no silent fallback - the robustness of judge analysis is the most frequent failure point."""
     with pytest.raises(ValueError):
         parse_pointwise_score("totally not a score")
 
 
 def test_parse_pointwise_score_clamps_out_of_range():
-    """超出 scale 的 int 被 clamp 到边界（行为锁死）。
+    """Ints that exceed scale are clamped to the boundary (the behavior is locked).
 
-    优先返回首个落在 scale 内的 int；都不在则 clamp 第一个 int。
-    "Score: 7/5" 同时含 7 和 5 → 优先 5（在 scale 内）。
-    "0" 只有 0 → clamp 到 1。
-    """
+    The first int that falls within scale is returned first; if it is not present, clamp the first int.
+    "Score: 7/5" contains both 7 and 5 → takes precedence over 5 (within scale).
+    "0" only clamps 0 → to 1."""
     assert parse_pointwise_score("Score: 7/5") == 5
     assert parse_pointwise_score("0") == 1
     assert parse_pointwise_score("999") == 5
 
 
-# ---------- judge_pointwise（2 条）----------
+# ---------- judge_pointwise (2 items) ----------
 
 def test_pointwise_mean_with_fake_judge():
-    """5 条预设分数 [3,4,5,2,1]，mean=3.0——基础 pointwise 形状契约."""
+    """5 preset scores [3,4,5,2,1], mean=3.0 - basic pointwise shape contract."""
     fake = FakeJudgeLM(outputs=["3", "4", "5", "2", "1"])
     pj = judge_pointwise(fake, prompt_template="rate: {response}")
 
@@ -108,26 +105,24 @@ def test_pointwise_mean_with_fake_judge():
 
 
 def test_pointwise_returns_none_on_parse_failure():
-    """DECISIONS §X wave 4：LM 输出无 int 可解析 → closure 返 None 而非 raise.
+    """DECISIONS §X wave 4: LM output no int parsable → closure returns None instead of raise.
 
-    与 phase 7 wave 2 P2 立的"None 占位未测得"原则同形——1-5 scale 0 越界，
-    None 显式表"未测得"，aggregator 自然过滤；区别于 raise 中断整 run.
+    Identical to the "None occupancy not measured" principle of phase 7 wave 2 P2 - 1-5 scale 0 is out of bounds,
+    None explicitly indicates "not measured" and the aggregator is naturally filtered; it is different from raise which interrupts the entire run.
 
-    parse_pointwise_score 自身仍 raise（test_parse_pointwise_score_invalid_raises 锁定）；
-    closure 层是"应用 / 系统层"的鲁棒边界.
-    """
+    parse_pointwise_score itself still raises (test_parse_pointwise_score_invalid_raises locked);
+    The closure layer is the robust boundary of the "application/system layer"."""
     fake = FakeJudgeLM(outputs=["totally not a score"])
     pj = judge_pointwise(fake, prompt_template="rate: {response}")
     assert pj(_doc(), _resp()) is None
 
 
-# ---------- judge_pairwise + pairwise_winrate（3 条）----------
+# ---------- judge_pairwise + pairwise_winrate (3 items) ----------
 
 def test_pairwise_position_bias_neutralized_by_swap():
-    """biased judge 永远说"A 赢"——经 swap 双跑两位置矛盾 → 全计 tie.
+    """The biased judge always says "A wins" - after swap, the two positions are contradictory → total tie.
 
-    这是 swap 去偏的核心断言：swap=True 真的把 biased judge 的"假阳性"中和掉了.
-    """
+    This is the core assertion of swap debiasing: swap=True really neutralizes the "false positives" of the biased judge."""
     biased = FakeJudgeLM(outputs=lambda prompt: "A")
     pairs = [
         (_doc(id=f"d{i}"), _resp(doc_id=f"d{i}", text="X"), _resp(doc_id=f"d{i}", text="Y"))
@@ -141,10 +136,9 @@ def test_pairwise_position_bias_neutralized_by_swap():
 
 
 def test_pairwise_consistent_judge_records_winner():
-    """一致 judge：A/B 与 B/A 双跑都判同一回答赢 → win_rate=1.0.
+    """Unanimous judge: Both A/B and B/A will judge the same answer to win → win_rate=1.0.
 
-    judge 依据"哪个 section 含 'good'"判，与位置无关——consistent 的代表.
-    """
+    Judge is based on "which section contains 'good'", regardless of position - representative of consistent."""
 
     def judge(prompt: str) -> str:
         a_section = prompt.split("Response A:")[1].split("Response B:")[0]
@@ -162,7 +156,7 @@ def test_pairwise_consistent_judge_records_winner():
 
 
 def test_pairwise_inconsistent_pair_counts_as_tie():
-    """A/B 说 A 赢、B/A 也说 A 赢 → 矛盾（位置偏置）→ 计 tie."""
+    """A/B says A wins, B/A also says A wins → contradiction (position offset) → tie."""
     biased = FakeJudgeLM(outputs=lambda prompt: "A")
     pairs = [(_doc(id="d0"), _resp(doc_id="d0", text="X"), _resp(doc_id="d0", text="Y"))]
 
@@ -170,13 +164,12 @@ def test_pairwise_inconsistent_pair_counts_as_tie():
     assert rates["tie"] == 1.0
 
 
-# ---------- g_eval（2 条）----------
+# ---------- g_eval (2 items) ----------
 
 def test_g_eval_multidim_aggregation():
-    """3 维度 × n_samples=1 → 每维直接取单条采样的 score.
+    """3 dimensions × n_samples=1 → directly take the score of a single sample in each dimension.
 
-    outputs cycled ["4","5","3"]：coherence=4, relevance=5, fluency=3.
-    """
+    outputs cycled ["4","5","3"]: coherence=4, relevance=5, fluency=3."""
     fake = FakeJudgeLM(outputs=["4", "5", "3"])
     result = g_eval(
         fake,
@@ -189,11 +182,10 @@ def test_g_eval_multidim_aggregation():
 
 
 def test_g_eval_multi_sample_distribution_replaces_logprob():
-    """n_samples=5 取均值——替代 OpenAI logprob 加权 mean 的离散分布通路.
+    """n_samples=5 mean - a discrete distribution pass that replaces OpenAI logprob's weighted mean.
 
-    outputs=[3,4,5,3,4] → mean=3.8（3 出现 2 次、4 出现 2 次、5 出现 1 次）.
-    单样本只能给点估计，多采样才能逼近"分布的期望"——这是 G-Eval 在无 logprob 下的核心.
-    """
+    outputs=[3,4,5,3,4] → mean=3.8 (3 appears 2 times, 4 appears 2 times, 5 appears 1 time).
+    A single sample can only give a point estimate, and multiple samples can approximate the "expectation of the distribution" - this is the core of G-Eval without logprob."""
     fake = FakeJudgeLM(outputs=["3", "4", "5", "3", "4"])
     result = g_eval(
         fake,
@@ -206,10 +198,9 @@ def test_g_eval_multi_sample_distribution_replaces_logprob():
 
 
 def test_g_eval_dim_returns_none_when_all_samples_unparseable():
-    """DECISIONS §X wave 4：单维 n_samples 全部 parse 失败 → 该维 None"未测得".
+    """DECISIONS §X wave 4: Single dimension n_samples all parse failed → None for this dimension "Not Measured".
 
-    与 phase 7 P2 切片为空时 None 占位同形（语义"判官全失败" ≈ 切片中无样本）.
-    """
+    The same shape as the None placeholder when phase 7 P2 slice is empty (semantic "all judges failed" ≈ no sample in the slice)."""
     fake = FakeJudgeLM(outputs=["bad", "garbage", "no number"])
     result = g_eval(
         fake,
@@ -222,11 +213,10 @@ def test_g_eval_dim_returns_none_when_all_samples_unparseable():
 
 
 def test_g_eval_dim_partial_failure_uses_valid_subset_mean():
-    """DECISIONS §X wave 4：n_samples 部分 parse 失败 → 该维返 valid 子集 mean.
+    """DECISIONS §X wave 4: n_samples partial parse failed → this dimension returns valid subset mean.
 
-    outputs=["4", "bad", "5"] n_samples=3 → valid=[4,5]，mean=4.5；
-    与 phase 8 wave 3 立的"OOV 敏感 metric 切 valid subset"同精神.
-    """
+    outputs=["4", "bad", "5"] n_samples=3 → valid=[4,5], mean=4.5;
+    In the same spirit as phase 8 wave 3 independent "OOV sensitive metric cut valid subset"."""
     fake = FakeJudgeLM(outputs=["4", "bad", "5"])
     result = g_eval(
         fake,
@@ -238,10 +228,10 @@ def test_g_eval_dim_partial_failure_uses_valid_subset_mean():
     assert result["quality"] == 4.5
 
 
-# ---------- self_consistency（3 条）----------
+# ---------- self_consistency (3 items) ----------
 
 def test_self_consistency_majority_vote():
-    """7 次采样 [A,A,B,A,C,A,B] → 众数 A（4 票）."""
+    """7 samples [A,A,B,A,C,A,B] → mode A (4 votes)."""
     seq = ["A", "A", "B", "A", "C", "A", "B"]
     cursor = [0]
 
@@ -255,10 +245,9 @@ def test_self_consistency_majority_vote():
 
 
 def test_self_consistency_breaks_tie_deterministically():
-    """平票时取首个出现的众数（first-seen tiebreak）：[B,A,B,A] → B（B 先到 2 票）.
+    """In the event of a tie break, the mode that appears first (first-seen tiebreak) is taken: [B,A,B,A] → B (B comes first 2 votes).
 
-    锁死行为，避免实现偷换为字典序 / 随机.
-    """
+    Locking behavior to avoid sneaking into dictionary order/random."""
     seq = ["B", "A", "B", "A"]
     cursor = [0]
 
@@ -272,10 +261,9 @@ def test_self_consistency_breaks_tie_deterministically():
 
 
 def test_self_consistency_wraps_pointwise():
-    """套在 pointwise 外层：5 次采样的 mode 是单一 score.
+    """Wrapped in a pointwise outer layer: the mode of 5 samples is a single score.
 
-    fake outputs [4,4,5,4,3] → counts {4:3, 5:1, 3:1} → 众数 4.
-    """
+    fake outputs [4,4,5,4,3] → counts {4:3, 5:1, 3:1} → mode 4."""
     fake = FakeJudgeLM(outputs=["4", "4", "5", "4", "3"])
     base = judge_pointwise(fake, prompt_template="rate: {response}")
     sc = self_consistency(base, n_samples=5)

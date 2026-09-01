@@ -1,21 +1,20 @@
 """Download BFCL `simple_python` slice (first 50 rows) → gold.jsonl.
 
-数据契约（每行）：
-  - id        : "simple_python_<N>" (BFCL 原始 id)
-  - input     : 用户 query 原文（doc_to_text 再套 prompt 模板）
-  - target    : 由 ground_truth 第一组 acceptable values 折出的 canonical call 字符串
-                （单串便于 EM 渲染 / 回归对比；真正打分仍读 metadata.ground_truth）
-  - metadata  :
-      function_schema : 该题函数定义（含 properties / required / type）
-      ground_truth    : 该题 BFCL acceptable-values dict（list-of-acceptable per arg）
-      user_query      : input 的副本，给 prompt 模板用
+Data contract (per row):
+  - id: "simple_python_<N>" (BFCL original id)
+  - input: user query original text (doc_to_text then sets the prompt template)
+  - target: canonical call string extracted from the first set of acceptable values of ground_truth
+                (A single string is convenient for EM rendering/regression comparison; for real scoring, still read metadata.ground_truth)
+  - metadata:
+      function_schema: function definition for this question (including properties / required / type)
+      ground_truth: BFCL acceptable-values dict of this question (list-of-acceptable per arg)
+      user_query: a copy of input, used for prompt template
 
-钉版 commit + 抓取命令落 SOURCE.md（同目录），保证下次跑 _fetch.py 字节级可复现.
+Ding version commit + fetch command is placed in SOURCE.md (same directory) to ensure byte-level reproducibility next time _fetch.py is run.
 
 Usage:
     cd play/evals/data/bfcl_slice
-    python _fetch.py        # 写 gold.jsonl（覆盖）
-"""
+    python _fetch.py # Write gold.jsonl (overwrite)"""
 
 from __future__ import annotations
 
@@ -39,7 +38,7 @@ GOLD_PATH = Path(__file__).resolve().parent / "gold.jsonl"
 
 
 def _load_jsonl(url: str) -> list[dict]:
-    """走 curl 而非 urllib——Python.framework 内置 SSL 偶尔缺 CA 包，curl 用系统 trust store."""
+    """Use curl instead of urllib - Python.framework's built-in SSL occasionally lacks CA packages, curl uses the system trust store."""
     result = subprocess.run(
         ["curl", "-sSL", "--fail", url],
         capture_output=True, text=True, check=True,
@@ -48,26 +47,24 @@ def _load_jsonl(url: str) -> list[dict]:
 
 
 def _format_value(v: object) -> str:
-    """把 GT acceptable-value 折成 Python 字面：str → repr，其它 → repr.
+    """Convert GT acceptable-value into Python literals: str → repr, other → repr.
 
-    BFCL GT 里 list/int/float/bool 直接 repr；str 也 repr 自带引号；嵌套 list/dict 同理.
-    """
+    In BFCL GT, list/int/float/bool repr directly; str also repr has its own quotes; the same goes for nested list/dict."""
     return repr(v)
 
 
 def _canonical_call(name: str, gt_args: dict[str, list]) -> str:
-    """从 BFCL GT 的 first acceptable per arg 折成 `name(a=v, b=v, ...)`.
+    """Folds from BFCL GT's first acceptable per arg to `name(a=v, b=v, ...)`.
 
-    BFCL 约定：`""` 出现在 acceptable list（任意位置）即代表该 arg 可省略——canonical
-    渲染选"最自然"的形式即跳过 optional；只渲染 required（acceptable 不含 ""）的第一
-    个值. 该 canonical 仅用于 EM 渲染 / 报告对账，真正打分仍对全 GT acceptable_values.
-    """
+    BFCL convention: `""` appearing in the acceptable list (any position) means that the arg can be omitted - canonical
+    Render the "most natural" form, i.e. skip the optional; only render the first of required (acceptable without "")
+    values. This canonical is only used for EM rendering/report reconciliation, real scoring is still against full GT acceptable_values."""
     parts: list[str] = []
     for arg_name, acceptable in gt_args.items():
         if not acceptable:
             continue
         if "" in acceptable:
-            continue  # optional → canonical 跳过
+            continue  # optional → canonical skip
         parts.append(f"{arg_name}={_format_value(acceptable[0])}")
     return f"{name}({', '.join(parts)})"
 
@@ -87,18 +84,18 @@ def main() -> None:
         if qid not in by_id:
             print(f"  skip {qid} (no answer)")
             continue
-        # BFCL question schema: question 是 list[list[message]] 嵌套两层（多轮预留），
-        # simple 子集每条只有 1 轮 1 user message
+        # BFCL question schema: question is list[list[message]] nested two levels (reserved for multiple rounds),
+        # The simple subset only has 1 round of 1 user message each.
         user_msg = q["question"][0][0]
         assert user_msg["role"] == "user", f"unexpected role in {qid}"
         user_query = user_msg["content"]
 
-        # function 也是 list（multi-tool 预留）；simple 子集每条 1 个函数
+        # function is also a list (reserved for multi-tool); each simple subset has 1 function
         func = q["function"][0]
         func_name = func["name"]
 
-        gt = by_id[qid]["ground_truth"][0]  # ground_truth 也是 list，simple 取第 1 个
-        # gt 形如 {func_name: {arg: [acceptable_vals]}}
+        gt = by_id[qid]["ground_truth"][0]  # ground_truth is also a list, simple takes the first one
+        # gt is in the form {func_name: {arg: [acceptable_vals]}}
         assert len(gt) == 1, f"unexpected GT shape in {qid}"
         gt_func_name, gt_args = next(iter(gt.items()))
         assert gt_func_name == func_name, f"name mismatch in {qid}: {gt_func_name} vs {func_name}"

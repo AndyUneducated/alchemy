@@ -1,5 +1,5 @@
-"""play/evals — 双模式 LLM 评测框架.
+"""play/evals — dual-mode LLM evaluation framework.
 
-- score 模式：吃 predictions JSONL + gold，纯文件打分（不驱动 LM）
-- run 模式：驱动 LM 跑 prompt，harness 风格
+- score mode: consume predictions JSONL + gold; file-only scoring (no LM)
+- run mode: drive LM over prompts, harness-style
 """

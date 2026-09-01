@@ -1,3 +1,3 @@
-# 鉴权 checklist（摘要）
+# Auth checklist (summary)
 
-P0：密码不进 log；注册限频；改密废 session。关联：BUG CSRF、BUG 注册并发。
+P0: passwords not in logs; signup rate limit; password change invalidates sessions. Related: BUG CSRF, BUG signup concurrency.

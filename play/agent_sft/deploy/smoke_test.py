@@ -1,19 +1,19 @@
 """Phase 4 smoke test — verify `agent-sft-qwen` tag emits `<tool_call>` blocks.
 
-不走 agent_engine（agent_engine 1-round 烟测在 Phase 4 验收清单作为加项另跑），
-只直接调 Ollama HTTP API 验证：
+Do not use agent_engine (agent_engine 1-round smoke test is run separately in the Phase 4 acceptance list as an additional item),
+Only directly call Ollama HTTP API verification:
 
-  1. tag 注册成功（GET /api/tags 含 agent-sft-qwen）
-  2. 给一个明显需要工具调用的 prompt + tools schema，输出
-     parsed `tool_calls`（Ollama 解析 chat template 渲染的 <tool_call> 块）
-     或原始 content 含 `<tool_call>` 字面块。
+  1. Tag registration is successful (GET /api/tags contains agent-sft-qwen)
+  2. Give a prompt + tools schema that obviously requires tool calling, and output
+     parsed `tool_calls` (Ollama parses the <tool_call> block rendered by the chat template)
+     Or raw content containing a `<tool_call>` literal block.
 
-Phase 4 验收口径：bytes-to-bytes 跑通；效果数字留 Phase 5。
+Phase 4 acceptance criteria: bytes-to-bytes run-through; effect figures remain in Phase 5.
 
-用法：
+Usage:
     python smoke_test.py
-    python smoke_test.py --tag agent-sft-qwen --host http://localhost:11434
-"""
+    python smoke_test.py --tag agent-sft-qwen --host http://localhost:11434"""
+    python smoke_test.py --tag agent-sft-qwen --host http://localhost:11434"""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
                 "role": "user",
                 "content": (
                     "请用 retrieve_docs 工具查询主题为 '项目代号 X 历史 commit' 的"
-                    "文档，返回前 5 条。请直接发起工具调用。"
+"Documents, return to the first 5 items. Please initiate a tool call directly."
                 ),
             }
         ],

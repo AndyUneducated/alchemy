@@ -1,30 +1,30 @@
 ---
 agents:
-  - name: 前端
+  - name: Frontend
     role: member
-    prompt: 你是前端工程师，关注体验。每次发言不超过 60 字，用中文。
+    prompt: You are a frontend engineer focused on UX. Keep each reply under 60 words. Reply in English.
     max_tokens: 140
 
-  - name: 后端
+  - name: Backend
     role: member
-    prompt: 你是后端工程师，关注架构。每次发言不超过 60 字，用中文。
+    prompt: You are a backend engineer focused on architecture. Keep each reply under 60 words. Reply in English.
     max_tokens: 140
 
   - name: PM
     role: member
-    prompt: 你是产品经理，关注价值。每次发言不超过 60 字，用中文。
+    prompt: You are a product manager focused on value. Keep each reply under 60 words. Reply in English.
     max_tokens: 140
 
 steps:
-  # 显式 list 形式：仅前端 + PM 先抛想法（演示按 name 寻址）
+  # Explicit list form: Frontend + PM pitch first (demonstrates name-based addressing)
   - id: open
-    who: [前端, PM]
-    instruction: 用一句话提一个团建活动方案。
+    who: [Frontend, PM]
+    instruction: Propose a team-building activity in one sentence.
 
-  # 全员补充 / 反驳
+  # Everyone adds or pushes back
   - id: refine
     who: all
-    instruction: 针对前面方案，用一句话补充或反驳，给出最终建议。
+    instruction: In one sentence, add to or challenge earlier proposals and give a final recommendation.
 ---
 
-我们团队要在一周内做一个团建活动，请讨论方案。
+Our team has one week to plan a team-building activity — discuss options.

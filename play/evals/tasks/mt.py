@@ -1,23 +1,22 @@
-"""Phase 2 vertical slice：族 2（Generation）EN→中 翻译 task.
+"""Phase 2 vertical slice: Family 2 (Generation) EN → Medium Translation task.
 
-6 个指标，覆盖 lexical + embedding 两个 tier（learned tier deferred）：
-  - exact_match    完全字符串相等              （手算）
-  - bleu           sacrebleu corpus-BLEU       （tokenize='zh'）
-  - chrf           sacrebleu corpus-chrF       （字符 n-gram，跨语言鲁棒）
-  - rouge_l        rouge_score F-LCS           （字符级 tokenizer，否则中文被剥光）
-  - meteor         nltk meteor_score           （字符级，需 wordnet 但中文无 synset）
-  - bertscore_f1   bert_score F1               （embedding tier 单独代表）
+6 indicators, covering two tiers of lexical + embedding (learned tier deferred):
+  - exact_match exact string equality (hand calculation)
+  - bleu sacrebleu corpus-BLEU (tokenize='zh')
+  - chrf sacrebleu corpus-chrF (character n-gram, cross-language robust)
+  - rouge_l rouge_score F-LCS (character-level tokenizer, otherwise Chinese will be stripped)
+  - meteor nltk meteor_score (character level, requires wordnet but no synset in Chinese)
+  - bertscore_f1 bert_score F1 (embedding tier represents alone)
 
-教学故事（4 份 predictions 的设计）：
-  - perfect      = gold target，全员 ≈ 1.0（BERTScore 浮点不精确等于 1）
-  - literal      逐字直译（成语处刻意"翻车"），BLEU/chrF 中等
-  - paraphrase   意思保留、词换光，**BLEU 暴跌但 BERTScore 救场** ← embedding tier 核心故事
-  - garbage      完全无关文本，全员低分（BERTScore 仍有 ~0.4 mBERT baseline）
+Teaching story (design of 4 predictions):
+  - perfect = gold target, all members ≈ 1.0 (BERTScore floating point imprecision is equal to 1)
+  - literal literal translation (deliberately "overturning" the idiom), BLEU/chrF medium
+  - Paraphrase retains meaning, replaces words, **BLEU plummets but BERTScore comes to the rescue** ← embedding tier core story
+  - Garbage has nothing to do with text, and everyone has low scores (BERTScore still has ~0.4 mBERT baseline)
 
-bertscore 重依赖处理（lazy + lru_cache）：
-  `bert_score` 在 `_bertscore_scorer()` 内 import，避免 list-tasks 等命令也付 ~700MB
-  下载 + ~3-5s torch 启动；scorer 实例 module-level 缓存避免重复加载模型。
-"""
+bertscore heavy dependency processing (lazy + lru_cache):
+  `bert_score` is imported in `_bertscore_scorer()` to avoid commands such as list-tasks also paying ~700MB
+  Download + ~3-5s torch startup; scorer instance module-level cache avoids repeated loading of models."""
 
 from __future__ import annotations
 
@@ -43,15 +42,14 @@ DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "mt" / "gold.jsonl
 
 
 def _zh_chars(text: str) -> list[str]:
-    """中文字符级分词：去空白后按字拆。
+    """Chinese character-level word segmentation: remove blanks and split by characters.
 
-    BLEU 和 chrF 由 sacrebleu 内置 zh-tokenizer 处理；这里给 ROUGE/METEOR 用。
-    """
+    BLEU and chrF are handled by sacrebleu's built-in zh-tokenizer; here for ROUGE/METEOR."""
     return [c for c in text if not c.isspace()]
 
 
 class _ZhCharTokenizer:
-    """rouge_score 默认 tokenizer 会 strip 非 ASCII 字符——必须提供自定义."""
+    """rouge_score The default tokenizer strips non-ASCII characters - customization must be provided."""
 
     def tokenize(self, text: str) -> list[str]:
         return _zh_chars(text)
@@ -59,7 +57,7 @@ class _ZhCharTokenizer:
 
 @lru_cache(maxsize=1)
 def _rouge_scorer():
-    """rouge_score 实例化有非零成本，整个 process 缓存一次."""
+    """rouge_score instantiation has a non-zero cost and is cached once for the entire process."""
     from rouge_score import rouge_scorer
 
     return rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False, tokenizer=_ZhCharTokenizer())
@@ -67,18 +65,17 @@ def _rouge_scorer():
 
 @lru_cache(maxsize=1)
 def _bertscore_scorer():
-    """BERTScorer 加载约 ~700MB 模型 + ~3-5s. 整个 process 缓存一次.
+    """BERTScorer loads ~700MB model + ~3-5s. The entire process is cached once.
 
-    `lang="zh"` 让 bert-score 选择 `bert-base-chinese` (~400MB)；
-    `rescale_with_baseline=False` 避免依赖 baseline 文件，identical strings 给 ~1.0 但非精确等。
+    `lang="zh"` makes bert-score select `bert-base-chinese` (~400MB);
+    `rescale_with_baseline=False` avoids relying on baseline files, gives identical strings to ~1.0 but not exact, etc.
 
-    `TRANSFORMERS_VERBOSITY=error` + `disable_progress_bar()` 抑制 transformers 加载
-    时打到 stderr 的 `BertModel LOAD REPORT` UNEXPECTED 警告（logging）+ `Loading
-    weights:` tqdm 进度条（progress bar）两类噪音；前者由 env var 控制（HuggingFace
-    官方推荐的日志级别控制方式），后者是独立机制（progress bar 不走 logging）。
-    `setdefault` 让用户显式 export 时不被覆盖；`disable_progress_bar` 是同 import
-    单点副作用。详见 DECISIONS §7.1.4.
-    """
+    `TRANSFORMERS_VERBOSITY=error` + `disable_progress_bar()` suppress transformers loading
+    `BertModel LOAD REPORT` UNEXPECTED warning (logging) + `Loading hit stderr
+    weights:` tqdm progress bar (progress bar) two types of noise; the former is controlled by env var (HuggingFace
+    Officially recommended log level control method), the latter is an independent mechanism (progress bar does not use logging).
+    `setdefault` allows users to export explicitly without being overwritten; `disable_progress_bar` is the same as import
+    Single point side effects. See DECISIONS §7.1.4 for details."""
     import os
 
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -90,10 +87,9 @@ def _bertscore_scorer():
 
 
 def _ensure_nltk_wordnet() -> None:
-    """METEOR 强依赖 wordnet 资源（即便中文无 synset 也要这个文件）。
+    """METEOR strongly relies on wordnet resources (even if Chinese does not have synset, this file is required).
 
-    用 SSL fix 兜底：macOS 系统 Python 常缺根证书。
-    """
+    Use SSL fix to find out: Python on macOS often lacks root certificates."""
     import nltk
 
     try:
@@ -105,7 +101,7 @@ def _ensure_nltk_wordnet() -> None:
         nltk.download("wordnet", quiet=True)
         nltk.download("omw-1.4", quiet=True)
     except Exception:
-        # 走 certifi 兜底再试一次
+        # Go through certifi and try again
         import ssl
 
         import certifi
@@ -117,7 +113,7 @@ def _ensure_nltk_wordnet() -> None:
 
 @register_task("mt")
 class MT(Task):
-    """EN→中 翻译任务，6 指标 demo."""
+    """EN→ZH translation task, 6-metric demo."""
 
     name: ClassVar[str] = "mt"
     output_type: ClassVar[str] = "generate_until"

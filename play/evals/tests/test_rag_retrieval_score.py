@@ -1,16 +1,15 @@
-"""rag_retrieval task score 路径 e2e：4 份 stub predictions 各自的指标在预期区间.
+"""rag_retrieval task score path e2e: 4 copies of stub predictions whose respective indicators are within the expected interval.
 
-数值也是 README 教学叙事——test 绿 = 文档没说谎.
+The numerical value is also the README teaching narrative - test green = the document does not lie.
 
-  | 预测         | recall@5 | mrr   | ndcg@5 | 含义 |
+  | prediction | recall@5 | mrr | ndcg@5 | meaning |
   |---|---|---|---|---|
-  | perfect      | 1.0      | 1.0   | 1.0    | 上界 sanity |
-  | good_rerank  | 1.0      | ~0.5  | mid    | recall 满 / rank 不准 |
-  | weak         | <1.0     | low   | low    | 弱基线 |
-  | garbage      | 0.0      | 0.0   | 0.0    | 下界 sanity |
+  | perfect | 1.0 | 1.0 | 1.0 | upper bound sanity |
+  | good_rerank | 1.0 | ~0.5 | mid | recall full / rank inaccurate |
+  | weak | <1.0 | low | low | weak baseline |
+  | garbage | 0.0 | 0.0 | 0.0 | lower bound sanity |
 
-按 plan §六：每个新 task 重锁 runner 不变量（n_matches / output_type='none' 不调 LM）.
-"""
+According to plan §6: Each new task relocks the runner invariant (n_matches / output_type='none' does not adjust LM)."""
 
 from __future__ import annotations
 
@@ -32,20 +31,20 @@ def _score(pred_name: str) -> dict[str, float]:
     return r.aggregated
 
 
-# ---------- 上下界 sanity ---------------------------------------------------
+# ---------- Upper and lower bounds sanity --------------------------------------------------
 
 def test_perfect_all_metrics_one():
-    """所有 query 的 gold 都在 rank 1（多 gold 在 rank 1+2）→ 全员 1.0."""
+    """The gold of all queries is in rank 1 (multiple golds are in rank 1+2) → all members are 1.0."""
     agg = _score("perfect")
     assert agg["recall@5"] == 1.0
-    assert agg["precision@5"] > 0.0  # gold = 1 个时 precision@5=0.2，多 gold 时更高
+    assert agg["precision@5"] > 0.0  # precision@5=0.2 when gold = 1, higher when there are more gold
     assert agg["mrr"] == 1.0
     assert agg["ndcg@5"] == 1.0
     assert agg["map@5"] == 1.0
 
 
 def test_garbage_all_metrics_zero():
-    """retrieved_ids 全是不存在的 doc → 全员 0.0."""
+    """retrieved_ids all do not exist doc → all members 0.0."""
     agg = _score("garbage")
     assert agg["recall@5"] == 0.0
     assert agg["precision@5"] == 0.0
@@ -54,21 +53,21 @@ def test_garbage_all_metrics_zero():
     assert agg["map@5"] == 0.0
 
 
-# ---------- 核心叙事 -------------------------------------------------------
+# ---------- Core Narrative ---------------------------------------------------------------
 
 def test_good_rerank_full_recall_mid_mrr():
-    """**核心叙事**：gold 都在 top 5 → recall=1.0，但全部退到 rank 2 → mrr~0.5（rerank 救场场景）."""
+    """**Core narrative**: gold is all in top 5 → recall=1.0, but all retreated to rank 2 → mrr~0.5 (rerank rescue scene)."""
     agg = _score("good_rerank")
     assert agg["recall@5"] == 1.0
-    # gold 主要在 rank 2，mrr 应在 0.4 - 0.6 之间
+    # gold is mainly in rank 2, mrr should be between 0.4 - 0.6
     assert 0.4 <= agg["mrr"] <= 0.7
-    # ndcg 也应介于 perfect 与 weak 之间
+    # ndcg should also be between perfect and weak
     assert agg["ndcg@5"] < 1.0
     assert agg["mrr"] < agg["recall@5"]
 
 
 def test_weak_lower_than_good_rerank():
-    """weak 在 mrr / ndcg 上严格弱于 good_rerank."""
+    """weak is strictly weaker than good_rerank on mrr / ndcg."""
     weak = _score("weak")
     good = _score("good_rerank")
     assert weak["mrr"] < good["mrr"]
@@ -76,7 +75,7 @@ def test_weak_lower_than_good_rerank():
 
 
 def test_metric_ordering_perfect_gt_good_gt_weak_gt_garbage():
-    """4 份 predictions 在 mrr 上呈严格递降——指标分辨力的最强证据."""
+    """The 4 predictions show a strict decrease in mrr - the strongest evidence of metric resolution."""
     perfect = _score("perfect")
     good = _score("good_rerank")
     weak = _score("weak")
@@ -85,17 +84,17 @@ def test_metric_ordering_perfect_gt_good_gt_weak_gt_garbage():
     assert perfect["ndcg@5"] >= good["ndcg@5"] >= weak["ndcg@5"] > garbage["ndcg@5"] - 1e-9
 
 
-# ---------- 框架不变量 -----------------------------------------------------
+# ----------Framework invariants--------------------------------------------------------
 
 def test_n_matches_gold():
-    """n == 数据集行数（防新 task 自身 codepath 提前 return / 漏样本）."""
+    """n == the number of rows in the data set (to prevent new task codepath from returning in advance / leaking samples)."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     assert r.n == 8
 
 
 def test_score_missing_pred_raises(tmp_path):
-    """缺 doc_id 严格 KeyError（与 sentiment / mt 同 contract，新 task 重锁）."""
+    """Missing doc_id strict KeyError (same contract as sentiment / mt, new task re-locked)."""
     task = RagRetrieval()
     partial = tmp_path / "partial.jsonl"
     partial.write_text(
@@ -106,7 +105,7 @@ def test_score_missing_pred_raises(tmp_path):
 
 
 def test_artifacts_carry_pred_and_gold_ids():
-    """per_sample.artifacts 必填 pred_ids / gold_ids（aggregation 拉数据的契约）."""
+    """per_sample.artifacts required pred_ids / gold_ids (aggregation contract for pulling data)."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:
@@ -117,9 +116,9 @@ def test_artifacts_carry_pred_and_gold_ids():
 
 
 def test_metrics_empty_for_rag_retrieval():
-    """rag_retrieval 本身不写 per-sample 标量；wave 3（DECISIONS §7.2）撤销 cross-cutting
-    safety AOP 后，sample.metrics 应为空 dict（rag_retrieval 是 retrieval-only task，
-    所有信号在 artifacts.pred_ids / gold_ids 上）."""
+    """rag_retrieval itself does not write per-sample scalars; wave 3 (DECISIONS §7.2) undoes cross-cutting
+    After safety AOP, sample.metrics should be an empty dict (rag_retrieval is a retrieval-only task,
+    All signals are at artifacts.pred_ids/gold_ids)."""
     task = RagRetrieval()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:

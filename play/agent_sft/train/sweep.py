@@ -1,22 +1,21 @@
-"""sweep.py — 控制变量法（controlled-variable）扫描 LoRA 超参，输出 REPORT.md.
+"""sweep.py — controlled-variable method scans LoRA hyperparameters and outputs REPORT.md.
 
-复用 [`play/sft_hello/sweep.py`](../../sft_hello/sweep.py) 的"每个 sweep 只动一个旋钮、
-跑完出含浅显解读的 markdown 表"模具，但：
+Reuse [`play/sft_hello/sweep.py`](../../sft_hello/sweep.py)'s "Each sweep only moves one knob,
+After running, a markdown table template with simple explanations was produced, but:
 
-  - 数据：[`data/triples/train_qwen3.jsonl`](../data/triples/) (DECISIONS §4 schema; v1.5 起切到 qwen3 三元组)
-  - 底座：mlx-community/Qwen3.5-9B-4bit（QLoRA; v1.5 起底座切到 qwen3.x，详见 DECISIONS §10）
-  - 训练：subprocess 调 [`train.py`](train.py)（封装好 mlx_lm.lora）
-  - eval：[`eval_smoke.py`](eval_smoke.py) 4 项 tool-call 指标，nudge-fire-rate 的 fast proxy
-  - sweep 维度（4 dim × 3-4 值 = 16 runs）：
-      * iters / lr / num_layers / rank
-  - 失败 / NaN / 非零退出标 diverged，仍记入 REPORT 但 commentary 标"发散".
+  - Data: [`data/triples/train_qwen3.jsonl`](../data/triples/) (DECISIONS §4 schema; switch to qwen3 triples since v1.5)
+  - Base: mlx-community/Qwen3.5-9B-4bit (QLoRA; base switched to qwen3.x from v1.5, See DECISIONS §10)
+  - Training: subprocess tune [`train.py`](train.py) (encapsulated mlx_lm.lora)
+  - eval: [`eval_smoke.py`](eval_smoke.py) 4 tool-call indicators, nudge-fire-rate fast proxy
+  - sweep dimensions (4 dim × 3-4 values = 16 runs):
+      *iters/lr/num_layers/rank
+  - Failure / NaN / non-zero exit flag diverged, still logged in REPORT but commentary flag "diverged".
 
-用法:
-    python sweep.py all                  # 跑全部 4 个 sweep
-    python sweep.py iters                # 只跑 iters
-    python sweep.py iters lr             # 跑指定几个
-    python sweep.py report               # 不重跑，仅根据 results.json 重生 REPORT.md
-"""
+Usage:
+    python sweep.py all # run all 4 sweeps
+    python sweep.py iters # run only iters
+    python sweep.py iters lr # Run specified ones
+    python sweep.py report # skip re-run, only re-run based on results.json REPORT.md"""
 
 from __future__ import annotations
 
@@ -33,12 +32,15 @@ SWEEPS_DIR = HERE / "runs" / "sweeps"
 DEFAULT_CONFIG = HERE / "lora_config.yaml"
 
 MODEL_ID = "mlx-community/Qwen3.5-9B-4bit"
-TRAIN_FILE = "train_qwen3.jsonl"   # v1.5: 500 train sample (v1 用 train_7b_1k.jsonl 766)
-VALID_FILE = "val_qwen3.jsonl"     # v1.5: 100 val sample (v1 用 val_7b_1k.jsonl 196)
+TRAIN_FILE = "train_qwen3.jsonl" # v1.5: 500 train sample (v1 uses train_7b_1k.jsonl 766)
+VALID_FILE = "val_qwen3.jsonl" # v1.5: 100 val sample (v1 uses val_7b_1k.jsonl 196)
 
-# 500 sample / batch 4 = 125 iter/epoch；v1.5 BASE iters=400 ≈ 3.2 epoch (与 v1 sweep iters=600 同强度)
-# （实测 iters=200 已让 train_loss 0.28→0.000——schema 信号高度可压缩；更长 iters
-# 主要是 overfit 观察用）。
+# 500 sample / batch 4 = 125 iter/epoch; v1.5 BASE iters=400 ≈ 3.2 epoch (same strength as v1 sweep iters=600)
+# 500 sample / batch 4 = 125 iter/epoch; v1.5 BASE iters=400 ≈ 3.2 epoch (same strength as v1 sweep iters=600)
+# (actually measured iters=200 has made train_loss 0.28→0.000 - the schema signal is highly compressible; longer iters
+# (actually measured iters=200 has made train_loss 0.28→0.000 - the schema signal is highly compressible; longer iters
+# Mainly used for overfit observation).
+# Mainly used for overfit observation).
 BASE = {
     "iters": 200,
     "batch_size": 4,
@@ -47,18 +49,22 @@ BASE = {
     "rank": 16,
 }
 
-# 控制变量 sweep（实测：M4 Pro 48GB 上 batch=4 / layers=16 / 4-bit Qwen2.5-7B
-# ≈ 18s/iter；原本规划的 4 dim × 4 值 = 16 runs 实际需 50h+，远超 overnight 预算。
-# 实际跑 2 个最有信息量的维度 + 6 runs ≈ 8h；layers / rank dim 留 Phase 3.5 follow-up
-# 单独再跑（届时可借力 multi-GPU / 云）。详 JOURNAL 2026-05-10 取舍.）
+# Control variable sweep (actual measurement: batch=4 / layers=16 / 4-bit Qwen2.5-7B on M4 Pro 48GB
+# Control variable sweep (actual measurement: batch=4 / layers=16 / 4-bit Qwen2.5-7B on M4 Pro 48GB
+# ≈ 18s/iter; the originally planned 4 dim × 4 value = 16 runs actually takes 50h+, far exceeding the overnight budget.
+# ≈ 18s/iter; the originally planned 4 dim × 4 value = 16 runs actually takes 50h+, far exceeding the overnight budget.
+# Actually run the 2 most informative dimensions + 6 runs ≈ 8h; layers / rank dim leaving Phase 3.5 follow-up
+# Actually run the 2 most informative dimensions + 6 runs ≈ 8h; layers / rank dim leaving Phase 3.5 follow-up
+# Run alone (you can use multi-GPU / cloud at that time). Details JOURNAL 2026-05-10 Choice.)
+# Run alone (you can use multi-GPU / cloud at that time). Details JOURNAL 2026-05-10 Choice.)
 SWEEPS: dict[str, list] = {
-    "iters": [50, 200, 600],                 # 0.25 / 1 / 3 epoch — 收敛曲线 + overfit 观察
-    "lr": [1e-5, 1e-4, 5e-4],                # LoRA 主流甜点 1e-4，两端各拉一档；1e-3 drop（高发散概率，低信息）
+"iters": [50, 200, 600], # 0.25 / 1 / 3 epoch — convergence curve + overfit observation
+"lr": [1e-5, 1e-4, 5e-4], # LoRA mainstream dessert 1e-4, pull one gear at each end; 1e-3 drop (high diverged probability, low information)
 }
 
 
 def make_temp_config(rank: int, out_dir: Path) -> Path:
-    """rank 只能通过 YAML 传 — 为 rank sweep 单独生成临时 YAML（同 alpha=2×rank 比例）."""
+    """rank can only be passed via YAML — temporary YAML is generated separately for rank sweep (same as alpha=2×rank scale)."""
     cfg = out_dir / "lora_config.yaml"
     cfg.write_text(
         "lora_parameters:\n"
@@ -72,11 +78,10 @@ def make_temp_config(rank: int, out_dir: Path) -> Path:
 
 
 def run_training(sweep: str, value, adapter_dir: Path, *, force: bool = False) -> dict:
-    """跑一次 train.py（内部调 mlx_lm.lora），把结果落 train_metrics.json + train.log.
+    """Run train.py (internally adjust mlx_lm.lora) and put the results into train_metrics.json + train.log.
 
-    Resume：若 `adapter_dir/train_metrics.json` 已存在且 `--force` 没传，直接复用上次结果
-    （跳过 train，省 ~60min/run）。eval_smoke 会照常重跑（fast，可重生）.
-    """
+    Resume: If `adapter_dir/train_metrics.json` already exists and `--force` is not passed, directly reuse the last result
+    (Skip train, save ~60min/run). eval_smoke will rerun as usual (fast, respawnable)."""
     metrics_path = adapter_dir / "train_metrics.json"
     if metrics_path.exists() and not force:
         info = json.loads(metrics_path.read_text())
@@ -134,7 +139,7 @@ def run_training(sweep: str, value, adapter_dir: Path, *, force: bool = False) -
 
 
 def run_eval(adapter_dir: Path, max_samples: int | None) -> dict:
-    """跑 eval_smoke.py 出 4 项 tool-call 指标."""
+    """Running eval_smoke.py produces 4 tool-call indicators."""
     cmd = [
         sys.executable, str(HERE / "eval_smoke.py"),
         "--model", MODEL_ID,
@@ -168,48 +173,48 @@ def run_sweep(sweep: str, max_eval_samples: int | None, *, force: bool = False) 
 
 SWEEP_HEAD = {
     "iters": {
-        "title": "训练步数 `--iters`（iterations）",
+"title": "Training steps `--iters` (iterations)",
         "what": (
-            "每次梯度更新叫一个 **iter / step**。766 个训练样本、batch=4 时 1 epoch ≈ 192 iter，"
-            "所以 `iters=600` 约等于 3 个 epoch（每条样本平均被看 3 次）。"
+"Each gradient update is called an **iter / step**. 766 training samples, batch=4, 1 epoch ≈ 192 iter,"
+"So `iters=600` is approximately equal to 3 epochs (each sample is viewed an average of 3 times)."
         ),
         "why": (
-            "tool-call schema 是个**结构性任务**——模型要学 `<tool_call>{...}</tool_call>` "
-            "形态 + 把 instruction 文本里的字面值搬进 JSON dict。iters 太少没学透形态；"
-            "太多会把 766 条 corrected 模板**死记**下来，泛化到训练集外的 args 时变差。"
+"tool-call schema is a **structural task** - the model needs to learn `<tool_call>{...}</tool_call>` "
+"Form + moves the literal value in the instruction text into JSON dict. There are too few iters and the form has not been learned thoroughly;"
+"Too much will memorize the 766 corrected templates, and generalize to args outside the training set."
         ),
     },
     "lr": {
-        "title": "学习率 `--learning-rate` (learning rate, LR)",
-        "what": "每次更新参数的步长——梯度告诉方向，LR 决定走多远。",
+"title": "Learning rate `--learning-rate` (learning rate, LR)",
+"what": "The step size of each parameter update - the gradient tells the direction, and the LR determines how far to go.",
         "why": (
-            "LoRA 因可训参数少，承受比全量微调（典型 1e-5）大一个数量级的 LR。1e-4 是 LoRA 主流甜点；"
-            "5e-4 / 1e-3 探激进上限；1e-5 探『训不动』下限。**最容易训坏的旋钮**——loss 单调降 OK，"
-            "震荡 / NaN 即偏大。"
+"Because LoRA has fewer trainable parameters, it can withstand an LR that is an order of magnitude larger than full fine-tuning (typically 1e-5). 1e-4 is the mainstream sweet spot of LoRA;"
+"5e-4 / 1e-3 explores the upper limit of radicalization; 1e-5 explores the lower limit of "training can't move". **The most easily trained knob** - loss monotonically decreases OK,"
+"Shock/NaN means too large."
         ),
     },
     "layers": {
-        "title": "LoRA 挂载层数 `--num-layers`",
+"title": "LoRA mounting layers `--num-layers`",
         "what": (
-            "在最顶上 N 层 transformer block 挂 LoRA 旁路。Qwen2.5-7B 共 28 层；挂 16 层 = 上半部分；"
-            "挂 28 层 = 全挂；挂 4 层 = 仅离输出最近的几层。"
+"Hang LoRA bypass on the top N layer transformer block. Qwen2.5-7B has 28 layers in total; hang 16 layers = upper half;"
+"28 layers = fully mounted; 4 layers = only the layers closest to the output."
         ),
         "why": (
-            "底层负责通用语法 / token embedding；中上层负责风格 / 任务策略 / 结构生成（如 "
-            "`<tool_call>` 形态）。tool-call 是结构性 + 风格性混合任务，挂中上层最划算；"
-            "全挂可能学得更深但易破坏底层能力（**灾难性遗忘 catastrophic forgetting**）。"
+"The bottom layer is responsible for general grammar/token embedding; the middle and upper layers are responsible for style/task strategy/structure generation (such as "
+"`<tool_call>` form). tool-call is a structural + stylistic mixed task, and it is most cost-effective to hang it in the middle and upper layers;"
+"Full suspension may lead to deeper learning but can easily destroy underlying abilities (**catastrophic forgetting**)."
         ),
     },
     "rank": {
-        "title": "瓶颈秩 `rank`（YAML，r in LoRA）",
+"title": "Bottleneck rank `rank` (YAML, r in LoRA)",
         "what": (
-            "LoRA 把权重改动写成 `A·B`，中间挤过一个 **r 维**瓶颈（bottleneck）。"
-            "r 越小 = 可训参数越少 = 表达力越受限。"
+"LoRA writes the weight changes as `A·B`, squeezing an **r-dimensional** bottleneck in the middle."
+"Smaller r = fewer trainable parameters = more limited expressiveness."
         ),
         "why": (
-            "tool-call SFT 比 toy task 信号丰富（多工具 / 多参数 schema 形态），"
-            "需要的有效秩高于 toy。8-32 是工业实战区间；r=4 测下限是否仍学得动；"
-            "r=32 测 ΔW 是否真低秩；中间 8 / 16 是主流候选。"
+"Tool-call SFT has richer signals than toy task (multi-tool/multi-parameter schema form),"
+"The required effective rank is higher than toy. 8-32 is the actual industrial combat range; r=4 tests whether the lower limit can still be learned;"
+"r=32 tests whether ΔW is really low rank; the middle 8 / 16 are mainstream candidates."
         ),
     },
 }
@@ -228,9 +233,9 @@ def value_commentary(sweep: str, value, train: dict, eval_: dict) -> str:
 
     if diverged:
         return (
-            "训练发散（diverged）：loss NaN / 跑飞或 mlx_lm.lora 非零退出。"
-            "**典型原因**：LR 过大、QLoRA 4-bit 精度遇病态、数据 schema bug。adapter 不可用，"
-            "eval 跳过。"
+"Training diverged (diverged): loss NaN / run away or mlx_lm.lora non-zero exit."
+"**Typical reasons**: LR is too large, QLoRA 4-bit accuracy is ill-conditioned, data schema bug. Adapter is not available,"
+"eval skip."
         )
 
     metrics_str = (
@@ -240,27 +245,27 @@ def value_commentary(sweep: str, value, train: dict, eval_: dict) -> str:
            if emit is not None else "")
     )
     if value == base:
-        head = "**基线**"
+head = "**Baseline**"
     elif sweep == "iters":
         if value < base:
-            head = "**欠拟合候选**" if value <= base // 2 else "**少 epoch**"
+head = "**Underfitting candidate**" if value <= base // 2 else "**Fewer epochs**"
         else:
-            head = "**深度过拟合候选**" if value >= base * 4 else "**多 epoch**"
+head = "**Deep Overfitting Candidate**" if value >= base * 4 else "**Multiple epochs**"
     elif sweep == "lr":
         if value < base:
-            head = "**步太小**" if value <= base / 5 else "**偏保守**"
+head = "**Step too small**" if value <= base / 5 else "**Conservative**"
         else:
-            head = "**激进 / 易发散**" if value >= base * 5 else "**偏激进**"
+head = "**Radical / Easily divergent**" if value >= base * 5 else "**Radical**"
     elif sweep == "layers":
         if value < base:
-            head = "**容量受限**" if value <= base // 2 else "**少层**"
+head = "**Capacity limited**" if value <= base // 2 else "**Fewer layers**"
         else:
-            head = "**全挂 / 易遗忘**" if value >= 28 else "**多层**"
+head = "**Full hanging / easy to forget**" if value >= 28 else "**Multiple layers**"
     else:  # rank
         if value < base:
-            head = "**极低秩**" if value <= 4 else "**低秩**"
+head = "**very low rank**" if value <= 4 else "**low rank**"
         else:
-            head = "**冗余秩**"
+head = "**Redundancy Rank**"
 
     return f"{head}：{metrics_str}。"
 
@@ -277,19 +282,19 @@ def fmt_pct(v):
 
 def write_report(all_results: dict[str, list[dict]]) -> None:
     lines: list[str] = []
-    lines.append("# LoRA 超参 sweep 报告（agent_sft Phase 3）\n")
+lines.append("# LoRA hyperparameter sweep report (agent_sft Phase 3)\n")
     lines.append(
-        "本报告由 [`sweep.py`](../../sweep.py) 自动生成。每个 sweep 中只动**一个**超参，"
-        "其余保持基线值不变（控制变量法 controlled-variable）。\n"
+"This report is automatically generated by [`sweep.py`](../../sweep.py). Only one hyperparameter is moved in each sweep,"
+"Keep the rest unchanged at the baseline value (controlled variable method controlled-variable).\n"
     )
     lines.append(
-        f"训练数据 `{TRAIN_FILE}` / `{VALID_FILE}`，schema 见 [`DECISIONS §4`](../../../DECISIONS.md)；"
-        f"底座 `{MODEL_ID}` (QLoRA)；评估走 [`eval_smoke.py`](../../eval_smoke.py)，"
-        "解析模型输出里 `<tool_call>` 块与 ground-truth 比对.\n"
+f"Training data `{TRAIN_FILE}` / `{VALID_FILE}`, see [`DECISIONS §4`](../../../DECISIONS.md) for schema;"
+f"Base `{MODEL_ID}` (QLoRA); evaluate [`eval_smoke.py`](../../eval_smoke.py),"
+"The `<tool_call>` block in the parsing model output is compared with ground-truth.\n"
     )
 
-    lines.append("## 基线配置（baseline）\n")
-    lines.append("|参数|值|")
+lines.append("## Baseline configuration (baseline)\n")
+lines.append("|parameter|value|")
     lines.append("|---|---|")
     for k, v in BASE.items():
         lines.append(f"|`{k}`|{v}|")
@@ -300,15 +305,15 @@ def write_report(all_results: dict[str, list[dict]]) -> None:
         if head is None:
             continue
         lines.append(f"## {head['title']}\n")
-        lines.append(f"**它做什么**：{head['what']}\n")
-        lines.append(f"**为什么会有差异**：{head['why']}\n")
+lines.append(f"**What it does**: {head['what']}\n")
+lines.append(f"**Why is there a difference**: {head['why']}\n")
 
-        lines.append("### 实测结果\n")
-        lines.append("|值|首 loss|末 loss|val loss|emit|name|arg_value|耗时|备注|")
+        lines.append("### Measured results\n")
+lines.append("|value|first loss|last loss|val loss|emit|name|arg_value|time-consuming|remarks|")
         lines.append("|---|---|---|---|---|---|---|---|---|")
         for r in results:
             ev = r.get("eval") or {}
-            note = "发散" if r.get("diverged") else ""
+note = "divergent" if r.get("diverged") else ""
             v = r["value"]
             v_str = f"`{v:g}`" if isinstance(v, float) else f"`{v}`"
             lines.append(
@@ -322,27 +327,27 @@ def write_report(all_results: dict[str, list[dict]]) -> None:
             )
         lines.append("")
 
-        lines.append("### 逐值解读\n")
+        lines.append("### Per-value notes\n")
         for r in results:
             v = r["value"]
             v_str = f"{v:g}" if isinstance(v, float) else str(v)
             lines.append(f"- **`{v_str}`** — {value_commentary(sweep_name, v, r, r.get('eval'))}")
         lines.append("")
 
-    lines.append("## 通用结论速查\n")
+    lines.append("## Quick reference conclusions\n")
     lines.append(
-        "- **学习率最容易训坏**——先把它钉对，再调其他。判据：loss 单调降 = 合适；"
-        "震荡 = 偏大；NaN = 远超.\n"
-        "- **iters × batch_size = 实际学习量**——同 epoch 数下两者可换算.\n"
-        "- **rank 16 是 tool-call SFT 实战起步**——4 试下限，32 测是否真需要更高表达力.\n"
-        "- **挂 16 层是经济 + 学得到位的折中**——全挂 (28) 易破坏底层能力，仅 4 层装不下 schema.\n"
-        "- **emit_rate 比 val_loss 更对位下游 nudge-fire-rate**——loss 低未必 emit 真的对，"
-        "tool_name_match / arg_value_match 才是结构性指标.\n"
+"- **Learning rate is the easiest to train bad**—get it right first, and then adjust others. Criterion: loss monotonically decreases = appropriate;"
+"Shock = too large; NaN = far beyond.\n"
+"- **iters × batch_size = actual learning amount** - the two can be converted by counting the same epoch.\n"
+"- **rank 16 is the starting point for tool-call SFT practice** - 4 tests are the lower limit, 32 tests whether higher expressiveness is really needed.\n"
+"- **Mounting 16 layers is a compromise between economy and adequate learning** - hanging all (28) can easily destroy the underlying capabilities, and only 4 layers cannot fit the schema.\n"
+"- **emit_rate is more suitable for downstream nudge-fire-rate** than val_loss - low loss may not necessarily be true for emit,"
+"tool_name_match / arg_value_match are structural indicators.\n"
     )
 
     out = SWEEPS_DIR / "REPORT.md"
     out.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\n✓ 报告已生成：{out.relative_to(HERE)}")
+print(f"\n✓ Report generated: {out.relative_to(HERE)}")
 
 
 # ----- IO ------------------------------------------------------------------
@@ -368,15 +373,15 @@ def main() -> int:
     )
     parser.add_argument(
         "sweeps", nargs="*",
-        help=f"sweep 名（{list(SWEEPS) + ['all', 'report']}），默认 all",
+help=f"sweep name ({list(SWEEPS) + ['all', 'report']}), default all",
     )
     parser.add_argument(
         "--max-eval-samples", type=int, default=None,
-        help="每次 eval_smoke 限制 sample 数（用于 sweep 总时长，默认全集 196）",
+help="Limit the number of samples per eval_smoke (used for the total sweep duration, the default full set is 196)",
     )
     parser.add_argument(
         "--force", action="store_true",
-        help="覆盖已存在的 train_metrics.json，重训每个值（默认 resume 跳过已完成 run）",
+help="Overwrite the existing train_metrics.json and retrain each value (default resume skips completed runs)",
     )
     args = parser.parse_args()
 
@@ -384,7 +389,7 @@ def main() -> int:
     if "report" in targets:
         results = load_or_init_results()
         if not results:
-            print("results.json 不存在或为空，请先跑 sweep。", file=sys.stderr)
+print("results.json does not exist or is empty, please run sweep first.", file=sys.stderr)
             return 1
         write_report(results)
         return 0
@@ -393,7 +398,7 @@ def main() -> int:
         targets = list(SWEEPS)
     unknown = [t for t in targets if t not in SWEEPS]
     if unknown:
-        print(f"未知 sweep: {unknown}；可选 {list(SWEEPS)}", file=sys.stderr)
+print(f"Unknown sweep: {unknown}; optional {list(SWEEPS)}", file=sys.stderr)
         return 1
 
     results = load_or_init_results()

@@ -1,17 +1,16 @@
-"""agent_sft 测试公共配置。
+"""agent_sft tests the public configuration.
 
-`agent_sft/eval/` 与 `agent_sft/data/` 不是对外 export 的 package（`__init__.py`
-仅装 docstring），为让 `tests/` 下的测试能裸 `from aggregate_seeds import …` /
-`from extractor import …`，把这两个目录加进 sys.path. 同时把 `play/` 加进 sys.path
-让 `from agent_engine import ...` / `from evals.metrics... import ...` 直接可用——
-否则这些跨项目 import 只能靠 `extractor.py` 等业务模块加载时的副作用注入，单独跑
-`test_scenario_yaml.py`（不依赖 extractor）会以 collection-time 顺序敏感 fail.
+`agent_sft/eval/` and `agent_sft/data/` are not external export packages (`__init__.py`
+Only install docstring), in order to allow the tests under `tests/` to be naked `from aggregate_seeds import …` /
+`from extractor import …`, add these two directories to sys.path. At the same time, add `play/` to sys.path
+Make `from agent_engine import ...` / `from evals.metrics... import ...` available directly -
+Otherwise, these cross-project imports can only rely on side-effect injection when loading business modules such as `extractor.py` and run separately.
+`test_scenario_yaml.py` (which does not rely on extractor) will fail with collection-time order sensitivity.
 
-收到 conftest 而非每个测试文件各自 `sys.path.insert` 的好处：
-  ① 测试文件保持纯净（只 import 业务模块，无 path 体操）
-  ② 未来加新测试（如 `test_run_baseline.py` / `test_formatter.py`）零样板
-  ③ 测试文件 collection 顺序无关——pytest-randomly / xdist 也稳
-"""
+Advantages of receiving conftest instead of individual `sys.path.insert` for each test file:
+  ① Keep the test files pure (only import business modules, no path gymnastics)
+  ② New tests (such as `test_run_baseline.py` / `test_formatter.py`) will be added in the future with zero boilerplate
+  ③ The order of test file collection is irrelevant - pytest-randomly / xdist is also stable"""
 
 from __future__ import annotations
 

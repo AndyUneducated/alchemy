@@ -1,3 +1,3 @@
-# 登录用例（摘要）
+# Login test cases (summary)
 
-TC-LOGIN-001 正常 JWT。TC-LOGIN-003 5 次错锁。TC-LOGIN-005 CSRF 403。TC-LOGIN-004 改密废旧 JWT。TC-LOGIN-008 refresh 并发幂等。
+TC-LOGIN-001 normal JWT. TC-LOGIN-003 lock after 5 wrong attempts. TC-LOGIN-005 CSRF 403. TC-LOGIN-004 old JWT invalidated on password change. TC-LOGIN-008 refresh concurrency idempotency.

@@ -1,14 +1,14 @@
-"""HF BPE tokenizer 包装的后处理逻辑。
+"""Post-processing logic for the HF BPE tokenizer wrapper.
 
-`tokenizer.tokenize` 在 HF 原始 `encoded.tokens` 上做 3 件事：
-  1. 过滤特殊 token（`<bos>` / `<eos>` / `<|...|>` 形如 `<...>`）
-  2. 去掉 SentencePiece / GPT-2 BPE 的词首前缀（`▁` / `Ġ`）
-  3. 小写化 + 丢空字符串
+`tokenizer.tokenize` does three things on HF raw `encoded.tokens`:
+  1. Filter special tokens (`<bos>` / `<eos>` / `<|...|>` angle-bracket forms)
+  2. Strip SentencePiece / GPT-2 BPE word-start prefixes (`▁` / `Ġ`)
+  3. Lowercase + drop empty strings
 
-DECISIONS §4 把这条与 dense embedding tokenization 同源作为 hybrid 的关键工程对偶；
-任何无意改动这层逻辑都会让 BM25 IDF 分布偏移。
+DECISIONS §4 treats same-source tokenization as dense embedding as hybrid's key
+engineering pairing; accidental changes here shift BM25 IDF distribution.
 
-测试不打真实 HF 模型，monkeypatch `_tokenizer` 返回 fake encoder。
+Tests monkeypatch `_tokenizer` with a fake encoder — no real HF model download.
 """
 from __future__ import annotations
 

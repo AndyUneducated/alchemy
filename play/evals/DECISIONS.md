@@ -1,31 +1,31 @@
 # Decisions
 
-> 记录标准：只保留对后续架构演进、评测可靠性、成本治理、面试问答有持续价值的决策。  
-> 删除标准：一次性排障过程、可从代码/commit 直接还原的实现流水、重复 supersession 细节。  
-> 日期以 git commit 历史为准。
+> Recording standards: Only retain decisions that have continued value for subsequent architecture evolution, evaluation reliability, cost management, and interview questions and answers.
+> Deletion criteria: one-time troubleshooting process, implementation pipeline that can be restored directly from code/commit, and repeated supersession details.
+> The date is based on git commit history.
 
-## 1. Phase 1：评测对象采用统一 envelope 合约（Doc / SampleResult / EvalResult）
+## 1. Phase 1: The evaluation object uses a unified envelope contract (Doc/SampleResult/EvalResult)
 
 - **Date**: 2026-05-02
 
 ### Context
 
-`evals` 同时覆盖分类、生成、RAG、Agent trajectory。若每类任务各自定义输入输出，runner / metrics / 存储就会沿着任务数线性分叉，几个 phase 之后维护代价会不可控。
+`evals` also covers classification, generation, RAG, and Agent trajectory. If each type of task defines its own input and output, runner/metrics/storage will bifurcate linearly along the number of tasks, and the maintenance cost will be uncontrollable after several phases.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 每任务自定义结构|任务内部完全自治|上手快|跨任务复用差，回归难|
-|B. 统一 envelope + 任务层解释|底层字段稳定，任务做语义映射|可复用、可审计|前期抽象成本更高|
+|A. Customized structure for each task | Complete autonomy within the task | Quick to get started | Poor cross-task reuse, difficult to return |
+|B. Unified envelope + task layer explanation|The underlying fields are stable and the tasks are semantically mapped|Reusable and auditable|Higher initial abstraction costs|
 
 ### Decision
 
-采用 **B**：`Doc` / `SampleResult` / `EvalResult` 是唯一运行时契约，任务只做映射与校验；后续 phase 的扩展全部走“向上加字段、向下不破坏旧解析”的方式（如 phase 4 把 `Doc.target` 放宽为 `str | None`、加 `SampleResult.artifacts`；phase 6 把 `aggregated` 放宽为 `dict[str, Any]`）。
+Adopt **B**: `Doc` / `SampleResult` / `EvalResult` is the only runtime contract, and the task only does mapping and verification; all expansions in subsequent phases follow the method of "adding fields upwards and downwards without destroying the old parsing" (for example, in phase 4, relax `Doc.target` to `str | None` and add `SampleResult.artifacts`; in phase 6, `aggregated` relaxed to `dict[str, Any]`).
 
 ```mermaid
 flowchart LR
-    subgraph Envelope[统一 envelope]
+    subgraph Envelope[unified envelope]
         D[Doc<br/>id / input / target? / metadata]
         S[SampleResult<br/>metrics / artifacts]
         E[EvalResult<br/>aggregated dict]
@@ -40,44 +40,44 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|扩展性|新增任务主要改 task/metric，runner 基本不动|
-|一致性|跨任务指标与日志字段可横向对比|
-|迁移成本|后续跨项目（如 `agent_engine`）对接更稳定|
+|Extensibility|New tasks mainly change task/metric, and runner basically remains unchanged|
+|Consistency|Cross-task indicators and log fields can be compared horizontally|
+|Migration cost|Subsequent cross-project (such as `agent_engine`) docking is more stable|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|新增 `rag_retrieval` 任务|`Doc.target=None`，结果挂在 `SampleResult.artifacts`，runner 不改|
-|接入 `agent_engine` 轨迹数据|envelope 字段映射后直接复用现有评测流水线|
+|New `rag_retrieval` task|`Doc.target=None`, the results are hung in `SampleResult.artifacts`, and the runner is not changed|
+|Access the `agent_engine` trajectory data|reuse the existing evaluation pipeline directly after mapping the envelope field|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不直接每个任务一套？|短期快，长期会形成 N 套执行框架；统一契约让扩展成本可控|
-|统一会不会牺牲灵活性？|灵活性放到任务解释层（`load_prediction` / `process_docs`），不放到执行层|
+|Why not just set one per task? |It’s fast in the short term, but N sets of execution frameworks will be formed in the long term; a unified contract makes expansion costs controllable|
+|Will unification sacrifice flexibility? |Flexibility is placed in the task interpretation layer (`load_prediction` / `process_docs`), not in the execution layer|
 
-## 2. Phase 2：评测架构采用“task producer + metric consumer”
+## 2. Phase 2: The evaluation architecture adopts "task producer + metric consumer"
 
 - **Date**: 2026-05-02
 
 ### Context
 
-早期实现把“任务逻辑 + 指标计算”混在一起，做同任务多指标或同指标跨任务都很别扭。few-shot 的引入也需要任务暴露 example pool 给 runner，再次确认必须把“任务”和“指标”的职责分开。
+Early implementations mixed "task logic + indicator calculation" together, making it awkward to do multiple indicators for the same task or the same indicator across tasks. The introduction of few-shot also requires the task to expose the example pool to the runner, and once again confirms that the responsibilities of "task" and "metric" must be separated.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 任务内直接算指标|代码集中|开发快|指标耦合任务，不可组合|
-|B. 任务产中间结果，指标独立消费|显式中间层|高复用、易测试|需要稳定中间契约|
+|A. Calculate indicators directly within the task | Centralized code | Fast development | Indicators are coupled tasks and cannot be combined |
+|B. Tasks produce intermediate results, and indicators are consumed independently|Explicit middle layer|High reuse, easy to test|Need to stabilize the intermediate contract|
 
 ### Decision
 
-采用 **B**：任务只产 `SampleResult`（含 `metrics` 与 `artifacts`），指标作为独立函数 / 模块消费；few-shot 装配交给 runner 而不是任务自己实现。
+Using **B**: the task only produces `SampleResult` (including `metrics` and `artifacts`), and the metrics are consumed as independent functions/modules; the few-shot assembly is handed over to the runner instead of the task itself.
 
 ```mermaid
 flowchart LR
@@ -100,44 +100,44 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|演进效率|新增指标无需改任务主流程|
-|质量保障|指标可以独立单测和回归|
-|可观测性|任务输出与指标输出可分别排障|
+|Evolution efficiency|New indicators do not need to change the main task process|
+|Quality Assurance|Indicators can be independently tested and regressed|
+|Observability|Task output and indicator output can be troubleshooted separately|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|给 mt task 新增 `bleu`|只实现 metric 并注册，不改 mt task 生成逻辑|
-|同一指标复用到 rag task|复用 metric consumer，只做任务输出字段对齐|
+|Add `bleu` to mt task|Only implement the metric and register it, without changing the mt task generation logic|
+|Reuse the same metric into the rag task|Reuse the metric consumer and only align the task output fields|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么强调中间层？|它是复用与测试的边界，避免“每次加指标都改任务”|
-|会不会过度设计？|多任务评测平台场景下，这个抽象是必要复杂度，不是奢侈品|
+|Why emphasize the middle layer? |It is the boundary between reuse and testing, to avoid "changing tasks every time you add indicators"|
+|Will it be over-designed? |In the multi-task evaluation platform scenario, this abstraction is necessary complexity, not a luxury |
 
-## 3. Phase 3：LLM-as-judge 统一到 adapter，judge_lm 通过 ctor 注入
+## 3. Phase 3: LLM-as-judge is unified into adapter, judge_lm is injected through ctor
 
 - **Date**: 2026-05-03
 
 ### Context
 
-Judge 类指标依赖多后端模型，输出不稳定（缺字段、错格式、空 token）。如果每个 judge 直接调模型，重试、解析、成本统计会沿不同代码路径长出多个版本。
+Judge indicators rely on multiple backend models, and the output is unstable (missing fields, wrong formats, empty tokens). If each judge directly adjusts the model, retry, parsing, and cost statistics will have multiple versions along different code paths.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 各指标自由调模型|实现直接|灵活|重复逻辑多，失败行为不可控|
-|B. judge adapter 统一封装|调用、重试、解析集中治理|一致性高，易替换|增加一层抽象|
+|A. Freely adjustable model for each indicator | Direct implementation | Flexible | Lots of repetitive logic, uncontrollable failure behavior |
+|B. judge adapter unified encapsulation | Centralized management of calling, retrying, and parsing | High consistency, easy to replace | Adding a layer of abstraction |
 
 ### Decision
 
-采用 **B**：`metrics/judge_core.py` 集中 4 种 judge 范式（pointwise / pairwise+swap / g_eval / self_consistency）；judge_lm 通过任务 ctor 注入，score / run 自动复用同一判官；不引新 ABC、不破坏 Task 签名。
+Using **B**: `metrics/judge_core.py` concentrates on 4 judge paradigms (pointwise / pairwise+swap / g_eval / self_consistency); judge_lm is injected through the task ctor, and score / run automatically reuses the same judge; no new ABC is introduced, and the Task signature is not destroyed.
 
 ```mermaid
 flowchart LR
@@ -150,44 +150,44 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|一致性|不同 judge 指标共享同一失败策略和统计口径|
-|可替换性|模型后端切换改动面小（phase 8 wave 4 已用上）|
-|可运营性|token / cost / latency 采集更标准（phase 6 / 7 wave 3 直接接续）|
+|Consistency|Different judge indicators share the same failure strategy and statistical caliber|
+|Replaceability|The model backend switching has little change (phase 8 wave 4 has been used)|
+|Operationability|Token / cost / latency collection is more standard (phase 6 / 7 wave 3 is directly continued)|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|从 `ollama` 切到云端 API|主要改 judge adapter，不动指标业务逻辑|
-|新增重试策略|在 adapter 统一实现，所有 judge 指标自动继承|
+|Switch from `ollama` to cloud API|Mainly change the judge adapter and not change the indicator business logic|
+|New retry strategy|Unified implementation in adapter, all judge indicators automatically inherited|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不每个指标自由调？|自由调用会导致同类问题在多处重复修|
-|adapter 的核心价值？|把 LLM 不确定性约束在边界层，业务层保持确定性|
+|Why not adjust each indicator freely? |Free calling will lead to repeated repairs of similar problems in multiple places|
+|Adapter’s core value? |Constrain LLM uncertainty to the boundary layer and maintain determinism in the business layer|
 
-## 4. Phase 4：RAG 拆成 retrieval + grounding 双 task；envelope 顺势扩 artifacts / 钩子
+## 4. Phase 4: RAG is split into retrieval + grounding dual tasks; envelope expands artifacts / hooks along the way.
 
 - **Date**: 2026-05-03
 
 ### Context
 
-RAG 失效有两层根因：召回不到、生成不对齐。只给一个总分既无法定位瓶颈，也会让“检索改善”和“生成改善”互相遮蔽。同期还要解决：检索任务没有 string gold（强塞空串污染语义）、检索结果是 list（不能塞进 scalar metrics）、纯检索任务不该走 LM 生成。
+There are two root causes for RAG failure: failure to recall and misaligned generation. Giving only a total score will neither locate bottlenecks, nor will "retrieval improvement" and "generation improvement" obscure each other. At the same time, we must also solve: there is no string gold for retrieval tasks (empty strings are forced to pollute the semantics), the retrieval results are lists (scalar metrics cannot be inserted), and pure retrieval tasks should not be generated by LM.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 单一 RAG 总分|展示简单|对外直观|诊断能力差|
-|B. retrieval / grounding 分层|根因分离|可诊断、可优化|指标解释更复杂|
+|A. Total score of a single RAG|Simple display|Intuitive to the outside|Poor diagnostic ability|
+|B. retrieval/grounding layering|Root cause separation|Diagnosable and optimizable|Indicator interpretation is more complex|
 
 ### Decision
 
-采用 **B**：分层评测 + envelope 扩展三件套：`Doc.target: str | None`、`SampleResult.artifacts: dict`、`output_type='none'` + `load_prediction` / `process_docs` 钩子；同步立下 monorepo 解耦原则——evals 不直接 import `play/rag`，通过 subprocess + JSON envelope 对接。
+Adopt **B**: layered evaluation + envelope extension three-piece set: `Doc.target: str | None`, `SampleResult.artifacts: dict`, `output_type='none'` + `load_prediction` / `process_docs` hook; simultaneously establish the monorepo decoupling principle - evals does not directly import `play/rag`, but is connected through subprocess + JSON envelope.
 
 ```mermaid
 flowchart LR
@@ -195,7 +195,7 @@ flowchart LR
       RT[rag_retrieval task<br/>output_type='none']
       RQ[rag_qa task]
     end
-    subgraph rag[play/rag<br/>独立进程]
+    subgraph rag[play/rag<br/>separate process]
       VDB[(vdb)]
     end
     RT -->|subprocess<br/>JSON envelope| rag
@@ -208,96 +208,96 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|定位速度|可快速判断“召回问题”还是“对齐问题”|
-|优化效率|检索和生成可独立迭代|
-|架构副产品|envelope 三件套被 phase 5 直接复用，零再设计|
+|Positioning speed|Can quickly determine "recall problem" or "alignment problem"|
+|Optimize efficiency|Retrieval and generation can be iterated independently|
+|Architecture by-product|The envelope three-piece set is directly reused by phase 5 with zero redesign|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|`retrieval_recall` 下降、`grounding` 稳定|优先排查向量索引和召回参数|
-|`retrieval` 稳定、`grounding` 下降|优先排查生成 prompt 或答案约束策略|
+|`retrieval_recall` is declining, `grounding` is stable|Prioritize the vector index and recall parameters|
+|`retrieval` is stable, `grounding` is declining|Prioritize troubleshooting to generate prompt or answer constraint strategy|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不只看最终正确率？|最终正确率无法指导具体改哪一层|
-|为什么 evals 不直接 import rag？|跨子项目要解耦：保持 import 边界，跨进程用 envelope|
+|Why not just look at the final accuracy rate? |The final accuracy rate cannot guide which layer to change|
+|Why doesn't evals import rag directly? |Decoupling across sub-projects: keep import boundaries and use envelope across processes|
 
-## 5. Phase 5：Agent 评测“轨迹优先，结果补充”，零 ABC 改动
+## 5. Phase 5: Agent evaluation "trajectory first, results supplemented", zero ABC changes
 
 - **Date**: 2026-05-04
 
 ### Context
 
-Agent 场景里“答案对”不等于“行为可上线”。更进一步，phase 4 已经给出 `output_type='none'` + `process_docs` + envelope 三件套，agent 评测如果再扩 ABC 就是过度抽象。
+In the Agent scenario, "the answer is right" does not mean "the behavior can be put online". Furthermore, phase 4 already provides a three-piece set of `output_type='none'` + `process_docs` + envelope. If the agent evaluation further expands ABC, it will be overly abstract.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 只评 final answer|实现简单|展示直观|忽略行为风险|
-|B. trajectory + final，复用 phase 4 三件套|无新 ABC，零 runner 改动|与 phase 4 形态一致|教学叙事更复杂|
-|C. trajectory + final，引入新 ABC（如 `process_trajectory`）|结构更显式|过度抽象|长期维护成本高|
+|A. Only comment on final answer|Simple implementation|Intuitive display|Ignore behavioral risks|
+|B. trajectory + final, reuse phase 4 three-piece set|No new ABC, zero runner changes|Consistent with phase 4 form|Teaching narrative is more complex|
+|C. trajectory + final, introduce new ABC (such as `process_trajectory`) |More explicit structure|Excessive abstraction|High long-term maintenance cost|
 
 ### Decision
 
-采用 **B**：通过 subprocess 启动 `play/agent_engine`，envelope 写回 `Doc.metadata.trajectory`；指标侧用闭包工厂；`plan_quality` 直接复用 `g_eval`，不重复实现 LLM 评估范式。
+Using **B**: start `play/agent_engine` through subprocess, envelope writes back to `Doc.metadata.trajectory`; use closure factory on indicator side; `plan_quality` directly reuses `g_eval`, without repeating the implementation of LLM evaluation paradigm.
 
 ```mermaid
 flowchart LR
     D[doc] --> AT[agent_traj task<br/>output_type='none']
     AT -->|subprocess JSON envelope| AE[(play/agent_engine)]
     AE -->|trajectory| AT
-    AT --> TM[trajectory metrics<br/>5 个]
+    AT --> TM[trajectory metrics<br/>5 metrics]
     AT -->|reuse| GE[g_eval<br/>plan_quality]
 ```
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|风险识别|可发现“结果正确但过程危险”样本|
-|架构稳定|没有为 agent 单独引入 ABC，phase 4 形态复用一遍|
-|跨项目协作|与 `agent_engine` 的对接形态可被未来其他子项目继续复用|
+|Risk Identification|Discover samples with "correct results but dangerous processes"|
+|Stable architecture| ABC is not introduced separately for the agent, and the phase 4 form is reused|
+|Cross-project collaboration|The docking form with `agent_engine` can be reused by other sub-projects in the future|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|最终答案正确但调用了危险工具|final 指标通过，trajectory 风险指标触发告警|
-|答案错误但轨迹接近正确|保留过程评分，用于策略微调而非全盘推翻|
+|The final answer is correct but a dangerous tool is called |The final indicator passes, and the trajectory risk indicator triggers an alarm|
+|Wrong answer but close to correct trajectory |Retain process score for strategy fine-tuning rather than wholesale overturning|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么要评过程？|Agent 的核心价值和风险都在过程，不只在终局文本|
-|为什么不为 agent 引新 ABC？|phase 4 已给出通用形态，复用比重新抽象更可靠|
+|Why evaluate the process? |Agent’s core value and risk lie in the process, not just in the final text|
+|Why not introduce new ABC to agent? |Phase 4 has given a general form, and reuse is more reliable than re-abstraction|
 
-## 6. Phase 6：Efficiency 作为 cross-cutting，runner 自动注入；run 路径独占
+## 6. Phase 6: Efficiency as cross-cutting, runner is automatically injected; run path is exclusive
 
 - **Date**: 2026-05-04
 
 ### Context
 
-成本与时延是评测落地约束。如果让每个任务自己采集，会出现 N 套口径；如果在 score 路径也写效率，分数就成了“没有 LM 调用也能伪造”的伪指标。
+Cost and delay are constraints for evaluation implementation. If each task is allowed to collect by itself, N sets of calibers will appear; if efficiency is also written in the score path, the score becomes a pseudo-indicator that can be forged without LM calls.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 任务自己采集|结构简单|实现自由|口径不一致，账单不可信|
-|B. runner 全程注入，含 score 路径|看板统一|实现轻|score 路径无 LM 调用却也带效率值，语义错|
-|C. runner 注入 + run 路径独占 + 三层组织|信息完整、口径一致|实现复杂度中等|需要明确 sample / run / metric 三层关系|
+|A. Collect tasks by yourself|Simple structure|Free implementation|Inconsistent caliber and unreliable bills|
+|B. Full runner injection, including score path | Kanban unified | Implementation of light | score path has no LM call but also carries efficiency value, which is semantically wrong |
+|C. runner injection + run path exclusive + three-tier organization | Complete information, consistent caliber | Medium implementation complexity | Need to clarify the sample / run / metric three-tier relationship |
 
 ### Decision
 
-采用 **C**：runner 自动注入 per-sample latency / usage；`aggregated["efficiency"]` 子组只在 run 模式挂出；价格表 + 成本计算集中在 `metrics/efficiency.py`；CLI 走 dot-path 渲染。
+Using **C**: runner automatically injects per-sample latency / usage; `aggregated["efficiency"]` subgroup is only hung out in run mode; price list + cost calculation is concentrated in `metrics/efficiency.py`; CLI uses dot-path rendering.
 
 ```mermaid
 flowchart TB
@@ -314,51 +314,51 @@ flowchart TB
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|预算治理|可从全局到单样本逐级定位|
-|语义诚实|score 路径不写 efficiency，避免“没调用也有时延”的伪数据|
-|后续扩展|phase 7 的 ontology 二分直接以此为先验|
+|Budget management|can be positioned step by step from global to single sample|
+|Semantic honesty|Do not write efficiency in the score path to avoid the pseudo data of "there is a delay even if there is no call"|
+|Subsequent expansion|The ontology bisection of phase 7 directly uses this as the prior|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|run 成本上涨但平均 sample 稳定|定位到少量 metric 级调用暴涨，而非整体退化|
-|p95 时延恶化|先查 sample 长尾，再下钻到具体 metric 调用链|
+|Run cost increases but average sample is stable|Locate a small number of metric-level calls to skyrocket, rather than overall degradation|
+|p95 Deterioration of latency | First check the long tail of the sample, and then drill down to the specific metric call chain |
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不让任务自己采？|任务自采会导致 N 套口径，账单不可比|
-|score 路径为什么不写效率？|没有 LM 调用就没有真实的成本，写出来就是假数据|
+|Why not let the task be done by yourself? |Self-collection of tasks will result in N sets of calibers, and the bills are not comparable|
+Why doesn't the score path write efficiency? |Without LM calls, there is no real cost, and writing it out is fake data|
 
-## 7. Phase 7：cross-cutting ontology 采用 content vs call 二分
+## 7. Phase 7: cross-cutting ontology uses content vs call dichotomy
 
 - **Date**: 2026-05-05
 
 ### Context
 
-phase 6 上线 efficiency 后，phase 7 又要上 safety。两个都是“跨任务”，但性质不同：efficiency 来自 LM 调用副产物，safety 来自 `Response.text` 的内容评估。如果不在 ontology 上分清楚，会出现“safety 强行注入到所有任务” / “efficiency 注入到 score 路径”这类语义错配。
+After efficiency is launched in phase 6, safety will be launched in phase 7. Both are "cross-task", but of different nature: efficiency comes from the LM call by-product, safety comes from the content evaluation of `Response.text`. If the ontology is not clearly distinguished, there will be semantic mismatches such as "safety is forcibly injected into all tasks" / "efficiency is injected into the score path".
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 全部当 cross-cutting，统一 AOP|形式统一|易做看板|语义失真，phase 7 wave 2 实测被推翻|
-|B. content class vs call class 二分|按来源分类|可解释、可治理|需要持续维护命名规范|
+|A. All cross-cutting, unified AOP|Unified form|Easy to make Kanban|Semantic distortion, phase 7 wave 2 actual measurement was overturned|
+|B. Content class vs call class dichotomy|Classification by source|Explainable and manageable|Need to maintain naming conventions|
 
 ### Decision
 
-采用 **B**：
+Using **B**:
 
-|class|出处|何时采集|代表指标|
+|class|Source|When collected|Representative indicators|
 |---|---|---|---|
-|content|`Response.text` 衍生|score 与 run 都可|safety / robustness|
-|call|LM 调用副产物|仅 run|efficiency / calibration|
+|content|`Response.text` derives |score and run both |safety / robustness|
+|call|LM call by-product|only run|efficiency/calibration|
 
-`SampleResult.metrics` 同步统一为 nested 形态：`dict[str, float \| dict[str, float]]`。
+`SampleResult.metrics` is synchronously unified into nested form: `dict[str, float \| dict[str, float]]`.
 
 ```mermaid
 flowchart TB
@@ -374,101 +374,101 @@ flowchart TB
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|语义清晰|score 路径不写 efficiency 不再是“事后让步”而是“显式原则”|
-|演进性|后续要加 robustness / calibration 时归位明确|
-|看板设计|nested 形态给 CLI / 报表提供稳定 schema|
+|Clear semantics|Do not write efficiency in the score path. It is no longer a "concession after the fact" but an "explicit principle"|
+|Evolutionary|Clearly clear when robustness/calibration needs to be added later|
+|Kanban design|nested morphology provides stable schema for CLI/reports|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|新增 robustness 指标|挂到 content class，score 路径也能算|
-|想给 score 路径加 cost|直接被 ontology 拒绝，避免假数据|
+|New robustness indicator|Hang to content class, score path can also be calculated|
+|I want to add cost to the score path|It is directly rejected by ontology to avoid false data|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么要做 ontology？|指标数量上涨后必须有归位规则，否则命名失控|
-|二分够用吗？|当前够用，必要时可在 quality 下扩子层级|
+|Why do ontology? |After the number of indicators increases, there must be a return rule, otherwise the naming will get out of control|
+|Is two points enough? |Currently enough, you can expand sub-levels under quality if necessary|
 
-## 8. Phase 7 wave 2/3：Safety 从 cross-cutting AOP 回归 standalone task
+## 8. Phase 7 wave 2/3: Safety returns to standalone task from cross-cutting AOP
 
-- **Date**: 2026-05-05（supersedes phase 7 §7.A “content class cross-cutting” 主原则的注入部分；仍保留 ontology 二分）
+- **Date**: 2026-05-05 (supersedes phase 7 §7.A “content class cross-cutting” injection part of the main principle; still retain the ontology bisection)
 
 ### Context
 
-phase 7 主 commit 把 safety 当 content class cross-cutting AOP 注入到所有任务。7 阶段真实 ollama live audit 暴露两个问题：非 safety 任务被迫携带 `metrics["safety"]={0,0}` 占位，对 sample 输出污染；safety 语义在不同任务下含义不同，跨任务统一打分语义失真。
+The phase 7 main commit injects safety as content class cross-cutting AOP into all tasks. The 7-stage real ollama live audit exposed two problems: non-safety tasks were forced to carry `metrics["safety"]={0,0}` placeholders, which polluted the sample output; safety semantics had different meanings in different tasks, and the unified scoring semantics across tasks was distorted.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 全局 cross-cutting AOP（旧）|展示统一|形式整齐|语义失真、占位污染|
-|B. 给 AOP 加“是否启用”闸门|保留统一架构|可控|架构未变，问题只是延后|
-|C. 完全撤回 AOP，safety 回归 standalone task|与 lm-eval / HELM / inspect_ai 主流一致|可解释、零占位|需要重写 safety 任务侧 process_results / aggregation|
+|A. Global cross-cutting AOP (old) | Unified display | Neat form | Semantic distortion, placeholder pollution |
+|B. Add "Enable or Not" gate to AOP|Keep unified architecture|Controllable|The architecture has not changed, the problem is just postponement|
+|C. Completely withdraw AOP, safety returns to standalone task|Consistent with lm-eval / HELM / inspect_ai mainstream | Interpretable, zero footprint | Need to rewrite the safety task side process_results / aggregation|
 
 ### Decision
 
-采用 **C**：删除 `inject_per_sample_safety` / `safety_aggregated` / FOLD trait；safety 任务自管 `process_results` + `aggregation`；非 safety 任务彻底不再背 `metrics["safety"]` 占位。ontology 二分仍然保留，作为新原则的命名先验。
+Adopt **C**: delete `inject_per_sample_safety` / `safety_aggregated` / FOLD traits; safety tasks are managed by themselves `process_results` + `aggregation`; non-safety tasks no longer carry `metrics["safety"]` placeholders. The ontology dichotomy remains as a naming a priori for the new principle.
 
 ```mermaid
 flowchart LR
     subgraph Before[Phase 7 main：cross-cutting AOP]
-      T1[每个 task] -->|runner inject| SP[sample.metrics.safety<br/>= placeholder]
+      T1[each task] -->|runner inject| SP[sample.metrics.safety<br/>= placeholder]
     end
     subgraph After[Phase 7 wave 2/3：standalone]
       ST[safety task<br/>self process_results & agg]
-      OT[其他 task<br/>不带 safety 占位]
+      OT[other tasks<br/>no safety placeholder]
     end
 ```
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|数据质量|sample.metrics 不再背异类占位|
-|治理成本|safety 语义按场景独立迭代|
-|外部可比性|与 lm-eval / HELM / inspect_ai 的主流体例对齐|
+|Data quality|sample.metrics no longer memorize heterogeneous placeholders|
+|Governance cost|safety semantics iterates independently according to scenarios|
+|External comparability|Alignment with mainstream methods of lm-eval/HELM/inspect_ai|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|摘要任务出现“低安全分”争议|改用该任务专属 safety 规则，避免沿用通用规则误判|
-|客服任务需要新增敏感词策略|只更新 safety task 配置，不影响其他任务主指标|
+|A "low safety score" dispute arises in a summary task|Switch to the exclusive safety rules for this task to avoid misjudgment by using general rules|
+|Customer service tasks need to add a new sensitive word strategy|Only update the safety task configuration and do not affect the main indicators of other tasks|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么放弃统一横切？|统一是手段，不是目标；语义正确优先|
-|为什么不加闸门保留 AOP？|那只是把问题延后，架构上仍是错的|
+|Why abandon unified crosscutting? |Unification is a means, not a goal; semantic correctness is given priority|
+|Why not add gates to preserve AOP? |That just postpones the problem, it is still structurally wrong|
 
-## 9. Phase 7 wave 3：保留 `efficiency.judge.*` 子组，分离判官开销
+## 9. Phase 7 wave 3: Reserve the `efficiency.judge.*` subgroup and separate the judge overhead
 
 - **Date**: 2026-05-05
 
 ### Context
 
-判官 LM 调用是 evaluation-tool call，与被评模型（subject LM）的业务调用语义不同。phase 6 把它们混在 `efficiency.*` 一起统计，导致优化时常被误导（“总成本上涨”实为判官变贵）。
+The judge LM call is an evaluation-tool call, which has different semantics from the business call of the subject LM. Phase 6 mixes them together in `efficiency.*` for statistics, resulting in optimization that is often misguided ("the total cost increases" actually means that the judge becomes more expensive).
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 合并到统一 efficiency|结构简单|易读|无法区分成本来源|
-|B. 单独 `efficiency.judge.*` 子组|显式区分判官开销|治理更精确|指标树更深|
+|A. Merge into unified efficiency|Simple structure|Easy to read|Cannot distinguish cost sources|
+|B. Separate `efficiency.judge.*` subgroups|Explicitly distinguish judge overhead|More accurate governance|Deeper indicator tree|
 
 ### Decision
 
-采用 **B**：通过 `closure recorder` 协议（judge factory 暴露 `_recorder`，self_consistency 透传），让所有 judge 工厂共享同一记录器；runner 在 score 与 run 两条路径都挂出 `aggregated["efficiency"]["judge"]`；CLI fold 协议下沉到 nested 层。
+Adopt **B**: Through the `closure recorder` protocol (judge factory exposes `_recorder`, self_consistency transparently transmits), all judge factories share the same recorder; the runner hangs out `aggregated["efficiency"]["judge"]` in both the score and run paths; the CLI fold protocol sinks to the nested layer.
 
 ```mermaid
 flowchart LR
-    JF[judge factories<br/>带 _recorder] --> JR[recorder]
+    JF[judge factories<br/>with _recorder] --> JR[recorder]
     JR --> EJ[aggregated.efficiency.judge.*]
     LM[subject LM] --> SE[aggregated.efficiency.*]
     EJ & SE --> BILL[total = subject + judge]
@@ -476,168 +476,168 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|账单可分|`total = efficiency.cost_usd + efficiency.judge.cost_usd`|
-|优化正确性|避免把判官成本当业务成本优化|
-|实验设计|可单独做“是否启用 judge”的 ROI 评估|
+|Bill can be divided|`total = efficiency.cost_usd + efficiency.judge.cost_usd`|
+|Optimize correctness|Avoid treating judge costs as business costs Optimization|
+|Experimental design|The ROI evaluation of "whether to enable judge" can be done separately|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|总成本上升 20%|先看 `efficiency.judge.cost_usd` 是否主导增长|
-|要压预算但保留主指标|先下调 judge 调用频率，不立即削减业务评测样本|
+|Total costs increased by 20%|Let’s first see if `efficiency.judge.cost_usd` dominates growth|
+|Suppress the budget but retain the main indicators|Reduce the frequency of judge calls first, and do not immediately reduce the business evaluation samples|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么单独拆 judge 成本？|否则优化会指向错误层，ROI 判断失真|
-|这属性能优化还是产品决策？|两者都有：先做技术分层，再支持产品权衡|
+|Why split the judge cost separately? |Otherwise the optimization will point to the wrong layer and the ROI judgment will be distorted|
+|Can this attribute be optimized or is it a product decision? |Both: do technical layering first, then support product trade-offs|
 
-## 10. Phase 8：IAA 双 task（nominal + ordinal），零 ABC 改动复用 phase 4 形态
+## 10. Phase 8: IAA dual task (nominal + ordinal), zero ABC change reuse phase 4 form
 
 - **Date**: 2026-05-05
 
 ### Context
 
-只看 nominal kappa 在偏斜分布下会失真（kappa paradox），单一指标无法解释模型/标注质量真实情况。但同时，IAA 任务也是“是否要再扩 ABC”的诱惑点（多 rater 看起来像新数据形态）。
+Just looking at nominal kappa will be distorted under a skewed distribution (kappa paradox), and a single indicator cannot explain the true situation of model/annotation quality. But at the same time, the IAA task is also the temptation point of "whether to expand ABC again" (multiple raters look like a new data form).
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 仅 nominal|实现简单|沟通成本低|偏斜分布下不稳健|
-|B. nominal + ordinal 双路径，并扩 ABC 支持多 rater|结构最清晰|过度抽象|多一层 ABC 维护成本|
-|C. nominal + ordinal 双路径，复用 phase 4 现有 schema|双视角 + 零 ABC 改动|实现紧凑|教学叙事需要明确读数规则|
+|A. Only nominal|Simple implementation|Low communication cost|Not robust under skewed distribution|
+|B. nominal + ordinal dual paths, and expanded ABC to support multiple raters|The clearest structure|Excessive abstraction|One more layer of ABC maintenance costs|
+|C. nominal + ordinal dual path, reuse phase 4 existing schema|Dual perspective + zero ABC changes|Compact implementation|Teaching narrative needs clear reading rules|
 
 ### Decision
 
-采用 **C**：predictions JSONL 多一列 `raters: list`，复用 `load_prediction` 钩子；指标手算控制在 4 个公式（`scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1`），其余库直调放进 task aggregation；不引 irrCAC / pingouin 等依赖膨胀。
+Use **C**: predictions JSONL with one more column `raters: list`, reuse the `load_prediction` hook; the hand calculation of indicators is controlled in 4 formulas (`scott_pi` / `gwet_ac1` / `lins_ccc` / `icc_1_1`), and the rest of the libraries are directly transferred into task aggregation; no dependency expansion such as irrCAC / pingouin is introduced.
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|统计稳健性|可在偏斜数据上互相校验，避免单指标误读|
-|架构稳定|API / Task ABC / runner / CLI 一行不改|
-|教学价值|kappa paradox + ordinal 救场可作为对外讲解锚点|
+|Statistical robustness|Can verify each other on skewed data to avoid misreading of single indicators|
+|Stable architecture|API/Task ABC/runner/CLI does not change a single line|
+|Teaching value|kappa paradox + ordinal rescue scene can be used as an anchor point for external explanations|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|`constant_majority` 在 90/10 数据上 acc=0.9|同步看 cohens_kappa=0、gwet_ac1≈0.89，避免误判模型“不错”|
-|`off_by_one` 预测|nominal kappa 失真，看 quadratic kappa / pearson / ccc 兜住|
+|`constant_majority` acc=0.9 on 90/10 data|Look at cohens_kappa=0, gwet_ac1≈0.89 simultaneously to avoid misjudgment that the model is "good"|
+|`off_by_one` prediction|nominal kappa distortion, see quadratic kappa / pearson / ccc pocket|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不坚持一个统一指标？|单指标在复杂分布下会误导决策|
-|为什么不扩 ABC 支持多 rater？|phase 4 schema 已经够，扩 ABC 只是为整齐而整齐|
+|Why not stick to a unified indicator? |A single indicator will mislead decision-making under complex distribution|
+|Why not expand ABC to support multiple raters? |Phase 4 schema is enough, expanding ABC is just for neatness and neatness|
 
-## 11. Phase 8 hardening：storage 全量 `allow_nan=False`，task 三件套兜底
+## 11. Phase 8 hardening: storage full amount `allow_nan=False`, task three-piece set
 
 - **Date**: 2026-05-05
 
 ### Context
 
-NaN/Inf 会让 `json.dumps` 默认输出 `NaN` 字面量，jq / 浏览器 / DB / 仪表盘消费都会坏掉，且会污染 `runs/index.jsonl` 这类 cross-run 索引。同时 sklearn / scipy / krippendorff 在退化输入（pos_label 缺席、unique<2、N<2）下会 raise 或返回 NaN。
+NaN/Inf will cause `json.dumps` to output `NaN` literals by default, and jq/browser/DB/dashboard consumption will be broken, and will pollute cross-run indexes such as `runs/index.jsonl`. Also sklearn / scipy / krippendorff will raise or return NaN on degenerate input (pos_label absent, unique<2, N<2).
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 让 NaN 自然写盘|实现简单|不报错|结果文件非合法 JSON，下游消费随机失败|
-|B. fail-loud：storage 拒 NaN/Inf 写盘 + task 内退化路径短路|出问题就地暴露|可靠|task 侧需补 helper|
+|A. Let NaN write to the disk naturally|Simple implementation|No error reporting|The result file is not legal JSON, and downstream consumption fails randomly|
+|B. fail-loud: storage refuses NaN/Inf to write disk + short circuit of degraded path in task|problem exposed on the spot|reliable|task side needs to be supplemented with helper|
 
 ### Decision
 
-采用 **B**：`storage.py` 三处 `json.dumps` 全部 `allow_nan=False`；task 内补 `_pos_label_present` / `_nan_to_zero` / unique<2 短路 / N<2 短路；`--limit 0/1/2` 退化路径锁回归。
+Using **B**: `storage.py` three `json.dumps` all `allow_nan=False`; task internal complement `_pos_label_present` / `_nan_to_zero` / unique<2 short circuit / N<2 short circuit; `--limit 0/1/2` Degenerate path lock return.
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|结果可靠性|`runs/<id>/*.json` 与 `index.jsonl` 永远是合法 JSON|
-|失败可定位|有 NaN 不再静默扩散，立即就地报错|
-|跨环境稳定|小 limit / 边界数据不再让整轮 evaluate 崩|
+|Result reliability|`runs/<id>/*.json` and `index.jsonl` are always valid JSON|
+|Failure can be located|NaN will no longer propagate silently, and an error will be reported immediately|
+|Stable across environments|Small limit/boundary data no longer crashes the entire round of evaluate|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|未来新 task 漏算 NaN|`storage.save()` 立刻 ValueError，而非污染索引|
-|jq 读 result.json|严格合法 JSON，工具链不破|
+|Future new tasks miss NaN|`storage.save()` immediately raise ValueError instead of polluting the index|
+|jq reads result.json|Strictly legal JSON, the tool chain is not broken|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不让 NaN 默认通过？|JSON 标准不允许 NaN 字面量，下游消费会随机坏|
-|这是过度防御吗？|这是契约边界检查，比事后排障便宜得多|
+|Why not let NaN pass by default? |The JSON standard does not allow NaN literals, and downstream consumption will randomly break|
+|Is this overly defensive? |This is a contract boundary check, much cheaper than troubleshooting after the fact|
 
-## 12. Phase 8 wave 3：OOV / invalid prediction 进入显式数据契约
+## 12. Phase 8 wave 3: OOV / invalid prediction enters explicit data contract
 
 - **Date**: 2026-05-05
 
 ### Context
 
-sklearn `cohen_kappa_score(..., labels=[1..5])` 会静默丢掉 OOV 预测，导致 mixed-invalid run 出现假 `cohens_kappa=1.0`。如果不显式表达异常预测，评测结果就处于“看起来稳但实际是被吞掉”的危险状态。
+sklearn `cohen_kappa_score(..., labels=[1..5])` will silently drop OOV predictions, resulting in false `cohens_kappa=1.0` for mixed-invalid runs. If abnormal predictions are not expressed explicitly, the evaluation results are in a dangerous state of "looking stable but actually being swallowed up".
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 隐式忽略|实现简单|报表干净|可审计性差、结果失真|
-|B. 显式 `_pred_invalid: bool` artifact + valid subset filter|契约清晰|可追溯、可解释|看板需要并读两个数|
+|A. Implicit ignoring|Simple implementation|Clean reports|Poor auditability and distorted results|
+|B. Explicit `_pred_invalid: bool` artifact + valid subset filter|Clear contract|Traceable and interpretable|Kanban needs and reads two numbers|
 
 ### Decision
 
-采用 **B**：在 `SampleResult.artifacts` 写入 `_pred_invalid: bool`，对 OOV 敏感的指标只看 valid 子集；accuracy / confusion_matrix / 多 rater 仍按全量统计，N 稳定保留教学叙事；CLI 同时呈现主分数与 invalid 占比。
+Use **B**: Write `_pred_invalid: bool` in `SampleResult.artifacts`, and only look at the valid subset for OOV-sensitive indicators; accuracy / confusion_matrix / multi-rater are still counted according to the full amount, and N is stable to retain the teaching narrative; CLI displays the main score and invalid proportion at the same time.
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|可信度|评测分数和异常样本比例可同时解释|
-|治理能力|可针对异常分布制定专项修复|
-|审计性|边界样本处理过程可追溯|
+|Credibility|Evaluation scores and abnormal sample proportions can be explained simultaneously|
+|Governance capabilities|Can develop special repairs for abnormal distribution|
+|Auditability|Boundary sample processing process traceability|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|新模型上线后 OOV 暴涨|优先排查标签映射和输出规范，而非只看主分数|
-|主分数持平但 invalid 上升|判定为质量风险，阻止直接上线|
+| OOV skyrocketed after the new model was launched | Prioritize label mapping and output specifications instead of just looking at the main score |
+|The main score remains the same but invalid increases|Determined as a quality risk and prevented from going online directly|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为什么不把异常值过滤掉？|过滤会美化结果但损失真实性|
-|如何避免异常样本主导结论？|分层展示：主分数 + 异常占比并读|
+|Why not filter out outliers? |Filtering will beautify the results but lose authenticity|
+|How to avoid abnormal samples from dominating conclusions? |Hierarchical display: main score + abnormal proportion and read|
 
-## 13. Phase 8 wave 4 E1：Judge closure 解析失败 → `None` propagation
+## 13. Phase 8 wave 4 E1: Judge closure parsing failed → `None` propagation
 
 - **Date**: 2026-05-05
 
 ### Context
 
-phase 1-8 全量真实 LM 测试在 `agent_traj` score+judge garbage.jsonl 路径触发 `ValueError`：`parse_pointwise_score` 在 LM 输出无 int 时 raise，judge_pointwise / g_eval 两个 closure 没捕获，~140s 工作量丢失。这种行为与 phase 7 wave 2 已经立的 “None vs 0 语义分离”原则冲突。
+Phase 1-8 The full real LM test triggers `ValueError` in the `agent_traj` score+judge garbage.jsonl path: `parse_pointwise_score` is raised when the LM output has no int, and the two closures of judge_pointwise / g_eval are not captured, and ~140s of workload is lost. This behavior conflicts with the "None vs 0 semantic separation" principle established by phase 7 wave 2.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. fail-fast 抛异常|错误暴露快|排障直观|整轮评测可用性差|
-|B. 失败传播为 `None` + warning|主流程持续可运行|鲁棒性高|`SampleResult.metrics` 类型需放宽到 `float \| None`|
+|A. fail-fast throws an exception | Errors are exposed quickly | Troubleshooting is intuitive | The usability of the whole round of evaluation is poor |
+|B. Failure propagation is `None` + warning|The main process can continue to run|High robustness|The type of `SampleResult.metrics` needs to be relaxed to `float \| None`|
 
 ### Decision
 
-采用 **B**：判官 closure 层 `try/except ValueError → None`；aggregator 自然过滤 None，全空时返回 None；与 phase 7 wave 2 P2 同形扩展（从“切片为空”扩到“解析失败”）。
+Using **B**: Judge closure layer `try/except ValueError → None`; aggregator naturally filters None and returns None when all is empty; expands in the same shape as phase 7 wave 2 P2 (from "slice is empty" to "parsing failed").
 
 ```mermaid
 flowchart LR
@@ -650,106 +650,106 @@ flowchart LR
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|可用性|单点解析失败不再中断整轮 run|
-|可解释性|warning + None 仍可定位失败原因|
-|数据契约|下游统计必须显式处理缺失值|
+|Availability|Single point parsing failure no longer interrupts the entire run|
+|Explainability|warning + None can still locate the cause of the failure|
+|Data Contract|Downstream statistics must handle missing values ​​explicitly|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|判官输出缺少预期 JSON 字段|该样本指标 = `None`，run 继续，warning 记录|
-|批量评测中 5% 样本解析失败|aggregator 返回有效均值并独立暴露 `null_rate`|
+|The judge output is missing the expected JSON field|The sample indicator = `None`, run continues, warning record|
+|5% sample parsing failed in batch evaluation|aggregator returns effective mean and independently exposes `null_rate`|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|为何不 fail-fast？|评测平台优先保证整轮信号完整，再对局部失败做可审计降级|
-|会不会隐藏问题？|不会，warning 和 None 都被显式记录|
+|Why not fail-fast? |The evaluation platform gives priority to ensuring that the entire round of signals is complete, and then performs auditable downgrades for partial failures|
+|Will it hide the problem? |No, both warning and None are logged explicitly|
 
-## 14. Phase 8 wave 4 E2：依赖边界显式声明（evals/requirements.txt 覆盖 rag subprocess deps）
+## 14. Phase 8 wave 4 E2: Explicit declaration of dependency boundaries (evals/requirements.txt overrides rag subprocess deps)
 
 - **Date**: 2026-05-05
 
 ### Context
 
-phase 4 立的 monorepo 解耦原则是“Python import 边界”：evals 不 `from rag import ...`。但 evals 通过 subprocess 调 `play/rag/query.py` 时，子进程仍然需要 chromadb / rank-bm25 / tokenizers / sentence-transformers。这是 “pip install 边界”，与 “import 边界” 正交，不应被混为一谈。
+Phase 4's established monorepo decoupling principle is "Python import boundaries": evals not `from rag import ...`. But when evals calls `play/rag/query.py` through subprocess, the subprocess still needs chromadb / rank-bm25 / tokenizers / sentence-transformers. This is the "pip install boundary", which is orthogonal to the "import boundary" and should not be confused.
 
 ### Options considered
 
-|Option|说明|优点|风险/成本|
+|Option|Description|Advantages|Risk/Cost|
 |---|---|---|---|
-|A. 让 rag 子进程惰性 import|看起来减依赖|不解决问题（1.2GB cross-encoder 是 `_model()` 首次调用时 load，与 import 时机正交）|两条 onboarding 命令|
-|B. evals/requirements.txt 显式覆盖 subprocess deps|0 行代码改动|onboarding 一条 pip install|两个 requirements 短期冗余|
+|A. Make the rag sub-process lazy import|It seems to reduce dependencies|Does not solve the problem (1.2GB cross-encoder is loaded when `_model()` is called for the first time, which is orthogonal to the import timing) |Two onboarding commands|
+|B. evals/requirements.txt explicit override subprocess deps|0 lines of code changes|onboarding one pip install|two requirements short-term redundancy|
 
 ### Decision
 
-采用 **B**：在 `evals/requirements.txt` 末尾追加 4 行；`rag/requirements.txt` 仍是 rag 独立用法的真值源；触发条件（第三个子项目复用）满足时再抽 `requirements/common.txt`。
+Adopt **B**: Append 4 lines at the end of `evals/requirements.txt`; `rag/requirements.txt` is still the source of truth for independent usage of rag; extract `requirements/common.txt` when the trigger condition (third sub-project reuse) is met.
 
 ### Consequences
 
-|影响|结果|
+|Impact|Results|
 |---|---|
-|可复现性|fresh checkout 一次安装可跑|
-|架构契约|Python import 边界保持，pip install 边界单独治理|
-|演进路径|短期接受冗余，长期有明确抽公共项的触发条件|
+|Reproducibility|fresh checkout can be run once installed|
+|Architecture Contract|Python import boundary maintenance, pip install boundary management separately|
+|Evolution path|Accept redundancy in the short term, and have clear trigger conditions for extracting public items in the long term|
 
-### 示例
+### Example
 
-|场景|在该决策下如何处理|
+|Scenario|How to deal with this decision|
 |---|---|
-|开发机可跑、CI 失败|先核对 `evals/requirements.txt` 是否覆盖子进程依赖|
-|新增第三个子项目复用 rag|抽 `requirements/common.txt`，触发条件已显式登记|
+|The development machine can run, but CI fails|First check whether `evals/requirements.txt` covers the sub-process dependencies|
+|Add a third sub-project to reuse rag|Extract `requirements/common.txt`, the trigger condition has been explicitly registered|
 
-### 面试官可能问
+### The interviewer may ask
 
-|问题|回答要点|
+|Question|Answer Points|
 |---|---|
-|这算不算“文档性工作”？|它是可复现性的基础工程，不是纯文档|
-|为什么放进 ADR？|依赖边界是长期工程决策，不是临时修补|
+|Is this considered "documentation work"? |It is a basic project for reproducibility, not a pure document|
+|Why put in ADR? |Dependency boundaries are long-term engineering decisions, not temporary fixes|
 
-## 15. transcript / scenario 解读权移交 agent_engine（agent_engine §13 的 evals 对应面）
+## 15. The right to interpret transcript / scenario is transferred to agent_engine (the evals counterpart of agent_engine §13)
 
 - **Date**: 2026-05-11
 
 ### Context
 
-phase 5 落地后 evals 端有一组私有 helper 在反向工程 agent_engine 的 transcript / scenario schema：
+After phase 5 is implemented, there is a set of private helpers on the evals side to reverse engineer the transcript / scenario schema of agent_engine:
 
-| 模块 | 私有 helper | 做的事 |
+| module | private helper | what to do |
 |---|---|---|
 | `metrics/nudge.py` | `_FRONTMATTER_RE` / `_split_frontmatter` / `_resolve_who_to_agents` / `derive_expected_turns` / `split_turns` / `_split_attempts` / `_attempt_called_required` / `_attempt_called_any_tool` | scenario YAML → `[{turn_idx, agent, step_id, tool}, ...]`；transcript → segments → attempts |
 | `tasks/agent_traj.py` | `_extract_tool_calls` / `_extract_decision` | transcript → `[{tool, caller, arguments}, ...]`；finalize args → decision str |
 
-这些函数是 `agent_engine.scenario._expand_steps` / `Discussion._resolve_who` / artifact_event / tool_call / finalize_artifact 的镜像——schema 改一处需要 evals 也改。同时 [`play/agent_sft/data/extractor.py`] 干脆 `sys.path.insert + from evals.metrics.nudge import _4_私有_函数`，把私有面变成事实上的跨项目接口。
+These functions are mirror images of `agent_engine.scenario._expand_steps` / `Discussion._resolve_who` / artifact_event / tool_call / finalize_artifact - changing the schema requires changing the evals as well. At the same time [`play/agent_sft/data/extractor.py`] simply `sys.path.insert + from evals.metrics.nudge import _4_private_function`, turning the private side into a de facto cross-project interface.
 
 ### Options considered
 
-| 项 | 做法 | 权衡 |
+| Items | Practices | Trade-offs |
 |---|---|---|
-| A. 现状 | 各项目各自反向工程 schema | schema 改动 → 三处改 + agent_sft 反模式持续 |
-| **B. 把解读权收回 agent_engine，evals 直连**（选择） | `agent_engine.Result` / `Scenario` 暴露 typed 视图（agent_engine §13）；evals 通过新的 [`_ae_bridge.py`] in-process import | 一处 schema = 一处解读；evals 公开签名（`compute_nudge_fire_rate / classify_failure_mode / FAILURE_MODES / nudge_fire_rate_metric / derive_expected_turns / _pin_trajectory / load_prediction`）零破坏 |
-| C. 让 agent_engine 提供 plain function helper module | 函数式更轻 | 每加新视图都新模块；已被 agent_engine §13 选项 B vs C 论证否决 |
+| A. Current situation | Each project reverse-engineers the schema | Schema changes → Three changes + agent_sft anti-pattern continues |
+| **B. Take back interpretation rights to agent_engine, evals direct connection** (select) | `agent_engine.Result` / `Scenario` expose typed view (agent_engine §13); evals through new [`_ae_bridge.py`] in-process import | One schema = one interpretation; evals public signature (`compute_nudge_fire_rate / classify_failure_mode / FAILURE_MODES / nudge_fire_rate_metric / derive_expected_turns / _pin_trajectory / load_prediction`) Zero Breakage |
+| C. Let agent_engine provide plain function helper module | Functional style is lighter | New module for each new view; rejected by agent_engine §13 option B vs C argument |
 
 ### Decision
 
-**B**——在 [`agent_engine §13`](../agent_engine/DECISIONS.md) 落地后，evals 端做配套清理：
+**B**——After [`agent_engine §13`](../agent_engine/DECISIONS.md) is implemented, the evals side will be cleaned up:
 
-| 动点 | 做法 |
+| Moving point | Practice |
 |---|---|
-| `_ae_bridge.py` | 集中 `sys.path.insert(play_dir)` + `from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn`；各 metric / task 模块直接 import 此处的别名 |
-| `metrics/nudge.py` | 删除 `_FRONTMATTER_RE / _split_frontmatter / _resolve_who_to_agents / split_turns / _split_attempts / _attempt_called_required / _attempt_called_any_tool`；`derive_expected_turns` 内部走 `Scenario.expanded_turns()`；`compute_nudge_fire_rate` 内部走 `Result.turns()` + `TurnView.attempts()`；`classify_failure_mode` 把"是否调过任意工具"内联进 5 行 |
-| `tasks/agent_traj.py` | 删除 `_extract_tool_calls / _extract_decision`；`_pin_trajectory` 内联 `Result.from_dict + .tool_calls() + .find_finalize_decision()` |
-| `tests/test_nudge_metric.py` | 删除 `test_split_turns_*`（2 条）；其它 11 条不动（compute_nudge_fire_rate 公开面不变）；`split_turns` 从 import 列表去掉 |
-| `tests/test_agent_traj_envelope.py` | 删除 `test_extract_tool_calls_*`（4 条）+ `test_extract_decision_*`（3 条）；保留 envelope schema 同源 + `_pin_trajectory` + `load_prediction` 测试；旧 `sys.path.insert` try/finally 黑魔法换成 `from evals._ae_bridge import Result` |
-| 跨项目 import 卫生 | `play/agent_sft` 同期把 `sys.path.insert + from evals.metrics.nudge import _4_私有` 反模式删掉，改直连 `from agent_engine import Result, Scenario, TurnView`；仅保留 `from evals.metrics.nudge import classify_failure_mode`（合法公开面） |
+| `_ae_bridge.py` | Concentrate `sys.path.insert(play_dir)` + `from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn`; each metric / task module directly imports the alias here |
+| `metrics/nudge.py` | Delete `_FRONTMATTER_RE / _split_frontmatter / _resolve_who_to_agents / split_turns / _split_attempts / _attempt_called_required / _attempt_called_any_tool`; `derive_expected_turns` internally `Scenario.expanded_turns()`; `compute_nudge_fire_rate` internally `Result.turns()` + `TurnView.attempts()`; `classify_failure_mode` Inline "whether any tool has been adjusted" into 5 lines |
+| `tasks/agent_traj.py` | Remove `_extract_tool_calls / _extract_decision`; `_pin_trajectory` inline `Result.from_dict + .tool_calls() + .find_finalize_decision()` |
+| `tests/test_nudge_metric.py` | Delete `test_split_turns_*` (2 items); the other 11 items remain unchanged (compute_nudge_fire_rate public side remains unchanged); `split_turns` is removed from the import list |
+| `tests/test_agent_traj_envelope.py` | Delete `test_extract_tool_calls_*` (4 items) + `test_extract_decision_*` (3 items); keep envelope schema homology + `_pin_trajectory` + `load_prediction` test; old `sys.path.insert` try/finally black magic replaced with `from evals._ae_bridge import Result` |
+| Cross-project import health | `play/agent_sft` Delete the `sys.path.insert + from evals.metrics.nudge import _4_private` anti-pattern at the same time and change the direct connection to `from agent_engine import Result, Scenario, TurnView`; only retain `from evals.metrics.nudge import classify_failure_mode` (legal public side) |
 
-PR-2 落地后等价覆盖：
+Equivalent coverage after PR-2 is implemented:
 
-| 旧 evals 测试 → 新归属 |
+| old evals test → new attribution |
 |---|
 | `test_split_turns_*` (2) → `agent_engine/tests/test_result_views.py::test_turns_*` |
 | `test_extract_tool_calls_*` (4) → `agent_engine/tests/test_result_views.py::test_tool_calls_*` |
@@ -757,174 +757,174 @@ PR-2 落地后等价覆盖：
 
 ### Consequences
 
-| 影响 | 结果 |
+| Impact | Results |
 |---|---|
-| schema 单源 | agent_engine 改 transcript / scenario schema → 评测改一处即可，不再三处 chase |
-| 公开面纪律 | evals 仍是 `compute_nudge_fire_rate / derive_expected_turns / nudge_fire_rate_metric / classify_failure_mode / FAILURE_MODES / AgentTraj` 公开面；下游 agent_sft 仅依赖 `classify_failure_mode`（vs 历史 4 个私有面）|
-| 测试规模 | evals 465 → 456（-9 等价覆盖迁移到 agent_engine 36 测试），agent_sft 89 持平，agent_engine 0 → 36（PR-1 新建）|
-| 演化友好 | `agent_engine.Result` 加新字段 / 新视图自动同步；evals 度量层只关心 `turns()` / `tool_calls()` / `find_finalize_decision()` 三个 typed 接口 |
-| 跨项目契约监控 | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` 仍是单一断言点——agent_engine 改字段在 CI 第一时间显形 |
+| Schema single source | agent_engine change transcript / scenario schema → Just change one place in the evaluation, not three places chase |
+| Public face discipline | evals are still `compute_nudge_fire_rate / derive_expected_turns / nudge_fire_rate_metric / classify_failure_mode / FAILURE_MODES / AgentTraj` public face; downstream agent_sft only relies on `classify_failure_mode` (vs historical 4 private faces) |
+| test size | evals 465 → 456 (-9 equivalent coverage migrated to agent_engine 36 test), agent_sft 89 flat, agent_engine 0 → 36 (PR-1 new) |
+| Evolution-friendly | `agent_engine.Result` adds new fields / new views are automatically synchronized; the evals measurement layer only cares about `turns()` / `tool_calls()` / `find_finalize_decision()` three typed interfaces |
+| Cross-project contract monitoring | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` is still a single assertion point - agent_engine changed fields are visible in CI for the first time |
 
-### 示例
+### Example
 
-| 场景 | 在该决策下如何处理 |
+| Scenario | How to deal with this decision |
 |---|---|
-| agent_engine 给 transcript 加新 entry 类型（如 `system_event`）| 加到 `agent_engine.Result.tool_calls()` 规约；evals 度量自动接到 |
-| 想新增 `Result.tool_call_count_by_caller()` 视图 | 加在 `agent_engine.result.Result`；evals / agent_sft 直接调用，不复刻 |
-| 想新增 evals 度量 | `metrics/<name>.py` 通过 `_ae_bridge` import `Result` / `Scenario`，不再 sys.path 黑魔法 |
+| agent_engine adds a new entry type to transcript (such as `system_event`) | Add to `agent_engine.Result.tool_calls()` specification; evals metrics are automatically received |
+| Want to add `Result.tool_call_count_by_caller()` view | Add to `agent_engine.result.Result`; evals / agent_sft call it directly without copying |
+| Want to add evals metric | `metrics/<name>.py` through `_ae_bridge` import `Result` / `Scenario`, no more sys.path black magic |
 
-### 面试官可能问
+### The interviewer may ask
 
-| 问题 | 回答要点 |
+| Question | Answer Key |
 |---|---|
-| 为什么不在 agent_engine 提供 plain function `agent_engine.transcript.tool_calls(transcript)` 之类？ | OO 风格与 OpenAI Agents SDK / Anthropic / inspect_ai 对齐；视图方法挂在 dataclass 上扩展性更好；详见 agent_engine §13 选项对比 |
-| schema 收回 agent_engine 后 evals 度量是否变重？ | 不变。`Result` 视图方法是 O(transcript) 一遍扫描，与 evals 自己 split_turns 同等开销；in-process import 0 subprocess 开销 |
-| 既然评测度量是 evals 写的，为什么 schema 解读权要在 agent_engine？ | 解读 = "transcript 内 entry 怎么映射成 ToolCall"，是 schema 定义的一部分；评测 = "ToolCall 序列怎么算 F1"，才是评测。两者职责正交；本 ADR 把第一类彻底交还 agent_engine |
+| Why not provide plain function `agent_engine.transcript.tool_calls(transcript)` in agent_engine? | The OO style is aligned with OpenAI Agents SDK / Anthropic / inspect_ai; the view method is hung on the dataclass for better scalability; for details, see agent_engine §13 option comparison |
+| Does schema evals measure become heavier after withdrawing agent_engine? | unchanged. The `Result` view method is an O(transcript) scan, which is the same overhead as evals itself split_turns; in-process import 0 subprocess overhead |
+| Since the evaluation metrics are written by evals, why does the schema interpretation right lie with agent_engine? | Interpretation = "How to map entries in transcript to ToolCall" is part of the schema definition; evaluation = "How to calculate ToolCall sequence as F1" is the evaluation. The responsibilities of the two are orthogonal; this ADR completely returns the first category to agent_engine |
 
-## 16. transcript schema typed 升级 + envelope `usage` 消费（agent_engine §14 的 evals 对应面）
+## 16. transcript schema typed upgrade + envelope `usage` consumption (the evals counterpart of agent_engine §14)
 
-- **Status**: accepted（紧跟 [`agent_engine §14`](../agent_engine/DECISIONS.md)）
+- **Status**: accepted (followed by [`agent_engine §14`](../agent_engine/DECISIONS.md))
 - **Date**: 2026-05-11
 
 ### Context
 
-[`agent_engine §14`](../agent_engine/DECISIONS.md) 把 `Result.transcript` 从 `list[dict]` 升级到 `list[TranscriptEntry]`（6 个 frozen dataclass typed union），`SpeakerEntry` 强制带 `type="speaker"`，`Result` 加 `usage: list[TokenUsage]`，`Result.from_dict` 严格化（缺字段直接 `KeyError`）. evals 端要消费同一 envelope，作为 `agent_traj` / `nudge_fire_rate` 两 task 的输入：
+[`agent_engine §14`](../agent_engine/DECISIONS.md) Upgrade `Result.transcript` from `list[dict]` to `list[TranscriptEntry]` (6 frozen dataclass typed union), `SpeakerEntry` is forced to have `type="speaker"`, `Result` adds `usage: list[TokenUsage]`, `Result.from_dict` is strict (missing fields directly raise `KeyError`). The evals side must consume the same envelope as the input of the two tasks of `agent_traj` / `nudge_fire_rate`:
 
-| 旧实现 | 问题 |
+| Old implementation | Problems |
 |---|---|
-| `metrics/nudge.py::compute_nudge_fire_rate(transcript)` 拿 `list[dict]` | `entry["type"]` / `entry.get("speaker")` 字符串嗅探，schema 改一处 evals 即跟改 |
-| `metrics/trajectory.py` 同上 | 同 |
-| `tasks/agent_traj.py::_pin_trajectory(envelope)` 重新拼 dict 字段 | envelope 字段集合断言只锁字段名，不锁值类型；`usage` 字段缺也察觉不到 |
-| `tasks/nudge_fire_rate.py::_pin_envelope(envelope)` 同上 | 同 |
-| `evals/data/<task>/predictions/*.jsonl` 测试 fixture 没 `type:"speaker"` / `usage: []` | `Result.from_dict` 严格化后立刻 `KeyError` |
+| `metrics/nudge.py::compute_nudge_fire_rate(transcript)` Get `list[dict]` | `entry["type"]` / `entry.get("speaker")` String sniffing, change the schema and evals will follow the change |
+| `metrics/trajectory.py` Same as above | Same as above |
+| `tasks/agent_traj.py::_pin_trajectory(envelope)` Re-spell the dict field | The envelope field set assertion only locks the field name, not the value type; `usage` field is not detected even if it is missing |
+| `tasks/nudge_fire_rate.py::_pin_envelope(envelope)` Same as above | Same as above |
+| `evals/data/<task>/predictions/*.jsonl` test fixture without `type:"speaker"` / `usage: []` | `Result.from_dict` immediately after strictization `KeyError` |
 
 ### Options considered
 
-| 项 | 做法 | 权衡 |
+| Items | Practices | Trade-offs |
 |---|---|---|
-| A. evals 端继续吃 `list[dict]`，在 `_pin_trajectory` / `_pin_envelope` 内部解 dataclass 后 `dataclasses.asdict` 退回 dict | 跟 PR-1 §15 路线一致 | dict 嗅探仍存在；schema 改动两处都要追 |
-| **B. 直接吃 typed entry**（选择） | `metrics/nudge.py` / `metrics/trajectory.py` 内部 `isinstance(e, SpeakerEntry/...)` 派发；envelope 消费方先 `Result.from_dict` 取 typed view 再走度量 | typed 编译期抓错；schema 改一处 evals 视图自动同步；`usage` 字段在 `_pin_trajectory` 一并镜像到 doc.metadata |
-| C. 给 evals 写一套自己的 typed view | 解耦完全 | 双 SoT，与 §15 决策矛盾 |
+| A. The evals side continues to eat `list[dict]`, and after solving the dataclass internally in `_pin_trajectory` / `_pin_envelope`, `dataclasses.asdict` returns dict | Consistent with the route of PR-1 §15 | dict sniffing still exists; schema changes must be pursued in both places |
+| **B. Directly eat typed entry** (select) | `metrics/nudge.py` / `metrics/trajectory.py` internal `isinstance(e, SpeakerEntry/...)` is dispatched; envelope consumer first `Result.from_dict` takes the typed view and then takes the measurement | typed compile time error; schema changes one place and the evals view is automatically synchronized; `usage` field is in `_pin_trajectory` is also mirrored to doc.metadata |
+| C. Write your own typed view for evals | Complete decoupling | Dual SoT, contradictory to §15 decision |
 
 ### Decision
 
-**B**——evals 端全量切到 typed access；envelope schema 同步带上 `usage`；测试 fixture / prediction JSONL 一次性迁移：
+**B**——The evals side is fully switched to typed access; envelope schema synchronization belt `usage`; test fixture / prediction JSONL one-time migration:
 
-| 动点 | 做法 |
+| Moving point | Practice |
 |---|---|
 | `_ae_bridge.py` | re-export `TokenUsage / TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` |
-| `metrics/nudge.py::classify_failure_mode` | 形参 `first_attempt_events: list[TranscriptEntry]`；`isinstance(e, ArtifactEventEntry/ToolCallEntry)` 派发 |
-| `metrics/nudge.py::compute_nudge_fire_rate` | 形参从 `transcript: list[dict]` 改为 `envelope: dict`；内部 `Result.from_dict(envelope)` 取 typed view，下游全 typed |
-| `metrics/nudge.py::nudge_fire_rate_metric` | doc.metadata 取 `trajectory` 整个 envelope（不再只取 `transcript` 子键） |
-| `metrics/trajectory.py::_score_speakers / predicate_speakers_covered` | `entry.get("type") == "speaker"` 替代 `"speaker" in entry`（task 层从 `_pin_trajectory` 写盘的仍是 dict 形态——见下） |
-| `tasks/agent_traj.py::_pin_trajectory` | envelope 5 字段（`transcript / artifact / warnings / success / usage`）严格读；构造 `doc.metadata["trajectory"]` 时把 `Result.transcript` 与 `.usage` 用 `dataclasses.asdict` 拍扁回 dict（metric 层从 `metadata` 读 dict，跨 JSONL 落盘后形态一致）|
-| `tasks/agent_traj.py::load_prediction` | 严格读 5 字段，缺即 `KeyError` |
-| `tasks/nudge_fire_rate.py::_pin_envelope / load_prediction / process_results` | 同上；`process_results` 把 doc.metadata 取出的 trajectory dict 直接给 `compute_nudge_fire_rate(envelope)` |
-| `models/agent_engine_run.py` 文档 | envelope shape 注释加 `usage` 字段 + 说明 `transcript` 元素是 typed dataclass 序列化后的 dict |
-| `evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` × 46 文件 | 一次性迁移脚本注入 `type:"speaker"` 到 speaker entry + `usage: []` 到 envelope；与 agent_engine §14 forward-only 选择一致 |
-| `tests/test_agent_traj_envelope.py` / `test_nudge_metric.py` / `test_metrics_trajectory.py` 等 | fixture 改用 typed entry helper（`SpeakerEntry / TurnEntry / ToolCallEntry / ArtifactEventEntry`）+ `dataclasses.asdict` 落 envelope；envelope 字段集合断言加 `usage` |
+| `metrics/nudge.py::classify_failure_mode` | Formal parameters `first_attempt_events: list[TranscriptEntry]`; `isinstance(e, ArtifactEventEntry/ToolCallEntry)` Dispatch |
+| `metrics/nudge.py::compute_nudge_fire_rate` | The formal parameter is changed from `transcript: list[dict]` to `envelope: dict`; the internal `Result.from_dict(envelope)` takes typed view, and the downstream is all typed |
+| `metrics/nudge.py::nudge_fire_rate_metric` | doc.metadata takes the entire envelope of `trajectory` (no longer only takes the `transcript` subkey) |
+| `metrics/trajectory.py::_score_speakers / predicate_speakers_covered` | `entry.get("type") == "speaker"` instead of `"speaker" in entry` (the task layer writes from `_pin_trajectory` to disk in dict form - see below) |
+| `tasks/agent_traj.py::_pin_trajectory` | envelope 5 fields (`transcript / artifact / warnings / success / usage`) are strictly read; when constructing `doc.metadata["trajectory"]`, `Result.transcript` and `.usage` are flattened back to dict using `dataclasses.asdict` (the metric layer reads dict from `metadata`, across JSONL has the same shape after placement) |
+| `tasks/agent_traj.py::load_prediction` | Strictly read 5 fields, if missing, `KeyError` |
+| `tasks/nudge_fire_rate.py::_pin_envelope / load_prediction / process_results` | Same as above; `process_results` directly gives the trajectory dict taken out of doc.metadata to `compute_nudge_fire_rate(envelope)` |
+| `models/agent_engine_run.py` documentation | envelope shape annotation plus `usage` field + description `transcript` element is a typed dataclass serialized dict |
+| `evals/data/{agent_traj,nudge_fire_rate,...}/predictions/*.jsonl` × 46 files | One-time migration script injects `type:"speaker"` into speaker entry + `usage: []` into envelope; consistent with agent_engine §14 forward-only selection |
+| `tests/test_agent_traj_envelope.py` / `test_nudge_metric.py` / `test_metrics_trajectory.py` etc. | Fixture uses typed entry helper instead (`SpeakerEntry / TurnEntry / ToolCallEntry / ArtifactEventEntry`) + `dataclasses.asdict` to drop envelope; envelope field collection assertion adds `usage` |
 
 ### Consequences
 
-| 影响 | 结果 |
+| Impact | Results |
 |---|---|
-| schema 单源 | agent_engine §14 改 entry / 加字段 → evals 度量层不修改即兼容（typed dispatch 自动接到）|
-| 测试规模 | evals 仍 456 测试通过（fixture migration 是同等覆盖的形态变更，不增不减）；三项目合计 585（agent_engine 42 / evals 456 / agent_sft 87） |
-| 公开面 | `compute_nudge_fire_rate` 形参从 `transcript: list[dict]` 改为 `envelope: dict`——破坏性，但 evals 是终端 task 而非长期 SDK，调用方仅 `nudge_fire_rate_metric` 一处；用户已确认 forward-only |
-| envelope schema 监控 | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` 现在锁 `{transcript, artifact, warnings, success, usage}`——agent_engine 加字段 evals CI 立刻 fail |
-| `usage` 消费 | 当前仅 `_pin_trajectory` 镜像到 metadata；后续 `efficiency.py` 可直接从 envelope 取 typed `TokenUsage` 计 cost，比 stderr 反推稳得多（待具体驱动场景再做） |
-| 老 prediction JSONL | 一次性迁移脚本处理；不留长期兼容 reader |
+| schema single source | agent_engine §14 Change entry / add fields → evals measurement layer is compatible without modification (typed dispatch is automatically received) |
+| Test scale | evals is still 456. The test passed (fixture migration is a morphological change with equal coverage, neither increase nor decrease); the total of the three projects is 585 (agent_engine 42 / evals 456 / agent_sft 87) |
+| Public side | `compute_nudge_fire_rate` formal parameter changed from `transcript: list[dict]` to `envelope: dict` - destructive, but evals is a terminal task rather than a long-term SDK, the caller only has `nudge_fire_rate_metric` in one place; the user has confirmed forward-only |
+| envelope schema monitoring | `tests/test_agent_traj_envelope.py::test_envelope_field_names_match_result_dataclass` now locks `{transcript, artifact, warnings, success, usage}`——agent_engine adds field evals CI and fails immediately |
+| `usage` consumption | Currently only `_pin_trajectory` is mirrored to metadata; subsequent `efficiency.py` can directly take typed `TokenUsage` from the envelope to calculate the cost, which is much more stable than stderr inversion (will be done in specific driving scenarios) |
+| Old prediction JSONL | One-time migration script processing; no long-term compatible readers |
 
-### 与 §15 / §11 / agent_engine §14 的关系
+### Relation to §15 / §11 / agent_engine §14
 
-| ADR | 立的是什么 |
+| ADR | What is established |
 |---|---|
-| §11 | envelope SoT 是 `Result` 的 dataclass 字段集合 |
-| §15 | transcript / scenario 解读权（`tool_calls / turns / expanded_turns`）住在 agent_engine |
-| §16 | envelope 字段值本身（`TranscriptEntry` typed union + `TokenUsage`）也住在 agent_engine；evals 度量层 100% typed 消费 |
+| §11 | envelope SoT is a collection of dataclass fields of `Result` |
+| §15 | transcript / scenario interpretation rights (`tool_calls / turns / expanded_turns`) live in agent_engine |
+| §16 | The envelope field value itself (`TranscriptEntry` typed union + `TokenUsage`) also lives in the agent_engine; evals metric layer 100% typed consumption |
 
-§11 → §15 → §16 是同一条链的三层收紧：字段名 → 字段解读 → 字段值类型，三者都从 evals 反向工程移交回 agent_engine 的 SoT.
+§11 → §15 → §16 is a three-layer tightening of the same chain: field name → field interpretation → field value type. All three are reverse-engineered from evals and handed back to the SoT of agent_engine.
 
-## 17. 历史 backward-compat 遗留清理（cli alias / Namespace getattr / docstring 措辞）
+## 17. History backward-compat legacy cleanup (cli alias / Namespace getattr / docstring wording)
 
-- **Status**: accepted（紧跟 §16；与 schema 改造解耦的纯 evals 内部清理）
+- **Status**: accepted (follows §16; pure evals internal cleanup decoupled from schema transformation)
 - **Date**: 2026-05-11
 
 ### Context
 
-evals 经过 phase 1 → phase 8 共 8 期演进，在公开面（task / metric / EvalResult）累积了一些"演进期 backward-compat 留痕"——当时为了让 phase N+1 的扩展不破坏 phase N 调用方而留的别名 / 默认值 / 措辞，但本仓库无外部消费者，且 phase 5+ 的演进已让这些留痕成为单纯的认知噪声而非真兼容支撑：
+evals has evolved through a total of 8 phases from phase 1 → phase 8, and has accumulated some "evolution phase backward-compat traces" on the public surface (task / metric / EvalResult) - aliases / default values ​​/ wording left in order to prevent the expansion of phase N+1 from destroying the phase N caller. However, this warehouse has no external consumers, and the evolution of phase 5+ has made these traces pure cognitive noise rather than true compatibility support:
 
-| 文件 | 现状 | 类型 |
+| Documentation | Current Status | Type |
 |---|---|---|
-| `cli.py:279-281` | `_build_task_with_optional_judge` 是 `_build_task_with_optional_deps` 的别名，仅给 phase 3 测试沿用旧名字 | 真死代码 |
-| `cli.py:331` | `_should_fold_when_all_zero` docstring "默认 True 兼容老 dim" | 措辞误导（"老 dim" 早已不存在；当前是"未注册 dim"）|
-| `cli.py:379` | `cmd_run` 用 `getattr(args, "vdb", None)` "兼容老 Namespace" | 真支撑（`test_qa_open_live` 手搓 Namespace 不带 phase 4 RAG flag）|
-| `runner.py:44` | `_load_predictions` docstring "向后兼容：默认 `Task.load_prediction` 只取 `row['prediction']`" | 措辞误导（这不是兼容，这是 Task ABC 的默认行为）|
-| `api.py:143` | `EvalResult.num_fewshot=0` docstring "默认值保证旧 result.json 反序列化兼容" | 措辞误导（默认值是 score 路径的最小构造形态，不是 result.json 兼容）|
-| `tasks/base.py:104` | `aggregation()` docstring "老 task 全 float 仍兼容（Optional 是 widening）" | 措辞误导（应是"子类返回纯 float 也合法"）|
-| `tests/test_api_contract_extension.py:38/79/139` | docstring 反复出现"向后兼容根基"措辞 | 措辞误导（这些断言是 API 契约本身，不是兼容支撑）|
-| `tests/test_runner_task_hooks_compat.py:1` | 模块 docstring 起手"向后兼容 parity" | 措辞误导（实质锁的是 Task ABC default hook，不是兼容）|
-| `tests/test_cli_spec.py:67/363` | "向后兼容老 spec" / "兼容老 dim" 措辞 | 措辞误导 |
+| `cli.py:279-281` | `_build_task_with_optional_judge` is an alias of `_build_task_with_optional_deps`, only for phase 3 tests to use the old name | Really dead code |
+| `cli.py:331` | `_should_fold_when_all_zero` docstring "Default True compatible with old dim" | Misleading wording ("old dim" no longer exists; currently "unregistered dim") |
+| `cli.py:379` | `cmd_run` uses `getattr(args, "vdb", None)` "Compatible with old Namespace" | True support (`test_qa_open_live` hand-rolled Namespace without phase 4 RAG flag) |
+| `runner.py:44` | `_load_predictions` docstring "Backward compatibility: default `Task.load_prediction` only takes `row['prediction']`" | Misleading wording (this is not compatible, this is the default behavior of Task ABC) |
+| `api.py:143` | `EvalResult.num_fewshot=0` docstring "The default value ensures compatibility with old result.json deserialization" | Misleading wording (the default value is the minimally constructed form of the score path, not result.json compatible) |
+| `tasks/base.py:104` | `aggregation()` docstring "Old tasks are still compatible with all floats (Optional is widening)" | Misleading wording (should be "It is also legal for subclasses to return pure floats") |
+| `tests/test_api_contract_extension.py:38/79/139` | docstring recurring "backward compatibility base" language | Misleading language (these assertions are of the API contract itself, not compatibility support) |
+| `tests/test_runner_task_hooks_compat.py:1` | Module docstring starts with "backward compatibility parity" | Misleading wording (actually locking Task ABC default hook, not compatibility) |
+| `tests/test_cli_spec.py:67/363` | "Backward compatible with old spec" / "Compatible with old dim" wording | Misleading wording |
 
 ### Options considered
 
-| 项 | 做法 | 权衡 |
+| Items | Practices | Trade-offs |
 |---|---|---|
-| A. 整体保留 | 0 风险 | 留痕持续误导新读者；与"forward-only / 显式优于隐式"项目原则不一致 |
-| **B. 分两类处理：真死代码删；措辞误导改写**（选择） | 行为零变化 + 文字与现实一致 | 公开签名一处破坏（`_build_task_with_optional_judge` → `_build_task_with_optional_deps`），但仅 evals 内部 + 1 个测试文件 |
-| C. 整体重写 README + DECISIONS 重新讲叙事 | 一次性彻底 | 工作量过大；现有 ADR 作为决策时间线本来就该保留"演进史" |
+| A. Overall retention | 0 risk | Traces continue to mislead new readers; inconsistent with the "forward-only / explicit over implicit" project principle |
+| **B. Divided into two categories: real code deletion; misleading wording rewritten** (selection) | Zero change in behavior + text consistent with reality | Public signature of one break (`_build_task_with_optional_judge` → `_build_task_with_optional_deps`), but only within evals + 1 test file |
+| C. Overall rewrite README + DECISIONS to retell the narrative | Thoroughly done at one time | The workload is too large; the existing ADR should retain the "evolutionary history" as a decision-making timeline |
 
 ### Decision
 
-**B**——逐项审视，按"真死代码 / 真支撑 / 措辞误导"三类落不同改动：
+**B**——Look at each item, and make different changes according to the three categories of "real dead code/real support/misleading wording":
 
-| 文件 | 改动 |
+| Documentation | Changes |
 |---|---|
-| `cli.py:279-281` | **删** `_build_task_with_optional_judge` 别名整 3 行（真死代码） |
-| `cli.py:331` | **改写** docstring：`缺失或未注册 → 默认 True 兼容老 dim` → `未注册 dim → 默认 True（与 phase 6 audit §1.7 立的折叠默认行为一致——新 cross-cutting 维度若想退出折叠须在自身模块显式声明 trait=False）` |
-| `cli.py:374-379` | `getattr(args, ..., default)` 4 处改 `args.x` 直接访问；`tests/test_qa_open_live.py:93-97` Namespace 构造补 4 个新字段（`vdb=None, retrieve_top_k=5, retrieve_mode="hybrid", rerank=False`），让"argparse 才是 Namespace 唯一来源"成为约束而非建议 |
-| `runner.py:38-46` | **改写** `_load_predictions` docstring：把"向后兼容：默认 Task.load_prediction 只取 row['prediction']" 改为"`Task.load_prediction` 默认实现仅取 `row['prediction']`——分类 / 翻译类 task 的最小行为；override 时把 row 里的 pipeline 数据注入 `doc.metadata` + Response" |
-| `api.py:143` | **改写** `EvalResult.num_fewshot=0` docstring：从"默认值保证旧 result.json 反序列化兼容" 改为 "`= 0` 默认让 score 路径构造省字段" |
-| `tasks/base.py:104` | **改写** `aggregation()` docstring：从"老 task 全 float 仍兼容（Optional 是 widening）" 改为 "子类返回纯 float（无未测得场景）也合法——Optional 只是放宽，不强制" |
-| `tests/test_api_contract_extension.py:1, 38, 79, 139` | docstring 三处"向后兼容根基" → 描述实际锁的是什么（落盘 schema 不丢字段 / 最小构造形态 / 嵌套形态）|
-| `tests/test_runner_task_hooks_compat.py:1` | 模块 docstring 改写：从"向后兼容 parity" 改为 "Task ABC 默认 hook 行为锁定"——实质内容（sentiment / mt 默认 hook 走 score+run 双路径）保留 |
-| `tests/test_cli_spec.py` | 同步：`_build_task_with_optional_judge` 3 处 import / 3 测试名调用改 `_build_task_with_optional_deps`；docstring 措辞清理 |
+| `cli.py:279-281` | **Delete** `_build_task_with_optional_judge` alias 3 lines long (really dead code) |
+| `cli.py:331` | **Rewritten** docstring: `Missing or unregistered → Default True Compatible with old dim` → `Unregistered dim → Default True (consistent with the default behavior of folding in phase 6 audit §1.7 - new cross-cutting dimensions must explicitly declare trait=False in their own modules if they want to exit folding)` |
+| `cli.py:374-379` | `getattr(args, ..., default)` 4 changes to `args.x` for direct access; `tests/test_qa_open_live.py:93-97` Namespace construction adds 4 new fields (`vdb=None, retrieve_top_k=5, retrieve_mode="hybrid", rerank=False`), making "argparse the only source of Namespace" become a constraint rather than a suggestion |
+| `runner.py:38-46` | **Rewrite** `_load_predictions` docstring: Change "Backward compatibility: Default Task.load_prediction only takes row['prediction']" to "`Task.load_prediction` The default implementation only takes `row['prediction']` - the minimum behavior of classification/translation tasks; when override, inject pipeline data in row into `doc.metadata` + Response" |
+| `api.py:143` | **Rewritten** `EvalResult.num_fewshot=0` docstring: changed from "Default value ensures compatibility with old result.json deserialization" to "`= 0` defaults to score path construction to save fields" |
+| `tasks/base.py:104` | **Rewritten** `aggregation()` docstring: from "Old tasks are still compatible with all floats (Optional is widening)" to "It is also legal for subclasses to return pure float (no untested scenarios) - Optional is just relaxing, not mandatory" |
+| `tests/test_api_contract_extension.py:1, 38, 79, 139` | docstring Three "Backwards Compatibility Basics" → Describe what is actually locked (the schema does not lose fields when the schema is dropped / the minimum structure form / the nested form) |
+| `tests/test_runner_task_hooks_compat.py:1` | Module docstring rewritten: from "backwards compatible parity" to "Task ABC default hook behavior lock" - the actual content (sentiment / mt default hook takes the score+run dual path) retained |
+| `tests/test_cli_spec.py` | Synchronization: `_build_task_with_optional_judge` 3 places import / 3 test name call changed to `_build_task_with_optional_deps`; docstring wording cleanup |
 
 ### Consequences
 
-| 影响 | 结果 |
+| Impact | Results |
 |---|---|
-| 行为变化 | 0——`_build_task_with_optional_deps(qa_open, judge_model_spec="...")` 的内部 dispatch 与原 `_build_task_with_optional_judge(qa_open, "...")` 字节相同 |
-| 公开签名 | 一处破坏：`_build_task_with_optional_judge` 被删；本仓库无外部消费者，调用方仅 `tests/test_cli_spec.py` 一处，已同步 |
-| 测试规模 | 456 测试全绿（PR-1 时已是 456，PR-2 形态变化不增减）|
-| 认知噪声 | 显著降低——新读者读 docstring 不会被"兼容老 X" 误导认知地图 |
-| 演化友好 | 升——下次有人想加新 dim / 新 hook 时不会被"兼容"措辞绊到（原措辞会让人不敢动） |
+| Behavior change | 0 - The internal dispatch of `_build_task_with_optional_deps(qa_open, judge_model_spec="...")` is bytes the same as the original `_build_task_with_optional_judge(qa_open, "...")` |
+| Public signature | One damage: `_build_task_with_optional_judge` was deleted; this warehouse has no external consumers, the caller only has one `tests/test_cli_spec.py`, which has been synchronized |
+| Test scale | 456 test all green (already 456 in PR-1, PR-2 shape changes will not increase or decrease) |
+| Cognitive noise | Significantly reduced - new readers will not be misled by "compatible with old X" when reading docstring Cognitive map |
+| Evolution friendly | Upgrade - next time someone wants to add a new dim / new hook, they will not be tripped by the "compatibility" wording (the original wording will make people afraid to move) |
 
-### 不在范围
+### Not in scope
 
-| 项 | 不动的理由 |
+| Item | Reasons for not moving |
 |---|---|
-| `tasks/agent_traj.py:32 / nudge_fire_rate.py:22 / rag_retrieval.py:25` 的 `run_fn=None` 默认 | 这是 run / score 双 hook 设计（task 工厂可选注入 retrieve_fn / run_fn），不是 backward-compat |
-| `evals/runner.py:_build_request` 非 `generate_until` 的 NotImplementedError | phase 1 占位，不是历史留痕 |
-| `evals/cli.py::parse_model_spec` external provider NotImplementedError | phase 1 占位 |
-| `evals/models/base.py` loglikelihood NotImplementedError | phase 1 占位 |
-| `tests/test_runner_task_hooks_compat.py` 文件名 | 重命名是分钟级动作但 git history 会丢 blame；模块 docstring 改写已说清楚锁的是什么；下次有人 grep "compat" 找到这个文件读 docstring 即知本意 |
+| `run_fn=None` default of `tasks/agent_traj.py:32 / nudge_fire_rate.py:22 / rag_retrieval.py:25` | This is a run / score double hook design (task factory optionally injects retrieve_fn / run_fn), not backward-compat |
+| `evals/runner.py:_build_request` NotImplementedError of non-`generate_until` | phase 1 placeholder, not a historical trace |
+| `evals/cli.py::parse_model_spec` external provider NotImplementedError | phase 1 placeholder |
+| `evals/models/base.py` loglikelihood NotImplementedError | phase 1 placeholder |
+| `tests/test_runner_task_hooks_compat.py` file name | Renaming is a minute-level action but git history will lose blame; the module docstring has been rewritten to make it clear what is locked; next time someone grep "compat" finds this file and reads the docstring, he will know the original meaning |
 
-### 与 §15 / §16 的关系
+### Relation to §15 / §16
 
-| ADR | 性质 |
+| ADR | Nature |
 |---|---|
-| §15 | schema 解读权移交（cross-project 接口纪律）|
-| §16 | schema 字段值 typed 化（cross-project 接口形态）|
-| §17 | evals 自身的"演进期 backward-compat 留痕"清理（项目内部认知卫生）|
+| §15 | Transfer of schema interpretation rights (cross-project interface discipline) |
+| §16 | Schema field values ​​are typed (cross-project interface form) |
+| §17 | evals' own "evolution period backward-compat traces" cleanup (internal cognitive hygiene of the project) |
 
-§15 + §16 是跨项目契约纪律；§17 是项目内部对自己叙事一致性的保养——三者同一时段（2026-05-11）落地，但目标域不同，分别独立成 ADR.
+§15 + §16 are cross-project contract disciplines; §17 is the maintenance of narrative consistency within the project - the three were implemented at the same time (2026-05-11), but with different target domains, and each became an independent ADR.
 
-## 非目标（持续有效）
+## Non-target (continuously valid)
 
-|项|说明|
+|item|description|
 |---|---|
-|追求一次性完美评测体系|优先可扩展、可诊断、可运营|
-|在 ADR 记录实现流水|ADR 只保留高杠杆决策与后果|
-|为了统一牺牲语义准确性|统一是手段，语义正确是底线|
-|让单一分数承载全部真相|保留分层与异常信号，避免过度压缩信息|
+|Pursue a one-time perfect evaluation system|Prioritize scalability, diagnosability, and operability|
+|Record implementation flow in ADR|ADR only retains high-leverage decisions and consequences|
+|Sacrifice semantic accuracy for the sake of unification|Unification is the means, semantic correctness is the bottom line|
+|Let a single score carry the entire truth|Preserve stratification and anomaly signals to avoid excessive compression of information|

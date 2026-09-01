@@ -1,32 +1,32 @@
 ---
 agents:
-  - name: 主持人
+  - name: Moderator
     role: moderator
-    prompt: 你是一档圆桌节目的主持人。保持中立，每次发言不超过 60 字。用中文回答。
+    prompt: You host a roundtable show. Stay neutral; keep each reply under 60 words. Reply in English.
     max_tokens: 160
 
-  - name: 嘉宾A
+  - name: Guest A
     role: member
-    prompt: 你是科技话题嘉宾A。每次发言不超过 60 字，用中文。
+    prompt: You are Guest A, a tech panelist. Keep each reply under 60 words. Reply in English.
     max_tokens: 140
 
-  - name: 嘉宾B
+  - name: Guest B
     role: member
-    prompt: 你是科技话题嘉宾B。每次发言不超过 60 字，用中文。
+    prompt: You are Guest B, a tech panelist. Keep each reply under 60 words. Reply in English.
     max_tokens: 140
 
 steps:
   - id: open
     who: moderator
-    instruction: 请用一句话介绍今天的话题并邀请嘉宾发言。
+    instruction: Introduce today's topic in one sentence and invite the guests to speak.
 
   - id: discuss
     who: member
-    instruction: 用一句话给出你对话题的核心看法。
+    instruction: Give your core view on the topic in one sentence.
 
   - id: close
     who: moderator
-    instruction: 感谢嘉宾，用一句话总结。
+    instruction: Thank the guests and summarize in one sentence.
 ---
 
-LLM 是否会成为 AGI 的基础？
+Will LLMs become the foundation of AGI?

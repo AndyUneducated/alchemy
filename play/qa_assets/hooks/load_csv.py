@@ -1,9 +1,9 @@
 """``load_csv``: read requirements CSV → list[dict] with minimal validation.
 
 Per plan §4.1 schema:
-- 必填: req_id / title / assignee
-- 二选一必填: description / prd_doc_path (.md only)
-- 可选: priority (P0~P3), sprint_start, sprint_end (ISO dates)
+- Required: req_id / title / assignee
+- One of required: description / prd_doc_path (.md only)
+- Optional: priority (P0~P3), sprint_start, sprint_end (ISO dates)
 
 Per plan §12: fail fast on missing required columns; raise ``ValueError`` with
 the offending row index. No friendly hints, no migration helpers.

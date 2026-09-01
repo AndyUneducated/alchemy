@@ -1,11 +1,10 @@
-"""Phase 4 契约锁定：Doc.target / SampleResult.artifacts.
+"""Phase 4 contract lock: Doc.target/SampleResult.artifacts.
 
-围绕两个 dataclass 写"形状 + 默认 + 反序列化"三类断言，避免日后误把
-`target` 收紧回 str 或抹掉 `artifacts` 字段——破坏 RAG / agent task 的
-"语义诚实"与"per-sample 非标量产物分桶"两条约束.
+Write three types of assertions "shape + default + deserialization" around the two dataclasses to avoid misunderstandings in the future.
+`target` tightens back to str or erases `artifacts` field - breaks RAG / agent task
+There are two constraints: "semantic honesty" and "per-sample non-scalar product bucketing".
 
-phase 6 起追加 Usage / Response.usage / EvalResult.aggregated 嵌套形态的同类锁定.
-"""
+From phase 6 onwards, Usage / Response.usage / EvalResult.aggregated nested form of similar locking will be added."""
 
 from __future__ import annotations
 
@@ -15,35 +14,35 @@ from evals.api import Doc, EvalResult, Response, SampleResult, Usage
 
 
 def test_doc_target_accepts_none():
-    """Doc.target = None 必须能直接构造（rag_retrieval 用例）."""
+    """Doc.target = None must be directly constructible (rag_retrieval use case)."""
     d = Doc(id="r1", input="who is X?", target=None)
     assert d.target is None
-    # asdict 不抛 + None 落到序列化里
+    # asdict does not throw + None falls into serialization
     assert asdict(d)["target"] is None
 
 
 def test_doc_target_default_is_none():
-    """target 是 keyword-default，省略时为 None——`Doc(id, input)` 直接合法."""
+    """target is keyword-default, and is None when omitted - `Doc(id, input)` is directly legal."""
     d = Doc(id="r2", input="q?")
     assert d.target is None
 
 
 def test_doc_target_str_still_supported():
-    """老 task 显式传 str 不破——sentiment / mt / qa_open 全部走这条."""
+    """The old task's explicit transmission of str is not broken—sentiment / mt / qa_open all go this way."""
     d = Doc(id="s1", input="x", target="positive")
     assert d.target == "positive"
 
 
 def test_sample_result_artifacts_default_empty_dict():
-    """不传 artifacts 必须 default 到空 dict（落盘 schema 不丢字段的根基）."""
+    """If you do not pass artifacts, you must default to an empty dict (the basis for inserting the schema without losing fields)."""
     sr = SampleResult(doc_id="x", prediction="p", target="t", metrics={"acc": 1.0})
     assert sr.artifacts == {}
-    # asdict 也带上 artifacts 字段（落 samples.jsonl 不丢）
+    # asdict also brings the artifacts field (dropping samples.jsonl will not be lost)
     assert asdict(sr)["artifacts"] == {}
 
 
 def test_sample_result_artifacts_carries_non_scalar():
-    """artifacts 装 list[str] / dict 等非标量——这是它存在的核心理由."""
+    """artifacts holds non-scalars such as list[str] / dict - this is the core reason for its existence."""
     sr = SampleResult(
         doc_id="x",
         prediction="",
@@ -53,41 +52,41 @@ def test_sample_result_artifacts_carries_non_scalar():
     )
     assert sr.artifacts["pred_ids"] == ["d1", "d2"]
     assert sr.artifacts["gold_ids"] == ["d2"]
-    # JSONL 落盘也 ok（asdict 浅拷贝即可）
+    # JSONL is also ok (shallow copy of asdict is enough)
     assert asdict(sr)["artifacts"]["pred_ids"] == ["d1", "d2"]
 
 
 def test_sample_result_metrics_still_only_scalar():
-    """metrics 仍是 dict[str, float] 用法（类型不强制，但语义契约保留）."""
+    """metrics still uses dict[str, float] (the type is not enforced, but the semantic contract is preserved)."""
     sr = SampleResult(doc_id="x", prediction="p", target="t", metrics={"em": 1.0, "rouge_l": 0.42})
     assert all(isinstance(v, float) for v in sr.metrics.values())
 
 
-# ---------- phase 6: Usage / Response.usage / EvalResult.aggregated 嵌套放宽 ----------
+# ---------- phase 6: Usage / Response.usage / EvalResult.aggregated Nesting relaxation ----------
 
 def test_usage_default_is_none_fields():
-    """Usage 两字段都默认 None——保证未填写场景（MockLM / 老 ollama）不爆构造."""
+    """Both Usage fields default to None - ensuring that unfilled scenarios (MockLM / old ollama) do not explode the structure."""
     u = Usage()
     assert u.tokens_in is None
     assert u.tokens_out is None
-    # asdict 不抛 + 两字段落到序列化里
+    # asdict is not thrown + the two fields fall into serialization
     d = asdict(u)
     assert d == {"tokens_in": None, "tokens_out": None}
 
 
 def test_response_usage_default_is_none():
-    """`Response(doc_id, text)` 必须默认 usage=None（最小构造形态——MockLM / score 路径不报 usage）."""
+    """`Response(doc_id, text)` must default to usage=None (minimum construction form - MockLM / score path does not report usage)."""
     r = Response(doc_id="x", text="hello")
     assert r.usage is None
     assert r.latency_ms is None
-    # asdict 也带上新字段（落盘不丢）
+    # asdict also brings new fields (no loss when placing the order)
     d = asdict(r)
     assert d["usage"] is None
     assert d["latency_ms"] is None
 
 
 def test_response_usage_carries_token_counts():
-    """OllamaLM 真实路径：usage 装 (tokens_in, tokens_out) 再嵌入 Response."""
+    """OllamaLM real path: usage install (tokens_in, tokens_out) and then embed Response."""
     r = Response(
         doc_id="x",
         text="hi",
@@ -96,16 +95,15 @@ def test_response_usage_carries_token_counts():
     )
     assert r.usage.tokens_in == 10
     assert r.usage.tokens_out == 5
-    # asdict 嵌套展开
+    # asdict nested expansion
     d = asdict(r)
     assert d["usage"] == {"tokens_in": 10, "tokens_out": 5}
     assert d["latency_ms"] == 123.4
 
 
 def test_eval_result_aggregated_accepts_nested_subgroup():
-    """EvalResult.aggregated 类型放宽到 dict[str, Any]——支持 phase 6 efficiency 嵌套子组.
-    audit §1.1 加 cost_usd.mean、§1.2 加 latency_ms.max、§1.5 tokens.total 用 int.
-    """
+    """EvalResult.aggregated type relaxed to dict[str, Any] - supports phase 6 efficiency nested subgroups.
+    audit §1.1 add cost_usd.mean, §1.2 add latency_ms.max, §1.5 tokens.total use int."""
     r = EvalResult(
         task="dummy",
         model="mock:gold",
@@ -129,14 +127,14 @@ def test_eval_result_aggregated_accepts_nested_subgroup():
     assert r.aggregated["efficiency"]["latency_ms"]["p50"] == 1.0
     assert r.aggregated["efficiency"]["latency_ms"]["max"] == 1.0
     assert r.aggregated["efficiency"]["cost_usd"]["mean"] == 0.0
-    # asdict 嵌套深拷贝（落 result.json 不丢任何层）
+    # asdict nested deep copy (dropping result.json without losing any layers)
     d = asdict(r)
     assert d["aggregated"]["efficiency"]["cost_usd"]["total"] == 0.0
-    assert d["aggregated"]["efficiency"]["tokens_in"]["total"] == 0  # int 语义保留
+    assert d["aggregated"]["efficiency"]["tokens_in"]["total"] == 0  # int semantics reserved
 
 
 def test_eval_result_aggregated_still_accepts_flat_only():
-    """score 路径 aggregated 全平铺也合法（无 cross-cutting dim 时不强制嵌套）."""
+    """The score path aggregated is also legal for full tiling (nesting is not forced when there is no cross-cutting dim)."""
     r = EvalResult(
         task="t",
         model="m",

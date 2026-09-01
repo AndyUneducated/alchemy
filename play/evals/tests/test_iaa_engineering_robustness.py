@@ -1,24 +1,23 @@
-"""Phase 8 IAA tasks 的工程健壮性回归——锁住 sklearn / krippendorff / scipy 直调
-在退化输入下不再 raise / 不再 emit NaN.
+"""Engineering robustness regression for Phase 8 IAA tasks - locking sklearn / krippendorff / scipy direct tuning
+No longer raise / emit NaN on degenerate inputs.
 
-驱动两个真实的失败路径（不需要真 LM）：
+Drive two real failure paths (no real LM required):
 
-1. **score 路径 + `--limit` 缩到只剩单类**：predictions/constant_majority.jsonl 头 5 行
-   全 ham → sklearn binary metrics (`precision/recall/f1/fbeta` with `pos_label='spam'`)
-   原本 `ValueError: pos_label=spam is not a valid label`，krippendorff 原本
-   `ValueError: There has to be more than one value in the domain`；
-2. **run 路径 (`output_type='none'`)**：runner 给占位 Response(doc_id=..) → process_results
-   看到 pred="" → 触发 sklearn multiclass-vs-binary 报错 + scipy correlation NaN
-   传染下游 (json.dumps 写 NaN 是非合法 JSON, 跨 run JSON_EXTRACT 必坏).
+1. **score path + `--limit` is reduced to only a single category**: the first 5 lines of predictions/constant_majority.jsonl
+   full ham → sklearn binary metrics (`precision/recall/f1/fbeta` with `pos_label='spam'`)
+   Originally `ValueError: pos_label=spam is not a valid label`, krippendorff Originally
+   `ValueError: There has to be more than one value in the domain`;
+2. **run path (`output_type='none'`)**: runner gives placeholder Response(doc_id=..) → process_results
+   See pred="" → trigger sklearn multiclass-vs-binary error + scipy correlation NaN
+   Infect downstream (json.dumps writing NaN is illegal JSON, and running JSON_EXTRACT will be corrupted).
 
-修复策略（DECISIONS §8 工程兜底）：
-  - per-class metrics 加 `_pos_label_present(yt, yp)` 短路；
-  - krippendorff 加 「<2 unique value」 短路；
-  - 所有可能 NaN 的 metrics (cohens_kappa / weighted_kappa* / pearsonr / spearmanr /
-    kendalltau / fleiss_kappa / krippendorff / icc_1_1) 包 `_nan_to_zero`.
+Repair strategy (DECISIONS §8 engineering cover):
+  - per-class metrics plus `_pos_label_present(yt, yp)` short circuit;
+  - krippendorff adds "<2 unique value" short circuit;
+  - All possible NaN metrics (cohens_kappa / weighted_kappa* / pearsonr / spearmanr /
+    kendalltau / fleiss_kappa / krippendorff / icc_1_1) package `_nan_to_zero`.
 
-任一保护失效 → JSON 序列化 emit NaN 或调用 sklearn raise → 测试 fail-loud.
-"""
+Either guard fails → JSON serialization emit NaN or call sklearn raise → test fail-loud."""
 from __future__ import annotations
 
 import json
@@ -38,7 +37,7 @@ from evals.tasks.iaa_ordinal import IaaOrdinal
 
 
 class _UnusedLM(LM):
-    """output_type='none' 任务下 runner 不应触发 generate_until；任何调用 = 工程契约破."""
+    """The runner under the output_type='none' task should not trigger generate_until; any call = project contract broken."""
 
     def __init__(self) -> None:
         self.name = "unused"
@@ -50,7 +49,7 @@ class _UnusedLM(LM):
 
 
 def _assert_aggregated_is_finite_json(aggregated: dict) -> None:
-    """所有 leaf 数值必须是有限 float（无 NaN / Inf），且 json.dumps 不依赖 allow_nan."""
+    """All leaf values ​​must be finite floats (no NaN/Inf), and json.dumps does not rely on allow_nan."""
     flat: list[tuple[str, float]] = []
 
     def _walk(prefix: str, obj) -> None:
@@ -70,8 +69,8 @@ def _assert_aggregated_is_finite_json(aggregated: dict) -> None:
 
 
 def test_iaa_nominal_score_limit_single_class_does_not_raise():
-    """`--limit 5` 后 constant_majority preds 只剩 5 个 ham → sklearn binary metrics
-    + krippendorff 原本两路都炸. 修复后必须给出有限值."""
+    """After `--limit 5` constant_majority preds only have 5 hams → sklearn binary metrics
+    + krippendorff Originally, both paths were fried. After repair, a finite value must be given."""
     task = IaaNominal()
     preds = (
         Path(__file__).resolve().parent.parent
@@ -79,21 +78,21 @@ def test_iaa_nominal_score_limit_single_class_does_not_raise():
     )
     r = evaluate_score(task, preds, limit=5)
     _assert_aggregated_is_finite_json(r.aggregated)
-    # 单类 ham + 全 ham 预测：accuracy=1, spam-面 metrics=0 (pos_label 缺席短路)
+    # Single class ham + full ham prediction: accuracy=1, spam-face metrics=0 (pos_label absent short circuit)
     assert r.aggregated["accuracy"] == 1.0
     assert r.aggregated["precision_spam"] == 0.0
     assert r.aggregated["recall_spam"] == 0.0
     assert r.aggregated["f1_spam"] == 0.0
     assert r.aggregated["f_beta_2"] == 0.0
-    # 全单类 → 退化 1.0 (scott_pi/gwet_ac1 单类约定) / 0.0 (kappa NaN→0)
+    # Full single class → degenerate 1.0 (scott_pi/gwet_ac1 single class convention) / 0.0 (kappa NaN→0)
     assert r.aggregated["scott_pi"] == 1.0
     assert r.aggregated["gwet_ac1"] == 1.0
-    assert r.aggregated["cohens_kappa"] == 0.0  # NaN→0 (Pe=1 退化)
-    assert r.aggregated["krippendorff_alpha"] == 0.0  # 单值域短路
+    assert r.aggregated["cohens_kappa"] == 0.0  # NaN→0 (Pe=1 degenerate)
+    assert r.aggregated["krippendorff_alpha"] == 0.0  # single value field short circuit
 
 
 def test_iaa_nominal_score_limit_single_class_metrics_keys_complete():
-    """退化路径必须仍给齐全部 14 个 first-class scalar + 1 个 _confusion_matrix dict."""
+    """The degenerate path must still give all 14 first-class scalar + 1 _confusion_matrix dict."""
     task = IaaNominal()
     preds = (
         Path(__file__).resolve().parent.parent
@@ -113,24 +112,24 @@ def test_iaa_nominal_score_limit_single_class_metrics_keys_complete():
 
 
 def test_iaa_nominal_run_path_does_not_raise_or_call_lm():
-    """run path: pred='' 在所有 30 doc 上触发 sklearn multiclass + binary 冲突；
-    必须被 _pos_label_present 短路 + NaN 兜底 + LM 一次没被调."""
+    """run path: pred='' triggers sklearn multiclass + binary conflicts on all 30 docs;
+    Must be short-circuited by _pos_label_present + NaN hidden + LM has not been adjusted once."""
     task = IaaNominal()
     lm = _UnusedLM()
     r = evaluate_run(task, lm)
     _assert_aggregated_is_finite_json(r.aggregated)
     assert r.n == 30
-    # 占位 pred 与 gold 全部不一致：accuracy=0, sanity 系列 0
+    # The placeholders pred and gold are all inconsistent: accuracy=0, sanity series 0
     assert r.aggregated["accuracy"] == 0.0
     assert r.aggregated["f_beta_2"] == 0.0
     assert r.aggregated["precision_spam"] == 0.0
-    # cohens_kappa 在 pred 全 "" 时 sklearn Pe 退化 → NaN → 我们 →0
+    # cohens_kappa degenerates → NaN → us → 0 when sklearn Pe degenerates in pred all ""
     assert r.aggregated["cohens_kappa"] == 0.0
-    assert r.aggregated["fleiss_kappa"] == 0.0  # raters 缺席 → guard 短路 0
+    assert r.aggregated["fleiss_kappa"] == 0.0  # raters absent → guard short circuit 0
 
 
 def test_iaa_nominal_run_path_small_limit():
-    """--limit 5 + run path: 双重退化（单类 yt + 占位 yp）"""
+    """--limit 5 + run path: double degradation (single type yt + placeholder yp)"""
     task = IaaNominal()
     lm = _UnusedLM()
     r = evaluate_run(task, lm, limit=5)
@@ -142,14 +141,14 @@ def test_iaa_nominal_run_path_small_limit():
 
 
 def test_iaa_ordinal_run_path_no_nan():
-    """run path: pred 全 0 (placeholder int) → constant input → pearson/spearman/kendall
-    原本全 NaN. NaN 不是合法 JSON (`json.dumps(float('nan'))` 写 'NaN' 任何非 Python parser
-    都会拒)，必须收紧到 0."""
+    """run path: pred all 0 (placeholder int) → constant input → pearson/spearman/kendall
+    Originally all NaN. NaN is not legal JSON (`json.dumps(float('nan'))` writes 'NaN' to any non-Python parser
+    will be rejected) and must be tightened to 0."""
     task = IaaOrdinal()
     lm = _UnusedLM()
     r = evaluate_run(task, lm)
     _assert_aggregated_is_finite_json(r.aggregated)
-    # 12 个 first-class scalar 应全在
+    # All 12 first-class scalar should be present
     expected = {
         "accuracy", "cohens_kappa", "weighted_kappa_linear", "weighted_kappa_quadratic",
         "pearson_r", "spearman_rho", "kendall_tau", "lins_ccc",
@@ -161,14 +160,14 @@ def test_iaa_ordinal_run_path_no_nan():
 
 
 def test_iaa_ordinal_run_path_small_limit_no_nan():
-    """--limit 3 + run: 退化更严重（小 N + 常数 pred），仍然必须无 NaN."""
+    """--limit 3 + run: more degenerate (small N + constant pred), still must have no NaNs."""
     task = IaaOrdinal()
     lm = _UnusedLM()
     r = evaluate_run(task, lm, limit=3)
     _assert_aggregated_is_finite_json(r.aggregated)
 
 
-# ---------- 跨 task: aggregated 序列化为合法 JSON ----------
+# ---------- Cross-task: aggregated serialized into legal JSON ----------
 
 
 @pytest.mark.parametrize(
@@ -181,8 +180,8 @@ def test_iaa_ordinal_run_path_small_limit_no_nan():
     ],
 )
 def test_iaa_score_aggregated_is_strict_json(task_factory, preds_name: str):
-    """Phase 4 path C 哲学：aggregated 永远跨进程 / 跨 run 用 JSON 流转；
-    `allow_nan=False` 必须能 round-trip——这里覆盖全 4 stub 的健康路径不退化."""
+    """Phase 4 path C philosophy: aggregated is always transferred across processes/runs using JSON;
+    `allow_nan=False` must be able to round-trip - here covering all 4 stub healthy paths without degradation."""
     task = task_factory()
     family = "iaa_nominal" if task_factory is IaaNominal else "iaa_ordinal"
     preds = Path(__file__).resolve().parent.parent / "data" / family / "predictions" / preds_name
@@ -190,13 +189,13 @@ def test_iaa_score_aggregated_is_strict_json(task_factory, preds_name: str):
     _assert_aggregated_is_finite_json(r.aggregated)
 
 
-# ---------- 边界 limit ----------
+# ---------- Boundary limit ----------
 
 
 @pytest.mark.parametrize("limit", [0, 1, 2])
 def test_iaa_nominal_score_extreme_small_limits(limit: int):
-    """`--limit 0/1/2` 是 audit / 调试常用入口；不能 raise 或 emit NaN.
-    `--limit 0` 触发空 sample_results 路径（`if not srs: return 0.0` 全员守门）."""
+    """`--limit 0/1/2` is a common entry point for audit/debugging; it cannot raise or emit NaN.
+    `--limit 0` triggers an empty sample_results path (`if not srs: return 0.0` is gated by everyone)."""
     task = IaaNominal()
     preds = (
         Path(__file__).resolve().parent.parent
@@ -209,7 +208,7 @@ def test_iaa_nominal_score_extreme_small_limits(limit: int):
 
 @pytest.mark.parametrize("limit", [0, 1, 2])
 def test_iaa_ordinal_score_extreme_small_limits(limit: int):
-    """同 iaa_nominal：极小 limit 不 raise / 不 NaN."""
+    """Same as iaa_nominal: minimum limit does not raise / does not NaN."""
     task = IaaOrdinal()
     preds = (
         Path(__file__).resolve().parent.parent
@@ -219,16 +218,15 @@ def test_iaa_ordinal_score_extreme_small_limits(limit: int):
     _assert_aggregated_is_finite_json(r.aggregated)
 
 
-# ---------- 存储层 strict-JSON 兜底（phase 8 §8.R4 follow-up） ----------
+# ---------- Storage layer strict-JSON (phase 8 §8.R4 follow-up) ----------
 
 
 def test_storage_save_rejects_nan_aggregated(tmp_path: Path):
-    """storage.save 必须 fail-loud 拒绝 NaN 写盘——否则下游 jq / DB / 仪表盘必坏.
+    """storage.save must fail-loud to reject NaN writes to the disk - otherwise the downstream jq/DB/dashboard will be broken.
 
-    任务自身的 NaN 兜底 (iaa_nominal/iaa_ordinal `_nan_to_zero`) 是第一道防线；
-    本测试锁第二道：即使任意未来 task 漏算，storage 层也会在 write 时 ValueError.
-    与 Phase 4 path C 「跨进程跨 run 用 JSON 流转」契约对齐.
-    """
+    The NaN bag of the task itself (iaa_nominal/iaa_ordinal `_nan_to_zero`) is the first line of defense;
+    This test locks the second point: even if any future task is missed, the storage layer will generate a ValueError during write.
+    Aligned with the Phase 4 path C "Cross-process and cross-run JSON transfer" contract."""
     from evals.api import EvalResult, SampleResult
     from evals.storage import save
 
@@ -249,7 +247,7 @@ def test_storage_save_rejects_nan_aggregated(tmp_path: Path):
 
 
 def test_storage_save_rejects_inf_aggregated(tmp_path: Path):
-    """同 NaN：Inf 也是非合法 JSON，storage 必须 fail-loud."""
+    """Same as NaN: Inf is also illegal JSON, storage must fail-loud."""
     from evals.api import EvalResult, SampleResult
     from evals.storage import save
 
@@ -270,8 +268,8 @@ def test_storage_save_rejects_inf_aggregated(tmp_path: Path):
 
 
 def test_storage_iaa_run_roundtrip_strict_json(tmp_path: Path):
-    """端到端：iaa_nominal run path → save → 三个写出文件都必须 strict-JSON 可读
-    （`parse_constant` 引发 ValueError 模拟 jq / 浏览器 / 数据库 parser）."""
+    """End-to-end: iaa_nominal run path → save → all three write files must be strict-JSON readable
+    (`parse_constant` raises ValueError emulating jq/browser/database parser)."""
     from evals.storage import save
 
     task = IaaNominal()
@@ -307,32 +305,32 @@ def test_storage_iaa_run_roundtrip_strict_json(tmp_path: Path):
 
 
 # ============================================================================
-# Audit follow-up wave: phase 8 P0/P1/P2 修复回归锁
+# Audit follow-up wave: phase 8 P0/P1/P2 fix regression lock
 # ============================================================================
 #
-# P0：iaa_ordinal 解析失败 fallback 旧实现走 `pred_int=0`，0 不在 LIKERT_LABELS
-#     [1..5] → sklearn `cohen_kappa_score(..., labels=[1..5])` 静默丢弃这些样本，
-#     在「混合非法 prediction」场景下 cohens_kappa / weighted_kappa_* 被无声美化.
-#     修法：process_results 标 `_pred_invalid` flag + aggregation 切 valid subset.
+# P0: iaa_ordinal parsing failure fallback old implementation uses `pred_int=0`, 0 is not in LIKERT_LABELS
+# [1..5] → sklearn `cohen_kappa_score(..., labels=[1..5])` silently discards these samples,
+# In the "mixed illegal prediction" scenario cohens_kappa / weighted_kappa_* are silently beautified.
+# Modification: process_results flag `_pred_invalid` flag + aggregation cut valid subset.
 #
-# P1a：iaa_nominal run path 上 yp 含 OOV (`""` / 大小写 / 噪声)，sklearn 内部触发
-#      `UserWarning: y_pred contains classes not in y_true` × N. 修法：valid subset 切片,
-#      sklearn 看到的 yp 严格 ⊆ LABELS.
+# P1a: yp on the iaa_nominal run path contains OOV (`""` / case / noise), sklearn triggers internally
+# `UserWarning: y_pred contains classes not in y_true` × N. Fix: valid subset slicing,
+# sklearn sees yp strictly ⊆ LABELS.
 #
-# P1b：iaa_ordinal 相关性 metric (pearson/spearman/kendall) 在常数输入下 scipy 触发
-#      `ConstantInputWarning`. 修法：每条 metric 入口加 `_is_constant` 短路.
+# P1b: iaa_ordinal correlation metric (pearson/spearman/kendall) scipy triggers on constant input
+# `ConstantInputWarning`. Fix: add `_is_constant` short circuit to each metric entry.
 #
-# P2：iaa_nominal `_balanced_accuracy` / `_mcc` 不接收 labels=，单类切片下 sklearn
-#     `_check_targets` 触发 `UserWarning: A single label was found`；同源退化路径中
-#     sklearn `cohen_kappa_score` / statsmodels `fleiss_kappa` 内部除 0 触发
-#     `RuntimeWarning: invalid value encountered in scalar divide`. 修法：catch_warnings
-#     局部静音；外层 `_nan_to_zero` 仍兜数值.
+# P2: iaa_nominal `_balanced_accuracy` / `_mcc` does not accept labels=, sklearn under single-class slicing
+# `_check_targets` triggers `UserWarning: A single label was found`; in the same source degradation path
+# sklearn `cohen_kappa_score` / statsmodels `fleiss_kappa` Internal division by 0 triggers
+# `RuntimeWarning: invalid value encountered in scalar divide`. Fix: catch_warnings
+# Partially muted; the outer layer `_nan_to_zero` still contains values.
 
-# ---------- P0：iaa_ordinal 混合非法 prediction 场景下 metric 数值正确 ----------
+# ---------- P0: iaa_ordinal mixed illegally. The metric value is correct in the prediction scenario ----------
 
 
 def _ordinal_synth(yt: list[int], yp: list[int | None]) -> list[SampleResult]:
-    """合成 ordinal SampleResult 列表；pred=None 表示「LM 输出非整数被标 invalid」."""
+    """Synthesize ordinal SampleResult list; pred=None means "LM output non-integer is marked as invalid"."""
     from evals.api import SampleResult as _SR
 
     srs: list[_SR] = []
@@ -356,47 +354,47 @@ def _ordinal_synth(yt: list[int], yp: list[int | None]) -> list[SampleResult]:
 
 
 def test_ordinal_p0_mixed_invalid_kappa_not_silently_inflated():
-    """P0 核心回归：yt=[1,2,3,4,5] + 2 条非法 (None) + 3 条 valid 全对.
-    旧实现 cohens_kappa=1.0 / weighted_quad=1.0（被 sklearn 静默丢弃 invalid 后剩 [1,3,5]
-    自匹配假性满分）；修复后 cohens_kappa 应来自 valid subset 的真实值（3/3=完美 → 1.0
-    但语义清晰：实测的是 valid subset，而非整个测验）。"""
+    """P0 core regression: yt=[1,2,3,4,5] + 2 illegal items (None) + 3 valid items, all correct.
+    Old implementation cohens_kappa=1.0 / weighted_quad=1.0 (silently discarded by sklearn as invalid, leaving [1,3,5]
+    Self-matching false perfect score); after repair, cohens_kappa should come from the true value of valid subset (3/3=perfect → 1.0
+    But the semantics are clear: what is measured is the valid subset, not the entire test)."""
     from evals.tasks.iaa_ordinal import IaaOrdinal
 
     task = IaaOrdinal()
     agg = task.aggregation()
     yt = [1, 2, 3, 4, 5]
-    yp = [1, None, 3, None, 5]  # 2 条 LM 解析失败
+    yp = [1, None, 3, None, 5]  # 2 LM parsing failed
     srs = _ordinal_synth(yt, yp)
 
-    # accuracy 走全部 sample（含 invalid → 0 贡献）：3/5 = 0.6
+    # accuracy takes all samples (including invalid → 0 contribution): 3/5 = 0.6
     assert agg["accuracy"](srs) == pytest.approx(0.6)
-    # kappa 系列在 valid subset (3 个全对) 上是 1.0；这是「显式让 invalid 不进 kappa」
-    # 的正确语义——与旧实现「sklearn 静默丢弃 → 数值看起来一样但来源未知」完全不同；
-    # 新数据契约 _pred_invalid 让消费者能从 sample.artifacts 看到哪些样本被剔除.
+    # The kappa series is 1.0 on the valid subset (3 all pairs); this is "explicitly keeping invalid out of kappa"
+    # Correct semantics - completely different from the old implementation "sklearn silently discards → values ​​look the same but origin is unknown";
+    # The new data contract _pred_invalid allows consumers to see which samples were excluded from sample.artifacts.
     assert agg["cohens_kappa"](srs) == pytest.approx(1.0)
-    # 关键诊断字段在 sample 层落地，下游 drill-down 能识别 invalid sample
+    # Key diagnostic fields are implemented at the sample layer, and downstream drill-down can identify invalid samples.
     invalid_count = sum(1 for s in srs if s.artifacts.get("_pred_invalid"))
     assert invalid_count == 2
 
 
 def test_ordinal_p0_mixed_invalid_with_disagreement():
-    """P0 严格回归：valid subset 内部有真实分歧时 kappa < 1.0，与旧实现的「假性 1.0」
-    定量分离．yt=[1..5] + 2 invalid + 3 valid 中 1 错位 (yp=[1, None, 4, None, 5])．"""
+    """P0 strict regression: when there is a real disagreement within the valid subset, kappa < 1.0, compared with the "false 1.0" of the old implementation
+    Quantitative separation. yt=[1..5] + 2 invalid + 3 valid 1 is misplaced (yp=[1, None, 4, None, 5])."""
     from evals.tasks.iaa_ordinal import IaaOrdinal
 
     task = IaaOrdinal()
     agg = task.aggregation()
     yt = [1, 2, 3, 4, 5]
-    yp = [1, None, 4, None, 5]  # valid subset = (1,1)(3,4)(5,5)，2/3 完美
+    yp = [1, None, 4, None, 5]  # valid subset = (1,1)(3,4)(5,5), 2/3 perfect
     srs = _ordinal_synth(yt, yp)
-    # 旧实现：sklearn 看 yp=[1, 4, 5] vs yt=[1, 3, 5]，labels=[1..5]，但 valid subset
-    # 中真实有错位，weighted_kappa_quadratic 应 < 1.0
+    # Old implementation: sklearn looks at yp=[1, 4, 5] vs yt=[1, 3, 5], labels=[1..5], but valid subset
+    # There is misalignment in the center truth, weighted_kappa_quadratic should be < 1.0
     wkq = agg["weighted_kappa_quadratic"](srs)
     assert wkq < 1.0, f"weighted_kappa_quadratic={wkq} 应反映 valid subset 的真实错位"
 
 
 def test_ordinal_p0_all_invalid_returns_zero():
-    """全部 invalid → valid subset 空 → kappa 系列短路返 0（而不是 NaN / sklearn raise）."""
+    """All invalid → valid subset empty → kappa series short circuit returns 0 (instead of NaN / sklearn raise)."""
     from evals.tasks.iaa_ordinal import IaaOrdinal
 
     task = IaaOrdinal()
@@ -409,26 +407,26 @@ def test_ordinal_p0_all_invalid_returns_zero():
         "pearson_r", "spearman_rho", "kendall_tau", "lins_ccc",
     ]:
         assert agg[k](srs) == 0.0, f"{k} 全 invalid 应返 0"
-    # accuracy 仍能算（全 invalid → 0）
+    # accuracy can still be calculated (all invalid → 0)
     assert agg["accuracy"](srs) == 0.0
 
 
 def test_ordinal_p0_real_predictions_unchanged():
-    """P0 修复不破坏 README 教学叙事：4 份合法 stub 数值与既有 score 测试一致."""
+    """P0 repair does not destroy the README teaching narrative: the 4 legal stub values ​​are consistent with the existing score test."""
     task = IaaOrdinal()
     PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "iaa_ordinal" / "predictions"
     r = evaluate_score(task, PRED_DIR / "off_by_one.jsonl")
-    # 沿用 test_iaa_ordinal_score.py 的核心 lock
+    # Inherit the core lock of test_iaa_ordinal_score.py
     assert r.aggregated["accuracy"] == 0.0
     assert r.aggregated["cohens_kappa"] == pytest.approx(-0.25, abs=1e-9)
     assert r.aggregated["weighted_kappa_quadratic"] == pytest.approx(0.7058823529411764, abs=1e-9)
 
 
-# ---------- P1a：iaa_nominal run path 不再触发 sklearn OOV warnings ----------
+# ---------- P1a: iaa_nominal run path no longer triggers sklearn OOV warnings ----------
 
 
 def _capture_warnings(fn):
-    """运行 fn() 并返回触发的 warning 列表；按 message 文本归一化便于断言."""
+    """Runs fn() and returns a list of triggered warnings; normalized by message text for ease of assertion."""
     import warnings as _warnings
 
     with _warnings.catch_warnings(record=True) as caught:
@@ -438,9 +436,9 @@ def _capture_warnings(fn):
 
 
 def test_nominal_p1a_run_path_no_oov_warning():
-    """P1a 回归：iaa_nominal run path 上 yp 全 `""` 不再让 sklearn emit
-    `UserWarning: y_pred contains classes not in y_true`（aggregation 走 valid subset，
-    sklearn 看到的 yp ⊆ LABELS）."""
+    """P1a regression: yp full `""` on iaa_nominal run path no longer allows sklearn emit
+    `UserWarning: y_pred contains classes not in y_true` (aggregation takes valid subset,
+    yp ⊆ LABELS as seen by sklearn)."""
     task = IaaNominal()
     lm = _UnusedLM()
     msgs = _capture_warnings(lambda: evaluate_run(task, lm))
@@ -449,9 +447,9 @@ def test_nominal_p1a_run_path_no_oov_warning():
 
 
 def test_nominal_p1a_run_path_no_runtimewarning_from_sklearn_kappa():
-    """P1a 同源回归：cohens_kappa / fleiss_kappa 在 Pe=1 退化时不再让 sklearn /
+    """P1a homology regression: cohens_kappa / fleiss_kappa no longer let sklearn /
     statsmodels emit `RuntimeWarning: invalid value encountered in scalar divide`
-    （包了 catch_warnings；外层 `_nan_to_zero` 仍兜数值）."""
+    (Includes catch_warnings; the outer layer `_nan_to_zero` still carries the value)."""
     task = IaaNominal()
     lm = _UnusedLM()
     msgs = _capture_warnings(lambda: evaluate_run(task, lm))
@@ -459,12 +457,12 @@ def test_nominal_p1a_run_path_no_runtimewarning_from_sklearn_kappa():
     assert rtw == [], f"应无 sklearn/statsmodels RuntimeWarning, 但触发 {len(rtw)}: {rtw[:2]}"
 
 
-# ---------- P1b：iaa_ordinal 常数输入不再触发 ConstantInputWarning ----------
+# ---------- P1b: iaa_ordinal constant input no longer triggers ConstantInputWarning ----------
 
 
 def test_ordinal_p1b_constant_input_no_warning():
-    """P1b 回归：iaa_ordinal run path（yp 全 invalid → valid subset 空 → 短路返 0）/
-    iaa_ordinal score path 极小 limit 等场景下，scipy 不再 emit ConstantInputWarning."""
+    """P1b regression: iaa_ordinal run path (yp all invalid → valid subset empty → short circuit returns 0)/
+    In scenarios such as iaa_ordinal score path with extremely small limit, scipy no longer emit ConstantInputWarning."""
     task = IaaOrdinal()
     lm = _UnusedLM()
     msgs = _capture_warnings(lambda: evaluate_run(task, lm))
@@ -472,11 +470,11 @@ def test_ordinal_p1b_constant_input_no_warning():
     assert cw == [], f"应无 ConstantInputWarning, 但触发 {len(cw)}: {cw[:2]}"
 
 
-# ---------- P2：iaa_nominal 单类切片不再触发 sklearn `single label` warning ----------
+# ---------- P2: iaa_nominal single-class slice no longer triggers sklearn `single label` warning ----------
 
 
 def test_nominal_p2_single_class_no_balanced_accuracy_warning():
-    """P2 回归：limit=5 perfect (全 ham 单类切片) 不再让 sklearn `_check_targets`
+    """P2 regression: limit=5 perfect (full ham single-class slice) no longer allows sklearn `_check_targets`
     emit `UserWarning: A single label was found in 'y_true' and 'y_pred'`."""
     task = IaaNominal()
     PRED_DIR = (

@@ -1,18 +1,17 @@
-"""Engine.invoke 端到端集成测试（无 LLM / 无 VDB / 无网络）.
+"""Engine.invoke end-to-end integration tests (no LLM / no VDB / no network).
 
-锁住跨模块装配链：`Engine` → `Scenario.assemble` → `Discussion.run` →
-`Agent.respond` → `Memory.build_messages` → `_client.chat`（fake）→
+Locks cross-module assembly chain: `Engine` → `Scenario.assemble` → `Discussion.run` →
+`Agent.respond` → `Memory.build_messages` → `_client.chat` (fake) →
 `tool_handler` → `ArtifactStore.dispatch` / `ToolTracer.record` → `Result`.
 
-这是覆盖"其它模块改动让本模块不可用"最有力的一层——任一模块改了对外契约（函数
-签名、entry 字段名、event schema、warning 信号）都会让本测试失败。
+Strongest layer for "other module changes break this module" — any contract change
+(signature, entry field names, event schema, warning signals) fails this test.
 
-设计原则：
-- 不跑 LLM，用 `FakeBackendClient.chat` 注入到 `agent_engine.agent._client` 上
-  （`scenario._backend_client` 引用同一模块对象，SummaryMemory 内部 summarizer
-   也走同一 patch）
-- scenario 用 `tmp_path` 写小文件，覆盖 happy path / require_tool 重试 /
-  --save-result-json envelope round-trip / artifact 工具触达 4 个独立形态
+Design:
+- No LLM; inject `FakeBackendClient.chat` into `agent_engine.agent._client`
+  (`scenario._backend_client` same module object; SummaryMemory summarizer same patch)
+- tmp_path scenarios cover happy path / require_tool retry /
+  --save-result-json envelope round-trip / artifact tool paths
 """
 from __future__ import annotations
 
@@ -42,11 +41,11 @@ from ._fake_client import FakeBackendClient, Script
 
 @pytest.fixture
 def fake_client(monkeypatch: pytest.MonkeyPatch) -> FakeBackendClient:
-    """每个测试一份新 FakeBackendClient，patch 到 `agent._client.chat` 上.
+    """Fresh FakeBackendClient per test, patched onto `agent._client.chat`.
 
-    注意：`scenario.py` 顶层 `from .agent import _client as _backend_client`
-    与 `agent._client` 指向同一 module；patch `_client.chat` 后 Agent.respond +
-    SummaryMemory 共用此 fake。
+    Note: `scenario.py` top-level `from .agent import _client as _backend_client`
+    and `agent._client` are the same module; patching `_client.chat` shares fake
+    between Agent.respond and SummaryMemory.
     """
     fc = FakeBackendClient()
     monkeypatch.setattr(_agent_mod._client, "chat", fc.chat)
@@ -59,13 +58,13 @@ def _write_scenario(tmp_path: Path, body: str) -> Path:
     return p
 
 
-# ---------- 基础 happy path -------------------------------------------
+# ---------- basic happy path -------------------------------------------
 
 def test_invoke_minimal_scenario_assembles_history_in_order(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """两 agent / 一 step 最简场景：history 形态 = topic → (turn + speaker) × N，
-    Result 字段 = Engine.invoke 默认值 + 无 warning + usage 来自 fake."""
+    """Two agents / one step minimal: history = topic → (turn + speaker) × N,
+    Result fields = Engine.invoke defaults + no warning + usage from fake."""
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
         agents:
@@ -102,7 +101,7 @@ def test_invoke_minimal_scenario_assembles_history_in_order(
     assert result.transcript[2].speaker == "A"
     assert result.transcript[2].content == "hello-A"
     assert result.transcript[4].speaker == "B"  # type: ignore[union-attr]
-    # usage 每 agent 1 次（无 summarizer），共 2 条
+    # usage once per agent (no summarizer), 2 total
     assert len(result.usage) == 2
     assert [u.caller for u in result.usage] == ["A", "B"]
 
@@ -110,7 +109,7 @@ def test_invoke_minimal_scenario_assembles_history_in_order(
 def test_invoke_passes_per_agent_system_prompt_and_caller(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """FakeBackendClient.chat 收到的 caller / system_prompt 与 scenario 声明一致."""
+    """FakeBackendClient.chat receives caller / system_prompt matching scenario declaration."""
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
         agents:
@@ -128,13 +127,13 @@ def test_invoke_passes_per_agent_system_prompt_and_caller(
     assert call["system_prompt"] == "prompt-for-A"
 
 
-# ---------- require_tool 重试 + warning -------------------------------
+# ---------- require_tool retry + warning -------------------------------
 
 def test_invoke_require_tool_miss_then_hit_succeeds(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """attempt 0 沉默（require_tool 未命中）→ nudge 触发 attempt 1，
-    fake 在 attempt 1 调用 propose_vote → 不产生 warning."""
+    """attempt 0 silent (require_tool miss) → nudge triggers attempt 1;
+    fake calls propose_vote on attempt 1 → no warning."""
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
         agents:
@@ -164,10 +163,10 @@ def test_invoke_require_tool_miss_then_hit_succeeds(
     result = Engine(Scenario.from_yaml(str(scn))).invoke()
     assert result.warnings == []
     assert result.success is True
-    # 两次 attempt → 两条 SpeakerEntry
+    # two attempts → two SpeakerEntry
     speakers = [e for e in result.transcript if isinstance(e, SpeakerEntry)]
     assert [s.content for s in speakers] == ["silent", "now-voting"]
-    # propose_vote 落 artifact_event
+    # propose_vote → artifact_event
     artifact_events = [
         e for e in result.transcript if isinstance(e, ArtifactEventEntry)
     ]
@@ -177,7 +176,7 @@ def test_invoke_require_tool_miss_then_hit_succeeds(
 def test_invoke_require_tool_exhaust_retries_emits_warning(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """attempt 0 + attempt 1 都沉默 → warning 落 Result.warnings + success=False."""
+    """attempt 0 + attempt 1 both silent → warning in Result.warnings + success=False."""
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
         agents:
@@ -202,8 +201,8 @@ def test_invoke_require_tool_exhaust_retries_emits_warning(
 def test_invoke_require_tool_covers_tracer_event_for_retrieve_docs(
     tmp_path: Path, fake_client: FakeBackendClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """DECISIONS §12 锁：require_tool 必须同时观测 tracer (非 artifact) 工具的事件——
-    `retrieve_docs` 调用应被识别，不再触发 nudge."""
+    """DECISIONS §12: require_tool must observe tracer (non-artifact) events —
+    `retrieve_docs` call recognized, no nudge."""
     scn_body = textwrap.dedent("""\
         ---
         agents:
@@ -238,11 +237,11 @@ def test_invoke_require_tool_covers_tracer_event_for_retrieve_docs(
         e for e in result.transcript if isinstance(e, ToolCallEntry)
     ]
     assert [t.tool for t in tool_calls] == ["retrieve_docs"]
-    # ToolTracer 写入 visible=False，确保 memory 不会回喂给 LLM
+    # ToolTracer writes visible=False so memory does not feed back to LLM
     assert all(t.visible is False for t in tool_calls)
 
 
-# ---------- artifact 集成 -------------------------------------------
+# ---------- artifact integration -------------------------------------------
 
 def test_invoke_artifact_tool_call_persists_section_and_event(
     tmp_path: Path, fake_client: FakeBackendClient,
@@ -275,7 +274,7 @@ def test_invoke_artifact_tool_call_persists_section_and_event(
 def test_invoke_initial_artifact_seeds_sections(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """Engine.invoke(initial_artifact=...) 在 ACL 之外预填 section."""
+    """Engine.invoke(initial_artifact=...) prefills section outside ACL."""
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
         agents:
@@ -341,8 +340,8 @@ def test_invoke_result_envelope_roundtrips_via_save_result_json(
 ) -> None:
     """In-memory Result == round-tripped Result via asdict → JSON → Result.load_json.
 
-    这把 §11 (envelope SoT) + §13 (typed view) + §16 (strict from_dict) 三层
-    契约扣在一起：Engine.invoke 输出的 Result 必须能通过 envelope 完整还原.
+    Locks §11 (envelope SoT) + §13 (typed view) + §16 (strict from_dict):
+    Engine.invoke Result must round-trip fully via envelope.
     """
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
@@ -379,13 +378,12 @@ def test_invoke_result_envelope_roundtrips_via_save_result_json(
 def test_summary_memory_triggers_summarizer_usage(
     tmp_path: Path, fake_client: FakeBackendClient,
 ) -> None:
-    """SummaryMemory 在 `stale_new >= max_recent` 时会触发一次额外的 summarizer
-    LLM 调用，且该调用的 TokenUsage 也落进 `Result.usage`.
+    """SummaryMemory triggers extra summarizer LLM call when `stale_new >= max_recent`,
+    and that call's TokenUsage lands in `Result.usage`.
 
-    实测口径：`memory.py::_run_summarizer` 调 client.chat 时不传 `caller=`，
-    所以 summarizer usage 的 `caller==""`（与 agent 调用区分开）；若有人改成
-    显式传 `caller="_summarizer"`，本测试自动暴露，提醒同步更新 evals/agent_sft
-    的 caller 过滤逻辑.
+    `memory.py::_run_summarizer` calls client.chat without `caller=`, so summarizer
+    usage has `caller==""` (distinct from agent calls); if changed to `caller="_summarizer"`,
+    this test exposes it for evals/agent_sft caller filter sync.
     """
     scn = _write_scenario(tmp_path, textwrap.dedent("""\
         ---
@@ -417,8 +415,8 @@ def test_summary_memory_triggers_summarizer_usage(
 # ---------- public API smoke ------------------------------------------
 
 def test_public_api_symbols_importable() -> None:
-    """README §快速开始 + DECISIONS §13/§14 列出的公开符号都能从 `agent_engine`
-    顶层 import；如有人删 / 改名要立刻发现."""
+    """Public symbols from README Quick Start + DECISIONS §13/§14 import from `agent_engine`
+    top level; delete/rename fails immediately."""
     import agent_engine as ae
 
     expected = {

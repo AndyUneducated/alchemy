@@ -1,16 +1,15 @@
-"""Phase 6 metrics/efficiency 单元锁：
+"""Phase 6 metrics/efficiency unit lock:
 
-cost lookup table 形状（per 1M tokens × (in, out) 二元组）+ 边界（None / 未命中 / mock）
-+ aggregated schema 永远 4 子组 + percentile 实现与 numpy linear interp 行为一致.
+cost lookup table shape (per 1M tokens × (in, out) tuples) + bounds (None / miss / mock)
++ aggregated schema always has 4 subgroups + percentile implementation consistent with numpy linear interp behavior.
 
-不引 numpy/tokencost：stdlib statistics 实现 percentile，几个数值断言用手算 oracle 锁住.
+Not citing numpy/tokencost: stdlib statistics implements percentile, and several numerical assertions are calculated by hand oracle locked.
 
-phase 6 audit follow-up（2026-05-04）：
-  - 1.1 cost_usd 子组加 mean
-  - 1.2 latency_ms 子组加 max
+phase 6 audit follow-up (2026-05-04):
+  - 1.1 cost_usd subgroup plus mean
+  - 1.2 latency_ms subgroup plus max
   - 1.4 unknown model fail-loud UserWarning
-  - 1.5 tokens.{total} 用 int 而非 float（整数语义）
-"""
+  - 1.5 tokens.{total} uses int instead of float (integer semantics)"""
 
 from __future__ import annotations
 
@@ -28,11 +27,11 @@ from evals.metrics.efficiency import (
 )
 
 
-# ---------- 价格表 ----------
+# ---------- Price list ----------
 
 def test_price_table_entries_are_in_out_tuple():
-    """每条 entry 必须是 (input_price, output_price) 二元 float tuple，单位 USD/1M tokens."""
-    assert _PRICE_PER_1M_TOKENS  # 至少 1 条
+    """Each entry must be (input_price, output_price) binary float tuple, unit USD/1M tokens."""
+    assert _PRICE_PER_1M_TOKENS  # at least 1
     for model, price in _PRICE_PER_1M_TOKENS.items():
         assert isinstance(model, str), f"key 必须是 str，got {type(model)}"
         assert isinstance(price, tuple) and len(price) == 2, (
@@ -44,8 +43,8 @@ def test_price_table_entries_are_in_out_tuple():
 
 
 def test_price_table_includes_canonical_models():
-    """phase 6 立的 4 个调试 SKU + plan A 切换后的 qwen3.x 默认对永远在表里
-    （cli.py EXTERNAL_PROVIDERS 三家全覆盖 + 当前 default ollama tag）."""
+    """The 4 debugging SKUs established in phase 6 + plan A. The default pair of qwen3.x after switching is always in the table.
+    (cli.py EXTERNAL_PROVIDERS three full coverage + current default ollama tag)."""
     assert "ollama:qwen3.6:27b" in _PRICE_PER_1M_TOKENS
     assert "ollama:qwen3.5:9b" in _PRICE_PER_1M_TOKENS
     assert "openai:gpt-4o-mini" in _PRICE_PER_1M_TOKENS
@@ -56,15 +55,15 @@ def test_price_table_includes_canonical_models():
 # ---------- compute_cost_usd ----------
 
 def test_compute_cost_returns_none_for_missing_tokens():
-    """tokens_in 或 tokens_out 任一 None → cost None（保持非 None 收集协议）."""
+    """tokens_in or tokens_out either None → cost None (keep non-None collection protocol)."""
     assert compute_cost_usd("ollama:qwen3.6:27b", None, 100) is None
     assert compute_cost_usd("ollama:qwen3.6:27b", 100, None) is None
     assert compute_cost_usd("ollama:qwen3.6:27b", None, None) is None
 
 
 def test_compute_cost_returns_zero_for_unknown_model():
-    """未填的 model（如 mock:gold / 未上架的 ollama tag）→ cost 0.0；audit §1.4 起 fail-loud warning."""
-    _warn_unknown_pricing_model.cache_clear()  # 清 lru_cache 让 warning 重发
+    """Unfilled model (such as mock:gold / unlisted ollama tag) → cost 0.0; audit §1.4 and above fail-loud warning."""
+    _warn_unknown_pricing_model.cache_clear()  # Clear lru_cache to allow warnings to be reissued
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         assert compute_cost_usd("mock:gold", 1000, 500) == 0.0
@@ -75,7 +74,7 @@ def test_compute_cost_returns_zero_for_unknown_model():
 
 
 def test_compute_cost_unknown_model_warning_dedups_lru():
-    """同 unknown model 多次调用同进程内只 warn 一次（lru_cache 防刷屏）."""
+    """If the unknown model is called multiple times in the same process, only warn once (lru_cache prevents screen refresh)."""
     _warn_unknown_pricing_model.cache_clear()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -86,7 +85,7 @@ def test_compute_cost_unknown_model_warning_dedups_lru():
 
 
 def test_compute_cost_known_model_no_warning():
-    """命中 model 不应 warn（避免在正常路径喷信号）."""
+    """Hit model should not warn (avoid spraying signals on normal paths)."""
     _warn_unknown_pricing_model.cache_clear()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -101,7 +100,7 @@ def test_compute_cost_uses_per_1m_unit():
 
 
 def test_compute_cost_handles_distinct_in_out_prices():
-    """anthropic:claude-3-5-haiku = (1.00, 5.00) → 1M in + 1M out = 6.00 USD（output 5x input 锁）."""
+    """anthropic:claude-3-5-haiku = (1.00, 5.00) → 1M in + 1M out = 6.00 USD (output 5x input lock)."""
     cost = compute_cost_usd("anthropic:claude-3-5-haiku-20241022", 1_000_000, 1_000_000)
     assert cost == 6.00
 
@@ -113,14 +112,13 @@ def test_compute_cost_small_call_scales_correctly():
     assert cost == expected
 
 
-# ---------- efficiency_aggregated schema 永远 4 子组 ----------
+# ---------- efficiency_aggregated schema always 4 subgroups ----------
 
 def _sr(eff: dict[str, float] | None = None) -> SampleResult:
-    """构造测试用 SampleResult.
+    """Construct SampleResult for testing.
 
-    phase 7 §7.D 起 sample.metrics nested 派：efficiency 键值嵌入 metrics["efficiency"] 子组.
-    `eff=None` 表示 sample 完全无 efficiency 信号（mock 路径或 score 路径）.
-    """
+    phase 7 §7.D onwards sample.metrics nested: efficiency key value embedded metrics["efficiency"] subgroup.
+    `eff=None` means that the sample has no efficiency signal at all (mock path or score path)."""
     metrics: dict[str, float | dict[str, float]] = {}
     if eff is not None:
         metrics["efficiency"] = eff
@@ -128,9 +126,8 @@ def _sr(eff: dict[str, float] | None = None) -> SampleResult:
 
 
 def test_efficiency_aggregated_empty_inputs_returns_zero_schema():
-    """完全无 efficiency 信号（MockLM 路径）→ 4 子组键值全 0，schema 仍存在.
-    audit §1.1: cost_usd 加 mean；§1.2: latency_ms 加 max；§1.5: tokens.total 用 int.
-    """
+    """No efficiency signal at all (MockLM path) → 4 subgroup key values are all 0, schema still exists.
+    audit §1.1: cost_usd plus mean; §1.2: latency_ms plus max; §1.5: tokens.total uses int."""
     agg = efficiency_aggregated([_sr(None)])
     assert set(agg.keys()) == {"latency_ms", "tokens_in", "tokens_out", "cost_usd"}
     assert agg["latency_ms"] == {"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0}
@@ -140,7 +137,7 @@ def test_efficiency_aggregated_empty_inputs_returns_zero_schema():
 
 
 def test_efficiency_aggregated_handles_empty_sample_list():
-    """0 sample（边界）→ 同 zero schema，不爆 statistics.mean 空序列错."""
+    """0 sample (boundary) → Same as zero schema, does not cause statistics.mean empty sequence error."""
     agg = efficiency_aggregated([])
     assert agg["latency_ms"]["p50"] == 0.0
     assert agg["latency_ms"]["max"] == 0.0
@@ -149,7 +146,7 @@ def test_efficiency_aggregated_handles_empty_sample_list():
 
 
 def test_efficiency_aggregated_aggregates_real_signals():
-    """3 个 sample 都报 latency / tokens / cost → 数学正确（含新加的 max / cost.mean）."""
+    """All three samples report latency / tokens / cost → mathematically correct (including the newly added max / cost.mean)."""
     srs = [
         _sr({"latency_ms": 100.0, "tokens_in": 10.0, "tokens_out": 5.0, "cost_usd": 0.01}),
         _sr({"latency_ms": 200.0, "tokens_in": 20.0, "tokens_out": 10.0, "cost_usd": 0.02}),
@@ -158,7 +155,7 @@ def test_efficiency_aggregated_aggregates_real_signals():
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == statistics.mean([100.0, 200.0, 300.0])
     assert agg["latency_ms"]["max"] == 300.0  # audit §1.2
-    assert agg["tokens_in"]["total"] == 60  # int 语义 (audit §1.5)
+    assert agg["tokens_in"]["total"] == 60  # int semantics (audit §1.5)
     assert isinstance(agg["tokens_in"]["total"], int)
     assert agg["tokens_in"]["mean"] == 20.0
     assert agg["tokens_out"]["total"] == 30
@@ -167,9 +164,8 @@ def test_efficiency_aggregated_aggregates_real_signals():
 
 
 def test_efficiency_aggregated_with_zero_padded_signals():
-    """phase 6 audit §1.3 选项 A：mock 路径 sample.metrics 写 0 占位 → aggregated 仍走 0 路径.
-    数学行为不变（0 序列的 mean/total/max 都是 0），schema-on-write 协议在两层一致.
-    """
+    """phase 6 audit §1.3 Option A: mock path sample.metrics writes 0 placeholder → aggregated still takes 0 path.
+    The mathematical behavior is unchanged (the mean/total/max of the 0 sequence are all 0), and the schema-on-write protocol is consistent at both layers."""
     srs = [_sr({"latency_ms": 0.0, "tokens_in": 0.0, "tokens_out": 0.0, "cost_usd": 0.0}) for _ in range(5)]
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == 0.0
@@ -179,14 +175,13 @@ def test_efficiency_aggregated_with_zero_padded_signals():
 
 
 def test_efficiency_aggregated_skips_none_signals_per_sample():
-    """部分 sample 报、部分不报（None）→ 只对报的求 mean / total（非 None 收集协议）.
-    注意：phase 6 audit §1.3 选项 A 后，runner injector 不再产生 None（永远写 0 占位）；
-    本测试守住 efficiency_aggregated 自身的 None-skipping 行为（直接构造 metrics 时仍合法）.
-    """
+    """Some samples are reported, some are not reported (None) → only the mean / total is calculated for the reported samples (non-None collection protocol).
+    Note: After phase 6 audit §1.3 option A, the runner injector no longer generates None (always writes 0 placeholder);
+    This test respects the None-skipping behavior of efficiency_aggregated itself (it is still legal when directly constructing metrics)."""
     srs = [
-        _sr({"latency_ms": 100.0}),  # 只报 latency
-        _sr({"tokens_in": 50.0}),    # 只报 tokens_in
-        _sr(None),                    # 啥都不报
+        _sr({"latency_ms": 100.0}),  # Only report latency
+        _sr({"tokens_in": 50.0}),    # Only report tokens_in
+        _sr(None),                    # Report nothing
     ]
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == 100.0
@@ -197,7 +192,7 @@ def test_efficiency_aggregated_skips_none_signals_per_sample():
 
 
 def test_efficiency_aggregated_single_sample_percentile_safe():
-    """单 sample 不能爆 statistics.quantiles 要求 n>=2 的 ValueError（边界）."""
+    """Single sample cannot explode the ValueError (bound) of statistics.quantiles which requires n>=2."""
     srs = [_sr({"latency_ms": 42.0})]
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == 42.0
@@ -207,7 +202,7 @@ def test_efficiency_aggregated_single_sample_percentile_safe():
 
 
 def test_efficiency_aggregated_two_sample_percentile_safe():
-    """n=2 是 statistics.quantiles 接受的最小输入；audit 测试覆盖缺口补齐."""
+    """n=2 is the minimum input accepted by statistics.quantiles; audit tests for coverage gap filling."""
     srs = [_sr({"latency_ms": 10.0}), _sr({"latency_ms": 20.0})]
     agg = efficiency_aggregated(srs)
     assert agg["latency_ms"]["mean"] == 15.0
@@ -217,40 +212,38 @@ def test_efficiency_aggregated_two_sample_percentile_safe():
 
 
 def test_efficiency_aggregated_p95_stays_below_max():
-    """p95 单调性：100 个等差 latency → p95 < max；max 准确等于序列最大值."""
+    """p95 monotonicity: 100 arithmetic latency → p95 < max; max is exactly equal to the sequence maximum."""
     srs = [_sr({"latency_ms": float(i)}) for i in range(1, 101)]  # 1..100
     agg = efficiency_aggregated(srs)
-    # p50 ≈ 50.5（中位数）
+    # p50 ≈ 50.5 (median)
     assert 50.0 <= agg["latency_ms"]["p50"] <= 51.0
-    # p95 应落在 95 附近
+    # p95 should fall around 95
     assert 94.0 <= agg["latency_ms"]["p95"] <= 96.0
-    # max 严格等于序列最大值
+    # max is strictly equal to the maximum value of the sequence
     assert agg["latency_ms"]["max"] == 100.0
-    # 严格 p95 < max（验证 max 的独立 worst-case 信号价值）
+    # Strict p95 < max (validates the independent worst-case signal value of max)
     assert agg["latency_ms"]["p95"] < agg["latency_ms"]["max"]
 
 
-# ---------- phase 7 §7.D nested 派写位置锁 ----------
+# ---------- phase 7 §7.D nested Dispatch write position lock ----------
 
 def test_efficiency_aggregated_ignores_legacy_flat_keys():
-    """phase 7 §7.D 起 metrics["efficiency"] 必须是 dict；老 phase 6 flat 写法
-    （metrics["latency_ms"] = 999）不再被识别（aggregator 看不到 → 全 0）.
+    """From phase 7 §7.D metrics["efficiency"] must be dict; old phase 6 flat writing method
+    (metrics["latency_ms"] = 999) is no longer recognized (aggregator cannot see → all 0).
 
-    这是 supersede 的预期行为：旧 result.json 反序列化后能加载但 efficiency 数据"看不见"，
-    需要重跑.（不抛异常 / 不崩溃即可，aggregator 默默跳过 non-dict efficiency key）.
-    """
+    This is the expected behavior of supersede: the old result.json can be loaded after deserialization but the efficiency data is "invisible",
+    Need to rerun. (No exception is thrown / no crash is required, the aggregator silently skips the non-dict efficiency key)."""
     sr_legacy = SampleResult(
         doc_id="x", prediction="p", target="t",
-        metrics={"latency_ms": 999.0},  # 老 flat 写法
+        metrics={"latency_ms": 999.0},  # Old way of writing flat
     )
     agg = efficiency_aggregated([sr_legacy])
     assert agg["latency_ms"]["mean"] == 0.0
 
 
 def test_inject_per_sample_efficiency_writes_nested_subgroup():
-    """phase 7 §7.D 锁：inject_per_sample_efficiency 写到 metrics["efficiency"] 嵌套子组,
-    不污染顶层（task-specific scalar 与 cross-cutting 横切按 ontology 分层）.
-    """
+    """phase 7 §7.D Lock: inject_per_sample_efficiency is written to metrics["efficiency"] nested subgroup,
+    Does not pollute the top level (task-specific scalar and cross-cutting are layered by ontology)."""
     from evals.api import Response, Usage
     from evals.metrics.efficiency import inject_per_sample_efficiency
 
@@ -262,13 +255,13 @@ def test_inject_per_sample_efficiency_writes_nested_subgroup():
     )
     [out] = inject_per_sample_efficiency([sr], [resp], "ollama:qwen3.6:27b")
 
-    # task-specific 顶层未受影响
+    # task-specific top level is not affected
     assert out.metrics["acc"] == 1.0
-    # cross-cutting 落在嵌套子组
+    # cross-cutting falls within nested subgroups
     assert isinstance(out.metrics["efficiency"], dict)
     assert out.metrics["efficiency"]["latency_ms"] == 123.0
     assert out.metrics["efficiency"]["tokens_in"] == 10.0
     assert out.metrics["efficiency"]["tokens_out"] == 5.0
-    # 顶层无 4 个 flat key（防止退回 phase 6 行为）
+    # There are no 4 flat keys at the top level (to prevent falling back to phase 6 behavior)
     assert "latency_ms" not in out.metrics
     assert "tokens_in" not in out.metrics

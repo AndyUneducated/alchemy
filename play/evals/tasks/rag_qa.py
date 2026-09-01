@@ -1,25 +1,24 @@
-"""Phase 4 vertical slice：族 4 RAG end-to-end QA task.
+"""Phase 4 vertical slice: Family 4 RAG end-to-end QA task.
 
-8 个针对 `play/rag/docs/panel/` 公司治理叙事 corpus 的中文 QA + 4 份 stub
-predictions（perfect / paraphrase / wrong_fact / garbage）。教学叙事核心：
-"在 grounding 维度上看 generation 质量阶梯"——
+8 Chinese QA + 4 stubs for `play/rag/docs/panel/` corporate governance narrative corpus
+predictions (perfect/paraphrase/wrong_fact/garbage). Core of teaching narrative:
+"Looking at the generation quality ladder from the grounding dimension"——
 
-  | 预测       | em  | rouge_l | faithfulness | answer_correctness | 故事 |
+  | prediction | em | rouge_l | faithfulness | answer_correctness | story |
   |---|---|---|---|---|---|
-  | perfect    | 1.0 | ~1.0    | ~1.0         | ~1.0              | 上界 sanity |
-  | paraphrase | 0.0 | mid     | ~1.0         | ~1.0              | lexical 失效 / judge 救场（**核心叙事**） |
-  | wrong_fact | 0.0 | high    | low          | low               | lexical 误判 / judge 抓事实错（**反向叙事**） |
-  | garbage    | 0.0 | low     | low          | low               | 下界 sanity |
+  | perfect | 1.0 | ~1.0 | ~1.0 | ~1.0 | upper bound sanity |
+  | paraphrase | 0.0 | mid | ~1.0 | ~1.0 | lexical failure / judge rescue (**core narrative**) |
+  | wrong_fact | 0.0 | high | low | low | lexical misjudgment / judge grasps the wrong fact (**reverse narrative**) |
+  | garbage | 0.0 | low | low | low | lower bound sanity |
 
-设计要点：
-  - **process_docs 注入 contexts**（run 路径）：在 LM 调用前一次性 retrieve 全部 docs,
-    contexts/retrieved_ids pin 进 doc.metadata；`doc_to_text` 是纯字符串构造（0 IO）.
-  - **load_prediction 注入 contexts**（score 路径）：从 row 里抽 contexts/retrieved_ids
-    进 doc.metadata，prediction 进 Response.text——path B+C 的 score 实例.
-  - **judge_lm 可选**：None → 仅 lexical（em / rouge_l），与 qa_open 的 lexical fallback 同模式.
-    给 judge_lm 时挂 5 个 RAG 维度（faithfulness / answer_correctness / context_precision /
-    context_recall / answer_relevancy）.
-"""
+Design points:
+  - **process_docs injection contexts** (run path): retrieve all docs at once before LM call,
+    contexts/retrieved_ids pin into doc.metadata; `doc_to_text` is a pure string construct (0 IO).
+  - **load_prediction injects contexts** (score path): extract contexts/retrieved_ids from row
+    Go into doc.metadata, prediction into Response.text - score instance of path B+C.
+  - **judge_lm optional**: None → lexical only (em/rouge_l), same mode as qa_open's lexical fallback.
+    Hang 5 RAG dimensions when giving judge_lm (faithfulness / answer_correctness / context_precision /
+    context_recall / answer_relevancy)."""
 
 from __future__ import annotations
 
@@ -40,7 +39,7 @@ from ..metrics.judge_rag import (
 from ..models.base import LM
 from ..registry import register_task
 from .base import Task
-from .mt import _rouge_scorer  # 复用 mt 的中文 char-level rouge tokenizer
+from .mt import _rouge_scorer  # Chinese char-level rouge tokenizer that reuses mt
 
 PROMPT_TEMPLATE = (
     "请依据以下材料回答问题。\n"
@@ -56,15 +55,14 @@ RetrieveFn = Callable[[str], tuple[list[str], list[str]]]
 
 @register_task("rag_qa")
 class RagQA(Task):
-    """RAG end-to-end QA：retrieval + generation + grounding 评估三合一.
+    """RAG end-to-end QA: retrieval + generation + grounding evaluation three-in-one.
 
-    构造：
-      - `retrieve_fn=None`         → 仅 score 路径可用（contexts 从 predictions 读）
-      - `retrieve_fn=callable`     → run 路径 process_docs hook 自动 retrieve
-      - `judge_lm=None`            → 仅 lexical baseline（em / rouge_l）
-      - `judge_lm=lm`              → 加 5 个 RAG 维度
-      - `top_k`                    → process_docs 截断 contexts/ids 到前 K 条
-    """
+    Construction:
+      - `retrieve_fn=None` → only the score path is available (contexts are read from predictions)
+      - `retrieve_fn=callable` → run path process_docs hook automatically retrieve
+      - `judge_lm=None` → only lexical baseline (em/rouge_l)
+      - `judge_lm=lm` → add 5 RAG dimensions
+      - `top_k` → process_docs truncate contexts/ids to top K items"""
 
     name: ClassVar[str] = "rag_qa"
     output_type: ClassVar[str] = "generate_until"
@@ -109,11 +107,10 @@ class RagQA(Task):
                 )
 
     def doc_to_text(self, doc: Doc) -> str:
-        """纯字符串构造：从 doc.metadata['contexts'] 渲染 prompt，0 IO.
+        """Pure string construction: rendering prompt from doc.metadata['contexts'], 0 IO.
 
-        `process_docs` 已在 LM 调用前一次性 retrieve 完毕；这里读已注入的 contexts.
-        若 contexts 缺失（极少见，run 模式无 retrieve_fn 配置），fallback 到无材料 prompt.
-        """
+        `process_docs` has been retrieved once before the LM call; read the injected contexts here.
+        If contexts are missing (rarely, there is no retrieve_fn configuration in run mode), fallback to no material prompt."""
         contexts = doc.metadata.get("contexts", ())
         if contexts:
             ctx_block = "\n---\n".join(contexts)
@@ -125,7 +122,7 @@ class RagQA(Task):
         return doc.target or ""
 
     def process_docs(self, docs: list[Doc]) -> list[Doc]:
-        """run 路径：retrieve 在 LM 调用前一次性完成，contexts/ids 进 doc.metadata."""
+        """run path: retrieve is completed once before LM call, contexts/ids enter doc.metadata."""
         if self._retrieve_fn is None:
             return docs
         out: list[Doc] = []
@@ -139,10 +136,9 @@ class RagQA(Task):
         return out
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：row['contexts'] / ['retrieved_ids'] → doc.metadata；row['prediction'] → Response.text.
+        """score path: row['contexts'] / ['retrieved_ids'] → doc.metadata; row['prediction'] → Response.text.
 
-        path B+C 的 score 实例：pipeline 产物住 doc 一侧，LM 输出住 Response 一侧.
-        """
+        Score example of path B+C: The pipeline product lives on the doc side, and the LM output lives on the Response side."""
         enriched = replace(doc, metadata={
             **doc.metadata,
             "retrieved_ids": tuple(row.get("retrieved_ids", ())),
@@ -162,9 +158,9 @@ class RagQA(Task):
             "gold_ids": list(doc.metadata.get("gold_doc_ids", ())),
         }
         if self._judge_faithfulness is not None:
-            # DECISIONS §X wave 4：judge_answer_correctness / judge_answer_relevancy 在 parse
-            # 失败时返 None；其余 3 closure 仍只回 float（degenerate-input 路径返 0.0 是合法
-            # 最低分）；统一用 None-check 既兼容也对未来 closure 升级 None 路径稳健.
+            # DECISIONS §X wave 4: judge_answer_correctness / judge_answer_relevancy in parse
+            # Returns None on failure; the remaining 3 closures still only return float (it is legal to return 0.0 for the degenerate-input path)
+            # lowest score); unified use of None-check is both compatible and robust to the None path of future closure upgrades.
             for key, fn in (
                 ("faithfulness", self._judge_faithfulness),
                 ("answer_correctness", self._judge_answer_correctness),
@@ -209,11 +205,10 @@ class RagQA(Task):
         return out
 
     def collect_judge_responses(self) -> tuple[list[Response], str | None]:
-        """DECISIONS §7.3：聚合 5 个 RAG judge closure 的 _recorder.responses.
+        """DECISIONS §7.3: Aggregate _recorder.responses of 5 RAG judge closures.
 
-        所有 5 维度共用同一 judge_lm（构造时同 LM 实例传给 5 个 factory），所以
-        model_label 取任一即可（实际 5 个 recorder 的 model_label 完全相同）。
-        """
+        All 5 dimensions share the same judge_lm (the same LM instance is passed to 5 factories during construction), so
+        Model_label can be any one (actually the model_labels of the 5 recorders are exactly the same)."""
         if self._judge_lm is None:
             return [], None
         all_responses: list[Response] = []
@@ -236,7 +231,7 @@ class RagQA(Task):
 
 
 def _per_sample_rouge_l(pred: str, target: str) -> float:
-    """单样本 ROUGE-L F-measure（中文 char-level；复用 mt._rouge_scorer 缓存）."""
+    """Single-sample ROUGE-L F-measure (Chinese char-level; reuse mt._rouge_scorer cache)."""
     if not pred or not target:
         return 0.0
     scorer = _rouge_scorer()
@@ -244,12 +239,11 @@ def _per_sample_rouge_l(pred: str, target: str) -> float:
 
 
 def _mean_metric(key: str) -> Callable[[list[SampleResult]], float | None]:
-    """工厂：对 SampleResult.metrics[key] 求均值的 aggregation 闭包.
+    """Factory: aggregation closure that averages SampleResult.metrics[key].
 
-    DECISIONS §X wave 4：None 占位"未测得"——key 缺 / value=None 都过滤；
-    em / rouge_l 等老 metric 始终是 float（不会 None），过滤逻辑透传不影响数值；
-    judge 维度（answer_correctness / answer_relevancy）parse 失败时不写键 → 返 None.
-    """
+    DECISIONS §X wave 4: None occupancy "not measured" - key is missing / value=None are filtered;
+    Old metrics such as em / rouge_l are always float (not None), and filtering logic transparent transmission does not affect the value;
+    judge dimension (answer_correctness / answer_relevancy) parse does not write the key on failure → returns None."""
 
     def _agg(srs: list[SampleResult]) -> float | None:
         if not srs:

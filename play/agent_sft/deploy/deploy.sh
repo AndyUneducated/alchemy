@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Step 4: ollama create agent-sft-qwen -f Modelfile
 #
-# 幂等：已存在 tag 先 rm 再 create。Modelfile 里 FROM 路径相对本目录。
+# Idempotent: rm existing tag before create. Modelfile FROM path is relative to this directory.
 
 set -euo pipefail
 

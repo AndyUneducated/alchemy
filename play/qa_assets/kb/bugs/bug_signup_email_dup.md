@@ -1,3 +1,3 @@
-# BUG-2025-06-03 注册并发（P1）
+# BUG-2025-06-03 Signup concurrency (P1)
 
-同邮箱并发「先查再写」双插。修：`redis SETNX signup:{email} 60s` 串行化。教训：唯一键须锁/SETNX；TC-SIGNUP-003。
+Concurrent signup for the same email used "check then insert" and double-inserted. Fix: `redis SETNX signup:{email} 60s` serializes. Lesson: unique keys need lock/SETNX; TC-SIGNUP-003.

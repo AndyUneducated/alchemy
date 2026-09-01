@@ -1,11 +1,10 @@
-"""synthesize.py — Approach B: 真失败 + 合成正确 三元组生成测试.
+"""synthesize.py — Approach B: true failure + synthesized correct triple generation test.
 
-覆盖：
-  - `_extract_call_template`: 模板抓取（带 paren / 不带 paren / 跨行 / 嵌套 paren / 中文）
-  - `synthesize_corrected_response`: 模板路径 + fallback 路径 + 空 instruction
-  - `envelope_to_synthetic_triples`: per-fire 一条 / 第一次成功 skip / wrong_args skip /
-    no require_tool / 空 transcript
-"""
+Coverage:
+  - `_extract_call_template`: template capture (with paren / without paren / cross-line / nested paren / Chinese)
+  - `synthesize_corrected_response`: template path + fallback path + empty instruction
+  - `envelope_to_synthetic_triples`: per-fire one / first time success skip / wrong_args skip /
+    no require_tool / empty transcript"""
 
 from __future__ import annotations
 
@@ -80,12 +79,12 @@ def test_extract_call_template_simple():
 
 
 def test_extract_call_template_no_template():
-    s = "调用 foo_tool 完成任务，不写参数"
+    s = "调用 foo_tool 完成任务，不写Parameter"
     assert _extract_call_template(s, "foo_tool") is None
 
 
 def test_extract_call_template_multiline_args():
-    s = textwrap.dedent("""\
+    s = textwrap.dedent("""
         请按下面的方式调用：
         append_section("review_a",
                        "- 评审结论一句话")
@@ -106,7 +105,7 @@ def test_extract_call_template_chinese_quotes_in_args():
 
 
 def test_extract_call_template_first_match_only():
-    """有两次出现时取第一次（保 instruction 主旨）."""
+    """When two matches appear, take the first (preserve instruction intent)."""
     s = 'foo_tool("a") 然后 foo_tool("b")'
     assert _extract_call_template(s, "foo_tool") == 'foo_tool("a")'
 
@@ -117,7 +116,7 @@ def test_extract_call_template_unbalanced_paren_returns_none():
 
 
 def test_extract_call_template_word_boundary():
-    """foo_tool_x 不应该被当成 foo_tool 的匹配."""
+    """foo_tool_x must not match as foo_tool."""
     s = 'foo_tool_x("a")'
     assert _extract_call_template(s, "foo_tool") is None
 
@@ -129,14 +128,14 @@ def test_synthesize_uses_template_when_present():
     out = synthesize_corrected_response(instr, "foo_tool")
     assert "foo_tool" in out
     assert 'foo_tool("a", "b")' in out
-    assert "好的" in out  # 包装语
+    assert "好的" in out  # wrapper phrase
 
 
 def test_synthesize_falls_back_when_no_template():
     instr = "调用 foo_tool 查询点东西，30 字一句话报告。"
     out = synthesize_corrected_response(instr, "foo_tool")
     assert "foo_tool" in out
-    assert "查询点东西" in out  # 完整 instruction 入正确响应作 fallback
+    assert "查询点东西" in out  # full instruction in corrected response as fallback
     assert "完成本步" in out
 
 
@@ -154,12 +153,12 @@ def test_synthesize_is_deterministic():
 # --- envelope_to_synthetic_triples ---------------------------------------
 
 def test_each_fire_produces_one_triple(tmp_path):
-    """关键差异 vs extractor: first attempt 失败 → 立刻 1 triple，无需后续 success."""
+    """Key difference vs extractor: first attempt fails → one triple immediately, no later success needed."""
     scen = write_scenario(tmp_path)
     transcript = [
         turn_marker(1),
         speaker("A", "我先想想"),  # missed
-        speaker("A", "再想想"),    # 仍未调对（max_retries=1 后引擎放弃）
+        speaker("A", "再想想"),    # Still not adjusted (the engine gives up after max_retries=1)
     ]
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)
     assert len(triples) == 1
@@ -167,11 +166,11 @@ def test_each_fire_produces_one_triple(tmp_path):
     assert t.failure_mode == "missed"
     assert t.failed_response == "我先想想"
     assert "foo_tool" in t.corrected_response
-    assert 'foo_tool("arg1", "arg2")' in t.corrected_response  # 用了 instruction 模板
+    assert 'foo_tool("arg1", "arg2")' in t.corrected_response  #Used instruction template
 
 
 def test_first_attempt_success_no_triple(tmp_path):
-    """第一次就调对 = 没 fire = 无 triple."""
+    """Get it right the first time = no fire = no triple."""
     scen = write_scenario(tmp_path)
     transcript = [
         turn_marker(1),
@@ -191,25 +190,25 @@ steps:
   - {id: chat, who: [A], instruction: just chat}
 ---
 """)
-    scen = write_scenario(tmp_path, yaml_text=yaml_text)
+    scenario = write_scenario(tmp_path, yaml_text=yaml_text)
     transcript = [turn_marker(1), speaker("A", "hi")]
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)
     assert triples == []
 
 
 def test_empty_transcript_returns_empty(tmp_path):
-    scen = write_scenario(tmp_path)
-    triples = envelope_to_synthetic_triples(envelope([]), scen, run_id=0)
+    scenario = write_scenario(tmp_path)
+    triples = envelope_to_synthetic_triples(envelope([]), scenario, run_id=0)
     assert triples == []
 
 
 def test_failure_mode_classification_works(tmp_path):
-    """failure_mode 仍按 first attempt 判，与 extractor 一致."""
+    """failure_mode is still judged according to first attempt, which is consistent with extractor."""
     scen = write_scenario(tmp_path)
     transcript = [
         turn_marker(1),
         speaker("A", "调点别的"),
-        tool_call("A", "other_tool"),  # wrong_tool 第一次
+        tool_call("A", "other_tool"),  # wrong_tool first time
     ]
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)
     assert len(triples) == 1
@@ -218,7 +217,7 @@ def test_failure_mode_classification_works(tmp_path):
 
 
 def test_yield_higher_than_extractor(tmp_path):
-    """5 个 fire turns 全部全程失败：extractor 出 0，synthesize 出 5."""
+    """All 5 fire turns failed: extractor came out with 0, synthesizer came out with 5."""
     yaml_text = textwrap.dedent("""\
 ---
 agents:
@@ -231,20 +230,20 @@ steps:
   - {id: t5, who: [A], require_tool: foo, max_retries: 1, instruction: 'foo("u")'}
 ---
 """)
-    scen = write_scenario(tmp_path, yaml_text=yaml_text)
+    scenario = write_scenario(tmp_path, yaml_text=yaml_text)
     transcript = []
     for i in range(1, 6):
         transcript.append(turn_marker(i, total=5))
         transcript.append(speaker("A", f"missed {i}"))
         transcript.append(speaker("A", f"still missed {i}"))
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)
-    assert len(triples) == 5
+    assertlen(triples) == 5
     assert all(t.required_tool == "foo" for t in triples)
     assert all(t.failure_mode == "missed" for t in triples)
 
 
 def test_segment_count_less_than_expected_skips_turn(tmp_path):
-    """subprocess 中途崩 → 缺 segments 的 turn 被静默跳过."""
+    """Subprocess crashes → Turns with missing segments are silently skipped."""
     yaml_text = textwrap.dedent("""\
 ---
 agents:
@@ -254,9 +253,10 @@ steps:
   - {id: s2, who: [A], require_tool: foo, max_retries: 1, instruction: 'foo("b")'}
 ---
 """)
-    scen = write_scenario(tmp_path, yaml_text=yaml_text)
-    # 只跑了 turn 1
+    scenario = write_scenario(tmp_path, yaml_text=yaml_text)
+    # run only turn 1
+    # run only turn 1
     transcript = [turn_marker(1), speaker("A", "miss")]
     triples = envelope_to_synthetic_triples(envelope(transcript), scen, run_id=0)
-    assert len(triples) == 1
-    assert triples[0].turn_idx == 1
+    assertlen(triples) == 1
+    assert triples[0].turn_idx == 1"""

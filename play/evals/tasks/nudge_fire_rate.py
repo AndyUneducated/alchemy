@@ -1,26 +1,25 @@
-"""Phase 1 baseline 主指标：require_tool 服从性.
+"""Phase 1 baseline main indicator: require_tool compliance.
 
-测 `play/agent_engine/scenarios/*.md` 上模型在 require_tool step 的"第一次到位率"
-（= 1 - nudge_fire_rate）. 与 `agent_traj` 同走 envelope subprocess 模式 + 同期望
-gold.jsonl schema（`scenario_path` 是唯一必填 metadata），仅度量函数不同：
+Measure the "first time placement rate" of the model in require_tool step on `play/agent_engine/scenarios/*.md`
+(= 1 - nudge_fire_rate). Same as `agent_traj` in envelope subprocess mode + same as expectations
+gold.jsonl schema (`scenario_path` is the only required metadata), only the measurement function is different:
 
-  | task               | 度量轴        | 信号 |
+  | task | metric axis | signal |
   |---|---|---|
-  | agent_traj         | trajectory 整体（task_success / tool F1 / coverage / ...） | 终态对错 |
-  | **nudge_fire_rate** | require_tool step 的第一次响应行为                          | 过程服从性 |
+  | agent_traj | trajectory overall (task_success / tool F1 / coverage / ...) | final state right or wrong |
+  | **nudge_fire_rate** | First response behavior of require_tool step | Process compliance |
 
-设计要点：
-  - **output_type='none'**：与 agent_traj 同；runner 跳 LM 调用；agent_engine
-    subprocess 跑全链路 LLM.
-  - **expected_require_tool_turns 自动派生**：从 scenario YAML frontmatter 解析，
-    避免 gold.jsonl 手维护与 scenario 漂移. 见 [`metrics/nudge.derive_expected_turns`].
-  - **失败模式 taxonomy**（DECISIONS Phase 1 ADR §6）：missed / wrong_tool / wrong_args
-    三桶；wrong_args 当前 deferred（artifact handler 在 error 路径不发 event）.
-  - **聚合**：top-level 按 require_tool_total 加权平均，by_scenario / by_tool /
-    by_failure_mode 三个 breakdown 字典写入 aggregated.
+Design points:
+  - **output_type='none'**: Same as agent_traj; runner jumps LM call; agent_engine
+    subprocess runs full-link LLM.
+  - **expected_require_tool_turns automatically derived**: parsed from scenario YAML frontmatter,
+    Avoid gold.jsonl hand maintenance and scenario drift. See [`metrics/nudge.derive_expected_turns`].
+  - **Failure Mode taxonomy** (DECISIONS Phase 1 ADR §6): missed/wrong_tool/wrong_args
+    Three buckets; wrong_args is currently deferred (artifact handler does not send events in the error path).
+  - **Aggregation**: top-level weighted average by require_tool_total, by_scenario / by_tool /
+    by_failure_mode Three breakdown dictionaries are written to aggregated.
 
-向后兼容：`run_fn=None` 默认构造可用于 score 路径（trajectory 从 predictions 读）.
-"""
+Backward compatibility: `run_fn=None` default constructor available for score path (trajectory reads from predictions)."""
 
 from __future__ import annotations
 
@@ -43,7 +42,7 @@ DATA_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "nudge_fire_rate" / "gold.jsonl"
 )
 
-# scenarios 路径解析根（与 agent_engine_run.make_run_fn 同源）
+# scenarios path resolution root (same origin as agent_engine_run.make_run_fn)
 PLAY_DIR = Path(__file__).resolve().parents[2]
 
 RunFn = Callable[[str], dict[str, Any]]
@@ -51,12 +50,11 @@ RunFn = Callable[[str], dict[str, Any]]
 
 @register_task("nudge_fire_rate")
 class NudgeFireRate(Task):
-    """Agent require_tool 服从性 task.
+    """Agent require_tool compliance task.
 
-    构造：
-      - `run_fn=None`     → 仅 score 路径可用（envelope 从 predictions JSONL 读）
-      - `run_fn=callable` → run 路径 process_docs hook 自动 subprocess 跑 agent_engine
-    """
+    Construction:
+      - `run_fn=None` → only score path is available (envelope read from predictions JSONL)
+      - `run_fn=callable` → run path process_docs hook automatic subprocess run agent_engine"""
 
     name: ClassVar[str] = "nudge_fire_rate"
     output_type: ClassVar[str] = "none"
@@ -88,7 +86,7 @@ class NudgeFireRate(Task):
         return doc.target or ""
 
     def process_docs(self, docs: list[Doc]) -> list[Doc]:
-        """run 路径：subprocess 跑 envelope，再派生 expected_turns，pin 到 metadata."""
+        """Run path: subprocess runs envelope, then derives expected_turns and pins to metadata."""
         if self._run_fn is None:
             return docs
         out: list[Doc] = []
@@ -103,12 +101,11 @@ class NudgeFireRate(Task):
         return out
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：predictions JSONL row 内的 envelope → metadata['trajectory']
-        + 派生 expected_turns；Response 占位.
+        """score path: envelope within predictions JSONL row → metadata['trajectory']
+        + Derive expected_turns; Response placeholder.
 
-        Predictions JSONL 由 run 路径写出，含 §16 envelope 全 5 字段（含 typed
-        transcript entry + usage list）.
-        """
+        Predictions JSONL is written by the run path, including §16 envelope and all 5 fields (including typed
+        transcript entry + usage list)."""
         envelope = {
             "transcript": row["transcript"],
             "artifact": row["artifact"],
@@ -125,8 +122,8 @@ class NudgeFireRate(Task):
 
         result = compute_nudge_fire_rate(traj, expected)
 
-        # SampleResult.metrics 仅放标量（一级嵌套约束 + 直观聚合）；breakdown 详情
-        # 进 artifacts 供 aggregation drill-down.
+        # SampleResult.metrics only holds scalars (one-level nested constraints + intuitive aggregation); breakdown details
+        # Enter artifacts for aggregation drill-down.
         metrics: dict[str, float | None | dict[str, float | None]] = {
             "nudge_fire_rate": result["nudge_fire_rate"],
             "nudge_fire_count": float(result["nudge_fire_count"]),
@@ -160,12 +157,12 @@ class NudgeFireRate(Task):
 
     def higher_is_better(self) -> dict[str, bool]:
         return {
-            # nudge_fire_rate 越低越好 —— 反向 metric，与项目其它指标的"高=好"约定相反.
-            # 标 False 让 show / 排序 UI 正确处理；breakdown dicts 不进 higher_is_better.
+            # nudge_fire_rate The lower the better - a reverse metric, contrary to the "high = good" convention of other project metrics.
+            # Flag False to make the show/sort UI handle it correctly; breakdown dicts are not included in higher_is_better.
             "nudge_fire_rate": False,
             "nudge_fire_count": False,
-            "require_tool_total": True,  # 量纲——多 turn 算分母，不是越多越好但
-                                          # 没有"越少越好"的反向语义；中性放 True 不误导.
+            "require_tool_total": True,  # Dimension - more turns count as the denominator, not more is better but
+                                          # There is no reverse semantics of "less is better"; putting True in neutral is not misleading.
         }
 
 
@@ -174,10 +171,9 @@ class NudgeFireRate(Task):
 def _pin_envelope(doc: Doc, envelope: dict[str, Any]) -> Doc:
     """envelope + scenario_path → metadata['trajectory'] + ['expected_require_tool_turns'].
 
-    envelope schema 与 agent_engine.result.Result 同形（§16，5 字段）：
+    envelope schema is the same as agent_engine.result.Result (§16, 5 fields):
       {transcript, artifact, warnings, success, usage}
-    严格透传——缺字段直接 KeyError，与 `Result.from_dict` 对齐.
-    """
+    Strictly transparent transmission - missing fields will directly raise KeyError, aligned with `Result.from_dict`."""
     trajectory = {
         "transcript": list(envelope["transcript"]),
         "artifact": dict(envelope["artifact"]),
@@ -193,9 +189,9 @@ def _pin_envelope(doc: Doc, envelope: dict[str, Any]) -> Doc:
             sp = (PLAY_DIR / sp).resolve()
         if sp.exists():
             expected = derive_expected_turns(sp)
-        # 文件不存在不抛——score 路径的 stub fixture 可能用虚构路径；该 doc 走"no
-        # require_tool turns" 路径（rate=None），与 brainstorm 等无 require_tool
-        # scenario 行为一致.
+        # If the file does not exist, it will not be thrown - the stub fixture of the score path may use a fictitious path; the doc takes "no
+        # require_tool turns" path (rate=None), no require_tool like brainstorm etc.
+        # scenario behaves consistently.
 
     new_meta = {
         **doc.metadata,
@@ -208,11 +204,10 @@ def _pin_envelope(doc: Doc, envelope: dict[str, Any]) -> Doc:
 # ---------- aggregation closures --------------------------------------------
 
 def _weighted_rate(srs: list[SampleResult]) -> float | None:
-    """跨 doc 的"全局" nudge_fire_rate = Σ fires / Σ totals.
+    """"Global" nudge_fire_rate = Σ fires / Σ totals across docs.
 
-    显式按 require_tool_total 加权——比简单平均 doc-level rate 更对：每个 require_tool
-    turn 是一个独立 Bernoulli 试验，加权后 SE 收紧 √N 倍.
-    """
+    Explicitly weighted by require_tool_total - more accurate than simple average doc-level rate: each require_tool
+    turn is an independent Bernoulli test weighted with the SE tightened by a factor of √N."""
     total = sum(int(s.metrics.get("require_tool_total") or 0) for s in srs)
     fires = sum(int(s.metrics.get("nudge_fire_count") or 0) for s in srs)
     if total == 0:
@@ -221,7 +216,7 @@ def _weighted_rate(srs: list[SampleResult]) -> float | None:
 
 
 def _sum_metric(key: str) -> Callable[[list[SampleResult]], float]:
-    """把 per-sample metric key 求和——给 nudge_fire_count / require_tool_total 用."""
+    """Sum per-sample metric key - for nudge_fire_count / require_tool_total."""
     def _agg(srs: list[SampleResult]) -> float:
         return float(sum(float(s.metrics.get(key) or 0.0) for s in srs))
     _agg.__name__ = f"sum_{key}"
@@ -231,9 +226,8 @@ def _sum_metric(key: str) -> Callable[[list[SampleResult]], float]:
 def _by_scenario(srs: list[SampleResult]) -> dict[str, float | None]:
     """{doc.id: nudge_fire_rate of that doc}.
 
-    doc.id 即 scenario id（gold.jsonl 行序约定，与 agent_traj 同源）. 无 require_tool
-    turn 的 scenario 在这里值为 None——breakdown 表格里渲染 <n/a>.
-    """
+    doc.id is scenario id (gold.jsonl line order convention, same origin as agent_traj). No require_tool
+    The turn scenario is None here - rendering <n/a> in the breakdown table."""
     out: dict[str, float | None] = {}
     for s in srs:
         rate = s.metrics.get("nudge_fire_rate")
@@ -242,10 +236,9 @@ def _by_scenario(srs: list[SampleResult]) -> dict[str, float | None]:
 
 
 def _by_tool(srs: list[SampleResult]) -> dict[str, float | None]:
-    """{tool_name: 跨 doc 的加权平均 fire rate}.
+    """{tool_name: Weighted average fire rate across docs}.
 
-    same weighting strategy as _weighted_rate（按 turn 数加权，不按 doc 数）.
-    """
+    same weighting strategy as _weighted_rate (weighted by the number of turns, not by the number of docs)."""
     bucket: dict[str, dict[str, int]] = {}
     for s in srs:
         per_tool = s.artifacts.get("by_tool", {}) or {}
@@ -260,7 +253,7 @@ def _by_tool(srs: list[SampleResult]) -> dict[str, float | None]:
 
 
 def _by_failure_mode(srs: list[SampleResult]) -> dict[str, int]:
-    """{mode: 跨 doc 的累计计数}. 三桶都显式列出（含 wrong_args=0）."""
+    """{mode: cumulative count across doc}. All three buckets are listed explicitly (including wrong_args=0)."""
     counter = {m: 0 for m in FAILURE_MODES}
     for s in srs:
         per_mode = s.artifacts.get("by_failure_mode", {}) or {}

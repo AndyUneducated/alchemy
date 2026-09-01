@@ -1,24 +1,23 @@
 """Single training run wrapper around `mlx_lm.lora --train`.
 
-负责：
-  1. 把 `data/triples/train_*.jsonl` + `val_*.jsonl` 装到一个 mlx_lm 期望的
-     `<dir>/{train,valid}.jsonl` 布局（用 symlink，不复制）；
-  2. 调用 `mlx_lm.lora` 子进程，stdout/stderr 落盘 `train.log`；
-  3. 解析 log 抽 first/last train loss、last val loss、wall clock、divergence flag，
-     写 `train_metrics.json`；
-  4. 不自动 fuse / convert（Phase 4 的活）.
+Responsible for:
+  1. Install `data/triples/train_*.jsonl` + `val_*.jsonl` into a mlx_lm expected
+     `<dir>/{train,valid}.jsonl` layout (use symlink, do not copy);
+  2. Call the `mlx_lm.lora` subprocess, and stdout/stderr is written to `train.log`;
+  3. Parse the log and extract first/last train loss, last val loss, wall clock, divergence flag,
+     Write `train_metrics.json`;
+  4. No automatic fuse / convert (Phase 4 work).
 
-行业对位（详见 [`README.md`](README.md)）：
-  - `--mask-prompt` 默认开（assistant-only loss），与 [TRL Qwen2.5 训练 template](https://github.com/huggingface/trl/pull/5522) 同思想；
-  - 4-bit 底座 (mlx-community/Qwen3.5-9B-4bit) → 自动走 QLoRA；
-  - tools schema (DECISIONS §4) 由 mlx_lm.lora 内部 `apply_chat_template` 渲染.
+Industry alignment (See [`README.md`](README.md)):
+  - `--mask-prompt` is enabled by default (assistant-only loss), the same idea as [TRL Qwen2.5 training template](https://github.com/huggingface/trl/pull/5522);
+  - 4-bit base (mlx-community/Qwen3.5-9B-4bit) → automatically run QLoRA;
+  - tools schema (DECISIONS §4) rendered by `apply_chat_template` internal to mlx_lm.lora.
 
-用法：
+Usage:
     python train.py --adapter-path runs/smoke --iters 100
     python train.py --adapter-path runs/main --iters 600 \\
         --learning-rate 1e-4 --batch-size 4 --num-layers 16
-    python train.py --dry-run     # 只打印命令
-"""
+    python train.py --dry-run # Only print commands"""
 
 from __future__ import annotations
 
@@ -38,7 +37,8 @@ DEFAULT_DATA_DIR = HERE.parent / "data" / "triples"
 DEFAULT_CONFIG = HERE / "lora_config.yaml"
 DEFAULT_MODEL = "mlx-community/Qwen3.5-9B-4bit"
 
-# 与 sft_hello/sweep.py 保持同样 regex（mlx_lm.lora log 格式稳定）.
+# Keep the same regex as sft_hello/sweep.py (mlx_lm.lora log format is stable).
+# Keep the same regex as sft_hello/sweep.py (mlx_lm.lora log format is stable).
 _LOSS_RE = re.compile(r"Iter\s+(\d+):\s+Train loss\s+([\d.]+)")
 _VAL_RE = re.compile(r"Iter\s+(\d+):\s+Val loss\s+([\d.]+)")
 
@@ -51,10 +51,9 @@ def setup_data_link_dir(
 ) -> Path:
     """Build `<adapter_path>/.data/{train,valid}.jsonl` symlinking selected sources.
 
-    mlx_lm.lora 严格要求 `--data <dir>` 下有 `train.jsonl` 与（可选）`valid.jsonl`.
-    我们的 jsonl 命名 `train_7b_1k.jsonl` 便于跨实验区分；symlink 让 mlx_lm 看到
-    标准名而源文件不动.
-    """
+    mlx_lm.lora strictly requires `train.jsonl` and (choices) `valid.jsonl` under `--data <dir>`.
+    Our jsonl naming `train_7b_1k.jsonl` facilitates differentiation across experiments; symlink allows mlx_lm to see
+    The standard name is left unchanged and the source file is left unchanged."""
     src_train = (triples_dir / train_file).resolve()
     src_valid = (triples_dir / valid_file).resolve()
     if not src_train.exists():
@@ -131,9 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--data", type=Path, default=DEFAULT_DATA_DIR,
                    help=f"directory containing train/val jsonl (default: {DEFAULT_DATA_DIR})")
     p.add_argument("--train-file", default="train_qwen3.jsonl",
-                   help="train jsonl filename inside --data (default: train_qwen3.jsonl; v1 用 train_7b_1k.jsonl)")
+help="train jsonl filename inside --data (default: train_qwen3.jsonl; v1 uses train_7b_1k.jsonl)")
     p.add_argument("--valid-file", default="val_qwen3.jsonl",
-                   help="valid jsonl filename inside --data (default: val_qwen3.jsonl; v1 用 val_7b_1k.jsonl)")
+help="valid jsonl filename inside --data (default: val_qwen3.jsonl; v1 uses val_7b_1k.jsonl)")
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
                    help=f"lora YAML config (default: {DEFAULT_CONFIG})")
     p.add_argument("--adapter-path", type=Path, required=True,
@@ -142,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="total optimizer steps (766 sample / batch 4 ≈ 192 step/epoch; default 600 ≈ 3 epoch)")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--num-layers", type=int, default=16,
-                   help="number of top transformer blocks to attach LoRA on (Qwen3.5-9B 共 36 层；default 16)")
+help="number of top transformer blocks to attach LoRA on (Qwen3.5-9B 36 layers in total; default 16)")
     p.add_argument("--learning-rate", type=float, default=1e-4)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--no-mask-prompt", dest="mask_prompt", action="store_false",
@@ -158,11 +157,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="number of val batches per eval (default 25)")
     p.add_argument("--max-seq-length", type=int, default=None,
                    help="max sequence length for samples; longer get truncated. "
-                        "v1.5+ qwen3.5:9b on M4 Pro 48GB 强烈建议 1500 (sample mean ~1100 token), "
-                        "否则 KV cache 撑爆 mlx metal buffer")
+"v1.5+ qwen3.5:9b on M4 Pro 48GB strongly recommended 1500 (sample mean ~1100 token), "
+"Otherwise the KV cache will burst the mlx metal buffer")
     p.add_argument("--clear-cache-threshold", type=int, default=None,
-                   help="mlx allocator cache clear threshold (MB)；激进 =1 (每 step 清) "
-                        "可缓解 9B QLoRA val→train 切换间 OOM (mlx 默认 ~1000 MB 太大)")
+help="mlx allocator cache clear threshold (MB); aggressive =1 (clear every step) "
+"Can alleviate 9B QLoRA val→train OOM between switching (mlx default ~1000 MB is too large)")
     p.add_argument("--dry-run", action="store_true",
                    help="print the command and exit")
     return p

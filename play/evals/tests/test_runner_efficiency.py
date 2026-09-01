@@ -1,12 +1,11 @@
-"""Phase 6 runner.efficiency 端到端锁：
+"""Phase 6 runner.efficiency end-to-end lock:
 
-  - run 模式：aggregated 包含 efficiency 子组（schema 永远 4 子组）
-  - score 模式：aggregated 不含 efficiency（cross-cutting 仅 run 注入）
-  - LM 报实数（fake LM）→ aggregated 数学正确 + per-sample SampleResult.metrics 拷贝
-  - LM 不报（MockLM）→ 子组键值全 0 但 schema 在
+  - run mode: aggregated contains efficiency subgroups (schema always 4 subgroups)
+  - score mode: aggregated without efficiency (cross-cutting only run injection)
+  - LM reports real numbers (fake LM) → aggregated mathematically correct + per-sample SampleResult.metrics copy
+  - LM is not reported (MockLM) → the subgroup key values are all 0 but the schema is
 
-不依赖 ollama live；用 fake LM 注入受控 latency/usage 字段.
-"""
+Does not rely on ollama live; use fake LM to inject controlled latency/usage fields."""
 
 from __future__ import annotations
 
@@ -22,10 +21,10 @@ from evals.tasks.sentiment_clf import SentimentClf
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "predictions"
 
 
-# ---------- fake LM：报受控 latency/usage 但答案随便 ----------
+# ---------- fake LM: Report controlled latency/usage but the answer is arbitrary ----------
 
 class _CountingFakeLM(LM):
-    """每条 request 回固定文本 + 自增 latency_ms + 固定 tokens_in/out → aggregated 可手算."""
+    """Each request returns fixed text + auto-increment latency_ms + fixed tokens_in/out → aggregated and can be calculated by hand."""
 
     def __init__(self, label: str = "fake:counter") -> None:
         self.name = label
@@ -44,10 +43,10 @@ class _CountingFakeLM(LM):
         return out
 
 
-# ---------- run 模式 ----------
+# ---------- run mode ----------
 
 def test_run_aggregated_contains_efficiency_subgroup():
-    """run 路径无论 LM 是否报，aggregated 永远有 efficiency 子组（schema 稳定）."""
+    """Regardless of whether LM is reported or not in the run path, aggregated always has an efficiency subgroup (schema is stable)."""
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
@@ -57,25 +56,25 @@ def test_run_aggregated_contains_efficiency_subgroup():
 
 
 def test_run_with_mock_lm_reports_zero_efficiency():
-    """MockLM 不报 latency / usage → 4 子组键值全 0（含 audit §1.1 cost.mean / §1.2 latency.max）."""
+    """MockLM does not report latency / usage → 4 subgroup key values ​​are all 0 (including audit §1.1 cost.mean / §1.2 latency.max)."""
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
     eff = r.aggregated["efficiency"]
     assert eff["latency_ms"]["mean"] == 0.0
     assert eff["latency_ms"]["max"] == 0.0  # audit §1.2
-    assert eff["tokens_in"]["total"] == 0    # audit §1.5: int 语义
+    assert eff["tokens_in"]["total"] == 0    # audit §1.5: int semantics
     assert eff["cost_usd"]["total"] == 0.0
     assert eff["cost_usd"]["mean"] == 0.0    # audit §1.1
 
 
 def test_run_with_real_signals_aggregates_correctly():
-    """fake LM 报 latency=100,110,...; tokens_in=10×N, tokens_out=5×N → 手算 oracle 锁住."""
+    """Fake LM reports latency=100,110,...; tokens_in=10×N, tokens_out=5×N → hand calculation oracle lock."""
     import warnings
     task = SentimentClf()
     docs = list(task.docs())
     n = len(docs)
-    # fake:counter 不在 PRICE_TABLE → 触发 audit §1.4 unknown-pricing-model warning（预期）
+    # fake:counter not in PRICE_TABLE → triggers audit §1.4 unknown-pricing-model warning (expected)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning, message=".*fake:counter.*")
         r = evaluate_run(task, _CountingFakeLM())
@@ -83,17 +82,17 @@ def test_run_with_real_signals_aggregates_correctly():
     eff = r.aggregated["efficiency"]
     expected_mean_latency = sum(100 + i * 10 for i in range(n)) / n
     assert eff["latency_ms"]["mean"] == expected_mean_latency
-    assert eff["latency_ms"]["max"] == float(100 + (n - 1) * 10)  # 最后一条最大
+    assert eff["latency_ms"]["max"] == float(100 + (n - 1) * 10)  # The last one is the biggest
     assert eff["tokens_in"]["total"] == 10 * n
     assert eff["tokens_in"]["mean"] == 10.0
     assert eff["tokens_out"]["total"] == 5 * n
-    # fake:counter 不在 PRICE_TABLE → cost 0.0（warning 已触发，见 test_metrics_efficiency）
+    # fake:counter not in PRICE_TABLE → cost 0.0 (warning triggered, see test_metrics_efficiency)
     assert eff["cost_usd"]["total"] == 0.0
     assert eff["cost_usd"]["mean"] == 0.0
 
 
 def test_run_per_sample_metrics_carry_efficiency_fields():
-    """per-sample 实测值进 SampleResult.metrics["efficiency"] 子组（phase 7 §7.D nested 派）."""
+    """The per-sample measured values ​​go into the SampleResult.metrics["efficiency"] subgroup (phase 7 §7.D nested)."""
     import warnings
     task = SentimentClf()
     with warnings.catch_warnings():
@@ -109,9 +108,8 @@ def test_run_per_sample_metrics_carry_efficiency_fields():
 
 
 def test_run_mock_lm_per_sample_metrics_carry_zero_padded_efficiency():
-    """audit §1.3 选项 A：mock 路径 per-sample.metrics["efficiency"] 子组也写 4 占位（schema-on-write 两层一致）.
-    phase 7 §7.D nested 派：访问路径 s.metrics["efficiency"]["latency_ms"]，避免 KeyError.
-    """
+    """audit §1.3 Option A: mock path per-sample.metrics["efficiency"] subgroup also writes 4 placeholders (schema-on-write is consistent at both levels).
+    phase 7 §7.D nested faction: access the path s.metrics["efficiency"]["latency_ms"] to avoid KeyError."""
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
@@ -124,19 +122,19 @@ def test_run_mock_lm_per_sample_metrics_carry_zero_padded_efficiency():
     assert eff["cost_usd"] == 0.0
 
 
-# ---------- score 模式 ----------
+# ---------- score mode ----------
 
 def test_score_aggregated_lacks_efficiency_subgroup():
-    """score 路径无 LM 调用 → 不注入 efficiency 子组（显式让步而非全 0 占位）."""
+    """Score path has no LM calls → does not inject the efficiency subgroup (explicit yield instead of all 0 placeholders)."""
     task = SentimentClf()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     assert "efficiency" not in r.aggregated
 
 
-# ---------- result.json 序列化 ----------
+# ---------- result.json serialization ----------
 
 def test_run_result_json_round_trip_preserves_efficiency(tmp_path: Path):
-    """落 result.json → re-load → efficiency 嵌套结构完整保留（asdict 浅拷贝足够）."""
+    """Drop result.json → re-load → efficiency to keep the nested structure intact (asdict shallow copy is enough)."""
     from dataclasses import asdict
 
     task = SentimentClf()

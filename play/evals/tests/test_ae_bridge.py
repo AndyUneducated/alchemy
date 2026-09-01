@@ -1,28 +1,27 @@
-"""evals/_ae_bridge.py re-export sentinel：跨子项目 import 边界的第一道哨兵.
+"""evals/_ae_bridge.py re-export sentinel: the first sentinel across subproject import boundaries.
 
-DECISIONS §13 / §16 立的 bridge 模块：把 `agent_engine` 的 typed view（Result /
-Scenario / 6 个 transcript entry / TokenUsage 等）集中 re-export，避免各 metric / task
-模块各自 `sys.path.insert(...)` + try/finally 清理.
+DECISIONS §13 / §16 The established bridge module: put the typed view of `agent_engine` (Result/
+Scenario / 6 transcript entries / TokenUsage, etc.) centralized re-export to avoid each metric / task
+Modules individually `sys.path.insert(...)` + try/finally cleanup.
 
-如果 `play/agent_engine` 改了 import 名 / 删了 dataclass / 改了字段：
-  - 直接报错的位置应该是**这个 bridge**（一处显形）；
-  - 而不是等下游 `metrics/nudge.py` / `tasks/agent_traj.py` / `tasks/nudge_fire_rate.py`
-    三处 e2e test 同时炸（错误信号弥散到无关模块）.
+If `play/agent_engine` changes the import name / deletes the dataclass / changes the fields:
+  - The location where the error is reported directly should be **this bridge** (a visible place);
+  - Instead of waiting for downstream `metrics/nudge.py` / `tasks/agent_traj.py` / `tasks/nudge_fire_rate.py`
+    Three e2e tests exploded at the same time (error signals spread to irrelevant modules).
 
-本文件不引 agent_engine 之外的任何 evals 类型，纯 import-time sentinel.
-agent_engine 不在则整体 test fail-loud（无 skip）—— 与 conftest::agent_engine_required
-的运行时 probe 不同：bridge 是 import-level 契约，缺失就是真破.
-"""
+This file does not import any evals type other than agent_engine, it is pure import-time sentinel.
+If agent_engine is not present, the entire test fails-loud (no skip) - with conftest::agent_engine_required
+The runtime probe is different: bridge is an import-level contract, and its absence is truly broken."""
 
 from __future__ import annotations
 
 import dataclasses
 
 
-# ---------- ① __all__ 白名单完整 -------------------------------------------
+# ---------- ① __all__ Complete whitelist -----------------------------------------------
 
 def test_bridge_all_lists_expected_symbols():
-    """`_ae_bridge.__all__` 显式列出所有 re-export 符号——增减时 sentinel 显形."""
+    """`_ae_bridge.__all__` explicitly lists all re-export symbols - the sentinel is visible when adding or subtracting."""
     from evals import _ae_bridge as br
 
     expected = {
@@ -51,7 +50,7 @@ def test_bridge_all_lists_expected_symbols():
 
 
 def test_bridge_imports_each_symbol():
-    """每个符号必须可 import（防 __all__ 列了但实际没 from agent_engine import）."""
+    """Each symbol must be importable (in case __all__ is listed but not actually imported from agent_engine)."""
     from evals._ae_bridge import (  # noqa: F401
         ArtifactEventEntry,
         ExpandedTurn,
@@ -70,12 +69,11 @@ def test_bridge_imports_each_symbol():
     )
 
 
-# ---------- ② 关键 dataclass 字段 schema ----------------------------------
+# ---------- ② Key dataclass field schema ----------------------------------
 
 def test_result_dataclass_fields():
-    """`Result` 5 字段：envelope schema 同源（test_agent_traj_envelope 已锁；这里再锁
-    防止 agent_engine 改字段名/顺序时 nudge / agent_traj task 同时炸前先在 bridge 层显形）.
-    """
+    """`Result` 5 fields: envelope schema has the same origin (test_agent_traj_envelope is locked; lock again here
+    Prevent agent_engine from changing field names/orders when nudge / agent_traj tasks are exposed at the bridge layer before exploding at the same time)."""
     from evals._ae_bridge import Result
 
     assert dataclasses.is_dataclass(Result)
@@ -86,8 +84,8 @@ def test_result_dataclass_fields():
 
 
 def test_speaker_entry_has_type_tag():
-    """`SpeakerEntry.type` 字段存在——§16 强制 transcript entry 显式 `type` 标签
-    （metrics/trajectory._score_speakers 用 `entry.get('type') == 'speaker'` 派发）."""
+    """`SpeakerEntry.type` field exists - §16 forces transcript entry to have an explicit `type` tag
+    (metrics/trajectory._score_speakers dispatched with `entry.get('type') == 'speaker'`)."""
     from evals._ae_bridge import SpeakerEntry
 
     assert dataclasses.is_dataclass(SpeakerEntry)
@@ -98,9 +96,9 @@ def test_speaker_entry_has_type_tag():
 
 
 def test_artifact_event_entry_has_tool_caller_arguments():
-    """`ArtifactEventEntry` 必含 (type, tool, caller, arguments)——
-    `metrics/nudge.classify_failure_mode` + `tasks/agent_traj._pin_trajectory` 都 isinstance
-    + 取这 3 字段判 wrong_tool / 抽 decision."""
+    """`ArtifactEventEntry` must contain (type, tool, caller, arguments)——
+    `metrics/nudge.classify_failure_mode` + `tasks/agent_traj._pin_trajectory` both isinstance
+    + Take these 3 fields to judge wrong_tool / draw decision."""
     from evals._ae_bridge import ArtifactEventEntry
 
     assert dataclasses.is_dataclass(ArtifactEventEntry)
@@ -110,8 +108,8 @@ def test_artifact_event_entry_has_tool_caller_arguments():
 
 
 def test_tool_call_entry_has_caller_tool_arguments():
-    """`ToolCallEntry`（tracer 写的非 artifact 工具调用）必含 (type, caller, tool, arguments)——
-    `metrics/nudge.classify_failure_mode` 用其与 ArtifactEventEntry 并列做派发."""
+    """`ToolCallEntry` (non-artifact tool call written by tracer) must contain (type, caller, tool, arguments)——
+    `metrics/nudge.classify_failure_mode` Use it in parallel with ArtifactEventEntry for dispatch."""
     from evals._ae_bridge import ToolCallEntry
 
     assert dataclasses.is_dataclass(ToolCallEntry)
@@ -121,8 +119,8 @@ def test_tool_call_entry_has_caller_tool_arguments():
 
 
 def test_token_usage_has_input_output_tokens():
-    """`TokenUsage`（envelope.usage 的元素类型）必含 input_tokens / output_tokens——
-    metrics/efficiency.py 后续从 envelope 取 usage 计 cost 的契约入口."""
+    """`TokenUsage` (element type of envelope.usage) must contain input_tokens / output_tokens——
+    metrics/efficiency.py subsequently obtains the contract entry of usage and cost from envelope."""
     from evals._ae_bridge import TokenUsage
 
     assert dataclasses.is_dataclass(TokenUsage)
@@ -132,8 +130,8 @@ def test_token_usage_has_input_output_tokens():
 
 
 def test_expanded_turn_has_turn_idx_agent_tool_fields():
-    """`ExpandedTurn`（Scenario.expanded_turns() 的元素）必含 turn_idx / agent /
-    step_id / require_tool——derive_expected_turns 直接读这 4 字段产 expected_require_tool_turns."""
+    """`ExpandedTurn` (element of Scenario.expanded_turns()) must contain turn_idx / agent /
+    step_id / require_tool——derive_expected_turns directly reads these 4 fields to produce expected_require_tool_turns."""
     from evals._ae_bridge import ExpandedTurn
 
     assert dataclasses.is_dataclass(ExpandedTurn)
@@ -143,8 +141,8 @@ def test_expanded_turn_has_turn_idx_agent_tool_fields():
 
 
 def test_tool_call_has_tool_caller_arguments():
-    """`ToolCall`（Result.tool_calls() 的元素，统一规约 ArtifactEvent + ToolCallEntry）
-    必含 tool / caller / arguments——`tasks/agent_traj._pin_trajectory` 直接消费."""
+    """`ToolCall` (element of Result.tool_calls(), unified specification ArtifactEvent + ToolCallEntry)
+    Required tool / caller / arguments——`tasks/agent_traj._pin_trajectory` direct consumption."""
     from evals._ae_bridge import ToolCall
 
     assert dataclasses.is_dataclass(ToolCall)
@@ -153,11 +151,11 @@ def test_tool_call_has_tool_caller_arguments():
         assert required in fields, f"ToolCall 缺 {required!r}：{fields}"
 
 
-# ---------- ③ Scenario / TurnView 类入口 ----------------------------------
+# ---------- ③ Scenario / TurnView class entrance ----------------------------------
 
 def test_scenario_is_class_with_from_yaml():
-    """`Scenario` 是 class 且暴露 `from_yaml` 类方法——`test_new_scenarios_smoke`
-    + `metrics/nudge.derive_expected_turns` 都 call 这个入口."""
+    """`Scenario` is a class and exposes the `from_yaml` class method - `test_new_scenarios_smoke`
+    + `metrics/nudge.derive_expected_turns` all call this entry."""
     from evals._ae_bridge import Scenario
 
     assert isinstance(Scenario, type), f"Scenario 应是 class，got {type(Scenario)}"
@@ -166,19 +164,19 @@ def test_scenario_is_class_with_from_yaml():
 
 
 def test_turn_view_is_class_with_attempts():
-    """`TurnView`（Result.turns() 的元素）必有 .attempts() / .start_offset 入口——
-    `metrics/nudge.compute_nudge_fire_rate` 走这两个 typed view."""
+    """`TurnView` (element of Result.turns()) must have .attempts() / .start_offset entry——
+    `metrics/nudge.compute_nudge_fire_rate` takes these two typed views."""
     from evals._ae_bridge import TurnView
 
     assert isinstance(TurnView, type), f"TurnView 应是 class，got {type(TurnView)}"
     assert hasattr(TurnView, "attempts"), "TurnView 缺 attempts 方法"
 
 
-# ---------- ④ TranscriptEntry typed union 形状 ----------------------------
+# ---------- ④ TranscriptEntry typed union shape ----------------------------
 
 def test_transcript_entry_is_typed_union():
-    """`TranscriptEntry` 是 6 个 entry class 的 typing.Union——下游 isinstance dispatch
-    依赖此约束（`metrics/trajectory.predicate_speakers_covered` 等）."""
+    """`TranscriptEntry` is a typing.Union of 6 entry classes - downstream isinstance dispatch
+    Depend on this constraint (`metrics/trajectory.predicate_speakers_covered` etc.)."""
     import typing
 
     from evals._ae_bridge import (
@@ -191,7 +189,7 @@ def test_transcript_entry_is_typed_union():
         TurnEntry,
     )
 
-    # typing.Union 的成员通过 __args__ 暴露
+    # Members of typing.Union are exposed through __args__
     assert hasattr(TranscriptEntry, "__args__"), (
         f"TranscriptEntry 应是 typing.Union，got {TranscriptEntry!r}"
     )
@@ -207,13 +205,13 @@ def test_transcript_entry_is_typed_union():
     )
 
 
-# ---------- ⑤ sys.path 注入副作用 -----------------------------------------
+# ---------- ⑤ sys.path injection side effects ------------------------------------------
 
 def test_bridge_injects_play_dir_into_sys_path():
-    """bridge 必须把 `play/` 加进 sys.path（其它模块 `from agent_engine import` 才能可达）."""
+    """bridge must add `play/` to sys.path (other modules can only be reached through `from agent_engine import`)."""
     import sys
 
-    import evals._ae_bridge  # noqa: F401  — 触发 sys.path.insert
+    import evals._ae_bridge  # noqa: F401 — trigger sys.path.insert
 
     assert any(p.endswith("/play") for p in sys.path), (
         f"bridge 未注入 play/ 到 sys.path；当前 sys.path 后缀片段："
@@ -222,8 +220,8 @@ def test_bridge_injects_play_dir_into_sys_path():
 
 
 def test_resolve_who_names_callable():
-    """`_resolve_who_names`（agent_engine.scenario 内私有但 bridge 显式暴露给 evals 用）
-    必须可调."""
+    """`_resolve_who_names` (private in agent_engine.scenario but explicitly exposed by bridge to evals)
+    Must be adjustable."""
     from evals._ae_bridge import _resolve_who_names
 
     assert callable(_resolve_who_names)

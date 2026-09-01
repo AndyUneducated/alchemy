@@ -1,15 +1,14 @@
-"""契约层：跨层唯一数据形状.
+"""Contract layer: unique data shape across layers.
 
-5 个顶层契约 dataclass 组成一条数据流：
+Five top-level contract dataclasses form a data flow:
     Doc -> Request -> Response -> SampleResult -> EvalResult
 
-phase 6 起增加 1 个嵌套字段类型 `Usage`（住 `Response.usage`，与 OpenAI / Anthropic /
-inspect_ai SDK 同形），不属于顶层契约——它是 Response 的内嵌资源消耗类型。
+Starting from phase 6, a nested field type `Usage` (live in `Response.usage`, and OpenAI / Anthropic /
+inspect_ai SDK isomorphic), does not belong to the top-level contract - it is an embedded resource consumption type of Response.
 
-所有其他层（Task / LM / Metric / Runner / Storage）都只读/生产这些类型，互相不 import。
-选 dataclass 而非 Pydantic：Phase 1 不引依赖；frozen 提供不可变 + hash + asdict。
-换 Pydantic v2 时外部 API 不变，只需加 validator。
-"""
+All other layers (Task/LM/Metric/Runner/Storage) only read/produce these types and do not import each other.
+Choose dataclass instead of Pydantic: Phase 1 does not introduce dependencies; frozen provides immutable + hash + asdict.
+When switching to Pydantic v2, the external API remains unchanged and only the validator is added."""
 
 from __future__ import annotations
 
@@ -22,15 +21,14 @@ EvalMode = Literal["score", "run"]
 
 @dataclass(frozen=True)
 class Doc:
-    """数据集一行，Task 产出。
+    """One row of data set, Task output.
 
-    `id` 用于 de-dup 和 per-sample 追踪 / join predictions。
-    `target` 由 str 放宽为 `str | None`（Phase 4 引入）：兼顾"老 task 仍传 str"
-    与"rag_retrieval / 任何无字符串 gold 的 task 显式传 None"两侧——避免用 ""
-    占位污染语义。`metadata` 是 task / pipeline 互通的 free-form bucket：RAG 在
-    `process_docs` hook 里把检索产物（retrieved_ids / contexts）注入这里，
-    `Response` 保持只装 LM-side 输出（path B+C 决策，详见 DECISIONS §4）。
-    """
+    `id` is used for de-dup and per-sample tracking/join predictions.
+    `target` is relaxed from str to `str | None` (introduced in Phase 4): taking into account "old tasks still pass str"
+    With "rag_retrieval / any task without string gold explicitly pass None" on both sides - avoid using ""
+    Placeholders pollute semantics. `metadata` is a free-form bucket for task/pipeline interoperability: RAG is in
+    Inject the retrieved products (retrieved_ids / contexts) here in the `process_docs` hook.
+    `Response` remains loaded with only LM-side output (path B+C decision, see DECISIONS §4 for details)."""
 
     id: str
     input: str
@@ -41,11 +39,10 @@ class Doc:
 
 @dataclass(frozen=True)
 class Request:
-    """LM 的调用请求.
+    """LM call request.
 
-    刻意只设三种 request_type，和 lm-evaluation-harness 原版一致。
-    不引入 chat messages，让 LM 适配层自己决定怎么封装，保证 prompt 字面可复现。
-    """
+    There are only three request_types deliberately set, which are consistent with the original version of lm-evaluation-harness.
+    Do not introduce chat messages, let the LM adaptation layer decide how to encapsulate it, and ensure that the prompt literal is reproducible."""
 
     doc_id: str
     prompt: str
@@ -57,20 +54,19 @@ class Request:
 
 @dataclass(frozen=True)
 class Usage:
-    """LM 调用的资源消耗（phase 6 引入）.
+    """Resource consumption of LM calls (introduced in phase 6).
 
-    与 OpenAI `CompletionUsage` / Anthropic `Usage` / inspect_ai `ModelUsage` 同形：
-    nested typed object，避免顶层 `Response` 字段在多模型生态扩展（reasoning_tokens /
-    cached_tokens / audio_tokens）时膨胀。
+    Identical to OpenAI `CompletionUsage` / Anthropic `Usage` / inspect_ai `ModelUsage`:
+    nested typed object to avoid the top-level `Response` field in multi-model ecological expansion (reasoning_tokens/
+    cached_tokens/audio_tokens).
 
-    扩展点（视模型生态按需加，加字段不破老 Response）：
-      - reasoning_tokens   o1 / DeepSeek-R1 风格
-      - cached_tokens      Anthropic prompt caching / OpenAI cached input
-      - audio_tokens       多模态
+    Extension points (view model ecology can be added on demand, adding fields will not break the old Response):
+      - reasoning_tokens o1 / DeepSeek-R1 style
+      - cached_tokens Anthropic prompt caching / OpenAI cached input
+      - audio_tokens multimodal
 
-    设计上 score 路径 / MockLM 永远不填（保持 None）；OllamaLM 等真适配器在
-    `generate_until` 内解析 provider response 后填入。
-    """
+    By design, the score path / MockLM is never filled in (keep None); OllamaLM and other true adapters are
+    `generate_until` parses the provider response and fills it in."""
 
     tokens_in: int | None = None
     tokens_out: int | None = None
@@ -78,15 +74,14 @@ class Usage:
 
 @dataclass(frozen=True)
 class Response:
-    """LM 的返回.
+    """Return of LM.
 
-    `text` 和 `loglikelihoods` 互斥，由 request_type 决定哪个有值。
-    `latency_ms` 顶层时间维度（与 HELM `request_time` / inspect_ai `output.time` 同位）；
-    phase 0 起预留，phase 6 起 OllamaLM 真填，runner 不做 batch 时间除以 N 的 fallback——
-    显式 None 优于不准估算。
-    `usage` 嵌套资源消耗（tokens_in/out 等），phase 6 引入；MockLM / score 路径永远 None。
-    score 模式下 text 字段从 predictions JSONL 读进来。
-    """
+    `text` and `loglikelihoods` are mutually exclusive, and request_type determines which one has a value.
+    `latency_ms` top-level time dimension (same position as HELM `request_time` / inspect_ai `output.time`);
+    Reserved from phase 0, OllamaLM is filled in from phase 6, and the runner does not do the fallback of dividing the batch time by N——
+    Explicit None is preferable to imprecise estimation.
+    `usage` nested resource consumption (tokens_in/out, etc.), introduced in phase 6; MockLM / score path is always None.
+    In score mode, the text field is read from predictions JSONL."""
 
     doc_id: str
     text: str | None = None
@@ -97,34 +92,33 @@ class Response:
 
 @dataclass(frozen=True)
 class SampleResult:
-    """单样本评分结果，粒度 = 1 条样本.
+    """Single sample scoring results, granularity = 1 sample.
 
-    `metrics` 形态（phase 7 起 nested 派统一，supersede phase 6 audit §1.5）：
-      - **task-specific scalar**：永远 flat 顶层（`acc` / `f1_macro` / `cohens_kappa`）—— task 内部命名空间
-      - **cross-cutting 横切子组**：嵌套 dict（`metrics["efficiency"]` / `metrics["safety"]`）—— runner 注入的横切 namespace；与 `aggregated["<dim>"]` 嵌套子组 / `Response.usage` nested object 三层完全一致（OpenAI / Anthropic / inspect_ai 派）
-      - **`_` 前缀私有键**：仍 task 顶层（如 `_safety_category`），不上聚合面板，aggregation 消费用
+    `metrics` form (from phase 7, nested faction unified, supersede phase 6 audit §1.5):
+      - **task-specific scalar**: always flat top level (`acc` / `f1_macro` / `cohens_kappa`) - task internal namespace
+      - **cross-cutting cross-cutting subgroup**: nested dict (`metrics["efficiency"]` / `metrics["safety"]`) - cross-cutting namespace injected by runner; exactly the same as `aggregated["<dim>"]` nested subgroup / `Response.usage` nested object three layers (OpenAI / Anthropic / inspect_ai faction)
+      - **`_` prefix private key**: still at the top level of task (such as `_safety_category`), not on the aggregation panel, used for aggregation consumption
 
-    F1/kappa 这种需要全集才能算的留 aggregation 拉原始 pred/target 自己算。
+    For F1/kappa, which requires the complete set to be calculated, leave aggregation to pull the original pred/target and calculate it yourself.
 
-    `artifacts`（Phase 4 引入）装 per-sample **非标量**产物：
-      - retrieval task 的 `pred_ids` / `gold_ids`（aggregation 用 ranx 拉）
-      - 未来 agent task 的 trajectory steps / tool_calls
-      - 任何 diagnostic dump 而非 metric 数值
+    `artifacts` (introduced in Phase 4) holds per-sample **non-scalar** artifacts:
+      - `pred_ids` / `gold_ids` of retrieval task (aggregation is pulled with ranx)
+      - Trajectory steps / tool_calls for future agent tasks
+      - any diagnostic dump other than metric values
 
-    与 metrics 的 `dict[str, float | None | dict[str, float | None]]` 形成
-    MLflow / W&B 风格的 scalar/non-scalar 对偶——防止把 `list[str]` 偷偷塞进
-    `metrics` 里破坏类型契约。
+    Formed with `dict[str, float | None | dict[str, float | None]]` of metrics
+    MLflow / W&B style scalar/non-scalar duality - prevent sneaking in `list[str]`
+    Breaking type contract in `metrics`.
 
-    防垃圾桶纪律：
-      - 装"per-sample 非标量产物"，aggregation 输入 + diagnostic dump 用途
-      - 不许装：与 metric 计算无关的状态（log/上报放 metric 闭包内；task 状态走 __init__）
+    Anti-trash can discipline:
+      - Install "per-sample non-scalar product", aggregation input + diagnostic dump purpose
+      - Not allowed to install: status irrelevant to metric calculation (log/reports are placed in the metric closure; task status goes to __init__)
 
-    类型放宽演化（DECISIONS §7.D 起 nested；§X wave 4 加 None 占位）：
-      phase 1: dict[str, float]                                     —— 严守标量
-      phase 7: dict[str, float | dict[str, float]]                  —— 横切子组嵌套
-      wave 4: dict[str, float | None | dict[str, float | None]]     —— None 表"未测得"
-              (judge parse 失败 / safety 切片空 / 等场景，与 phase 7 wave 2 P2 同形)
-    """
+    Type relaxation evolution (DECISIONS §7.D onwards nested; §X wave 4 plus None placeholder):
+      phase 1: dict[str, float] - strictly stick to scalars
+      phase 7: dict[str, float | dict[str, float]] - crosscut subgroup nesting
+      wave 4: dict[str, float | None | dict[str, float | None]] - None means "not measured"
+              (judge parse fails / safety slices empty / etc., the same shape as phase 7 wave 2 P2)"""
 
     doc_id: str
     prediction: str
@@ -135,23 +129,22 @@ class SampleResult:
 
 @dataclass(frozen=True)
 class EvalResult:
-    """一次 run 的最终产物，粒度 = 整个 run.
+    """The final product of a run, granularity = entire run.
 
-    外层包内层：`per_sample: list[SampleResult]` 提供 drill-down 入口。
-    `aggregated` 装必须看全集才能算的指标（f1_macro / kappa / NDCG...）。
-    `mode` 区分 score / run，让 storage 能按模式过滤。
-    `num_fewshot` 仅 run 路径有意义（score 永远 0，`= 0` 默认让 score 路径构造省字段）。
+    Outer package inner layer: `per_sample: list[SampleResult]` provides drill-down entry.
+    `aggregated` installs indicators that must be viewed in full to be calculated (f1_macro / kappa / NDCG...).
+    `mode` distinguishes score / run, allowing storage to be filtered by mode.
+    `num_fewshot` is only meaningful in the run path (score is always 0, `= 0` defaults to the score path construction to save fields).
 
-    aggregated 类型 phase 6 起放宽为 `dict[str, Any]`（实际形态 `dict[str, float | dict]`）：
-      - 顶层平铺任务自身指标（HELM accuracy 维度：accuracy / f1_macro / em / rouge_l / ...）
-      - 嵌套子组装横切维度（HELM 7 维度的另外 6 维），按 cross-cutting ontology 二分挂载（DECISIONS §7.A）：
-          aggregated["efficiency"]   phase 6   call class    仅 run 挂
-          aggregated["safety"]       phase 7   content class score / run 双挂
-          aggregated["calibration"]  phase 9   call class    （计划）
-          aggregated["robustness"]   phase 10  content class （计划）
-      - 同名指标跨 phase 位置一致（如 cohens_kappa 在 phase 1 / 8 都顶层），保证
-        cross-run JSON_EXTRACT 路径不漂移；显式不按"方法学族"内部归类 task-specific 指标。
-    """
+    The aggregated type is relaxed to `dict[str, Any]` starting from phase 6 (actual form `dict[str, float | dict]`):
+      - Top-level tiling task's own indicators (HELM accuracy dimension: accuracy / f1_macro / em / rouge_l / ...)
+      - Nested subassembly cross-cutting dimensions (an additional 6 dimensions of HELM 7 dimensions), mounted bipartite by cross-cutting ontology (DECISIONS §7.A):
+          aggregated["efficiency"] phase 6 call class only run hangs
+          aggregated["safety"] phase 7 content class score / run double hanging
+          aggregated["calibration"] phase 9 call class (plan)
+          aggregated["robustness"] phase 10 content class (plan)
+      - Indicators with the same name have consistent positions across phases (for example, cohens_kappa is at the top level of phases 1 / 8), ensuring
+        The cross-run JSON_EXTRACT path does not drift; explicit task-specific metrics are not internally categorized by "method families"."""
 
     task: str
     model: str

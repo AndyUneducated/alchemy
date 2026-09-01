@@ -1,11 +1,10 @@
-"""Phase 8 iaa_ordinal task 的 score 路径矩阵锁（4 份 predictions）.
+"""Phase 8 iaa_ordinal task's score path matrix lock (4 predictions).
 
-核心叙事 — ordinal-aware metric 救场 nominal κ 失明：
-  - off_by_one：accuracy=0 + cohens_kappa=-0.25 (nominal 全失明)；但
-    weighted_kappa_quadratic≈0.71 + pearson≈0.83 + lins_ccc≈0.71 (ordinal-aware 救场)
-  - garbage：pred = 6−gold (perfect inverse) → weighted_quad=-1, pearson=-1, ccc=-1
-    （ordinal-aware 直接抓出反向，cohens_kappa 仍是 0 paradox 复刻）
-"""
+core narrative — ordinal-aware metric rescue nominal κ blindness:
+  - off_by_one: accuracy=0 + cohens_kappa=-0.25 (nominal total blindness); but
+    weighted_kappa_quadratic≈0.71 + pearson≈0.83 + lins_ccc≈0.71 (ordinal-aware rescue)
+  - garbage: pred = 6−gold (perfect inverse) → weighted_quad=-1, pearson=-1, ccc=-1
+    (ordinal-aware directly captures the reverse, and Cohens_kappa is still 0 paradox replica)"""
 
 from __future__ import annotations
 
@@ -23,7 +22,7 @@ def _score(pred_name: str):
     return evaluate_score(IaaOrdinal(), PRED_DIR / f"{pred_name}.jsonl")
 
 
-# ---------- perfect: 上界 sanity ----------
+# ---------- perfect: upper realm sanity ----------
 
 def test_perfect_all_metrics_one():
     r = _score("perfect")
@@ -37,17 +36,17 @@ def test_perfect_all_metrics_one():
         assert r.aggregated[k] == pytest.approx(1.0), f"{k}={r.aggregated[k]} != 1.0"
 
 
-# ---------- off_by_one: 核心叙事（nominal 失明 / ordinal 救场）----------
+# ---------- off_by_one: core narrative (nominal blindness / ordinal rescue) ----------
 
 def test_off_by_one_nominal_failure():
-    """exact accuracy = 0 + nominal cohens_kappa = -0.25（exact 与 nominal κ 全部失明）."""
+    """exact accuracy = 0 + nominal cohens_kappa = -0.25 (exact and nominal κ are all blind)."""
     r = _score("off_by_one")
     assert r.aggregated["accuracy"] == 0.0
     assert r.aggregated["cohens_kappa"] == pytest.approx(-0.25, abs=1e-9)
 
 
 def test_off_by_one_ordinal_aware_rescue():
-    """ordinal-aware metric 救场：weighted_quad≈0.71 / pearson≈0.83 / spearman≈0.82 /
+    """ordinal-aware metric rescue: weighted_quad≈0.71 / pearson≈0.83 / spearman≈0.82 /
     kendall≈0.74 / ccc≈0.71."""
     r = _score("off_by_one")
     assert r.aggregated["weighted_kappa_quadratic"] == pytest.approx(0.7058823529411764, abs=1e-9)
@@ -59,8 +58,8 @@ def test_off_by_one_ordinal_aware_rescue():
 
 
 def test_off_by_one_multi_rater_ordinal_high():
-    """raters 与 prediction 同步偏 1 → 多 rater ordinal/interval/ICC 仍高
-    (raters 之间一致，仅与 gold 偏 1)."""
+    """Raters and prediction synchronization bias 1 → multiple rater ordinal/interval/ICC is still high
+    (The raters are consistent among themselves, only biased by 1 with gold)."""
     r = _score("off_by_one")
     assert r.aggregated["fleiss_kappa"] > 0.3
     assert r.aggregated["krippendorff_alpha_ordinal"] > 0.8
@@ -68,10 +67,10 @@ def test_off_by_one_multi_rater_ordinal_high():
     assert r.aggregated["icc_1_1"] > 0.8
 
 
-# ---------- random: 下界 sanity ----------
+# ---------- random: lower bound sanity ----------
 
 def test_random_near_zero_correlation():
-    """random：accuracy ≈ 1/5 + 全 kappa/correlation/ccc 都接近 0 (无信号 baseline)."""
+    """random: accuracy ≈ 1/5 + all kappa/correlation/ccc are close to 0 (no signal baseline)."""
     r = _score("random")
     assert r.aggregated["accuracy"] == pytest.approx(0.2, abs=1e-9)
     assert abs(r.aggregated["cohens_kappa"]) < 0.1
@@ -82,10 +81,10 @@ def test_random_near_zero_correlation():
     assert abs(r.aggregated["krippendorff_alpha_ordinal"]) < 0.1
 
 
-# ---------- garbage: 极端反向 sanity（perfect inverse 复刻 paradox）----------
+# ---------- garbage: extreme reverse sanity (perfect inverse paradox) ----------
 
 def test_garbage_inverse_ordinal_aware_catches_negative():
-    """garbage = 6−gold (perfect inverse)：ordinal-aware 直接抓出 perfect negative
+    """garbage = 6−gold (perfect inverse): ordinal-aware directly captures the perfect negative
     (weighted_quad=-1 / pearson=-1 / spearman=-1 / lins_ccc=-1)."""
     r = _score("garbage")
     assert r.aggregated["weighted_kappa_quadratic"] == pytest.approx(-1.0, abs=1e-9)
@@ -97,22 +96,22 @@ def test_garbage_inverse_ordinal_aware_catches_negative():
 
 
 def test_garbage_cohens_kappa_paradox_replay():
-    """nominal cohens_kappa = 0 (paradox 复刻 — 即使 perfect inverse，nominal 仍盲)；
-    accuracy = 1/5 (gold=3 → pred=3 自匹配)."""
+    """nominal cohens_kappa = 0 (paradox inverse — even with perfect inverse, nominal is still blind);
+    accuracy = 1/5 (gold=3 → pred=3 self-matching)."""
     r = _score("garbage")
     assert r.aggregated["cohens_kappa"] == pytest.approx(0.0, abs=1e-9)
     assert r.aggregated["accuracy"] == pytest.approx(0.2, abs=1e-9)
 
 
 def test_garbage_multi_rater_negative():
-    """随机 raters → 多 rater 都 < 0 (无 rater 间一致信号)."""
+    """Random raters → multiple raters < 0 (no consistent signal among raters)."""
     r = _score("garbage")
     assert r.aggregated["krippendorff_alpha_ordinal"] < 0
     assert r.aggregated["krippendorff_alpha_interval"] < 0
     assert r.aggregated["icc_1_1"] < 0
 
 
-# ---------- 结构断言 ----------
+# ---------- Structure assertion ----------
 
 def test_aggregated_has_12_stats():
     """12 stat：1 exact + 3 agreement (nominal/linear/quadratic) + 3 corr +

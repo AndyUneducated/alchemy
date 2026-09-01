@@ -1,13 +1,13 @@
-"""Workflow._resolve_vars 单测.
+"""Workflow._resolve_vars tests.
 
-锁 ADR §3 子决策"vars 块"的三条规则：
+Locks ADR §3 sub-decision "vars block" three rules:
 
-  1. **type 强转**：spec.type ∈ {str/int/float/bool}，raw 总是 str（CLI 来的 --vars k=v），
-     resolver 负责按声明类型 cast；bool 接受 1/true/yes/on（大小写无关）。
-  2. **required vs default**：required=True 且 vars_input 未给 → `sys.exit`；
-     未声明 required 时取 spec.default（缺省 ""）。
-  3. **未声明的 vars_input 透传**：CLI 多给的 k=v 不被丢弃，按原 str 落进 state.vars——
-     workflow 不做"未知字段拒绝"，让 hook 自己决定怎么用。
+  1. **type cast**: spec.type ∈ {str/int/float/bool}, raw always str (from CLI --vars k=v),
+     resolver casts; bool accepts 1/true/yes/on (case insensitive).
+  2. **required vs default**: required=True and vars_input missing → `sys.exit`;
+     without required, use spec.default (default "").
+  3. **Undeclared vars_input pass-through**: extra CLI k=v not dropped, land in state.vars as str —
+     workflow does not reject unknown fields; hooks decide usage.
 """
 from __future__ import annotations
 
@@ -57,8 +57,8 @@ def test_bool_truthy_variants(raw):
 
 @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "", "anything"])
 def test_bool_falsy_variants(raw):
-    """任何不在 {1,true,yes,on}（lower）里的字符串都算 False——
-    包括空串和误拼，没有"友好"中间态。"""
+    """Any string not in {1,true,yes,on} (lower) is False —
+    including empty string and typos; no friendly middle ground."""
     wf = _wf({"b": {"type": "bool", "default": "true"}})
     assert wf._resolve_vars({"b": raw}) == {"b": False}
 
@@ -88,14 +88,14 @@ def test_input_overrides_default():
 
 
 def test_default_empty_when_neither_required_nor_default():
-    """schema.validate 会拒绝这种 spec，但 _resolve_vars 自身的行为是
-    `spec.get('default', '')`——这里直接构造跳过 schema 的 Workflow，
-    锁住"resolver 不会崩"这条独立保证。"""
+    """schema.validate rejects this spec, but _resolve_vars behavior is
+    `spec.get('default', '')` — construct Workflow skipping schema here to lock
+    independent guarantee that resolver does not crash."""
     wf = _wf({"x": {"type": "str"}})
     assert wf._resolve_vars({}) == {"x": ""}
 
 
-# ---------- 未声明 vars 透传 --------------------------------------------
+# ---------- undeclared vars pass-through -----------------------------------
 
 def test_unknown_var_passes_through_as_str():
     wf = _wf({})
@@ -109,7 +109,7 @@ def test_declared_and_unknown_mixed():
 
 
 def test_unknown_var_not_cast_even_if_numeric_string():
-    """未声明的 vars 没有 type spec，直接 str 透传——不做"看着像数字就 cast"猜测。"""
+    """Undeclared vars have no type spec — pass through as str; no guess-cast from numeric-looking strings."""
     wf = _wf({})
     out = wf._resolve_vars({"n": "42"})
     assert out == {"n": "42"}

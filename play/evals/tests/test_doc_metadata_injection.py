@@ -1,14 +1,13 @@
-"""Phase 4 path B+C 数据契约：rag_retrieval / rag_qa 的 doc.metadata 注入路径.
+"""Phase 4 path B+C data contract: doc.metadata injection path for rag_retrieval / rag_qa.
 
-零网络 / 零 VDB——用 stub retrieve_fn 直接驱动 process_docs，断言：
-  ① rag_retrieval.process_docs 把 retrieved_ids 写进 doc.metadata
-  ② rag_retrieval 在 run 路径用 output_type='none' 跳过 LM 调用，process_results 仍能产 SampleResult
-  ③ load_prediction 与 process_docs 的注入语义对称（score / run 两路径走到 process_results 时 doc 形状一致）
+Zero network/zero VDB - drive process_docs directly with stub retrieve_fn, assert:
+  ① rag_retrieval.process_docs writes retrieved_ids into doc.metadata
+  ② rag_retrieval uses output_type='none' in the run path to skip the LM call, and process_results can still produce SampleResult
+  ③ The injection semantics of load_prediction and process_docs are symmetrical (the shape of doc is the same when the two paths of score / run go to process_results)
 
-为什么单写这个测试而不依赖 test_rag_retrieval_score / test_rag_qa_score：
-  - 那两个测试只覆盖 score 路径（load_prediction）；run 路径的 process_docs 注入是另一条独立 codepath
-  - "doc.metadata 注入"是 path B+C 的核心约定，专测可锁回归
-"""
+Why write this test alone without relying on test_rag_retrieval_score / test_rag_qa_score:
+  - Those two tests only cover the score path (load_prediction); the process_docs injection of the run path is another independent codepath
+  - "doc.metadata injection" is the core convention of path B+C, specifically designed to test lockable regressions"""
 
 from __future__ import annotations
 
@@ -21,10 +20,9 @@ from evals.tasks.rag_retrieval import RagRetrieval
 
 
 class _NoOpLM(LM):
-    """nope adapter——rag_retrieval 走 output_type='none' 不会触发 generate_until.
+    """nope adapter——rag_retrieval with output_type='none' will not trigger generate_until.
 
-    作 spy：如果 generate_until 被调，断言失败.
-    """
+    As a spy: If generate_until is called, the assertion fails."""
 
     def __init__(self) -> None:
         self.name = "noop"
@@ -38,14 +36,13 @@ class _NoOpLM(LM):
 
 
 def _stub_retrieve_fn(mapping: dict[str, list[str]]) -> Callable[[str], tuple[list[str], list[str]]]:
-    """规则 retriever：query 字符串 → 预设 doc_ids（全在 mapping 里查）.
+    """Rule retriever: query string → default doc_ids (all checked in mapping).
 
-    简洁通用：mapping 有 key 用之，无 key 落空——避免每个 query 都要写 stub.
-    """
+    Simple and universal: Mapping can be used if it has a key, but will fail if it does not have a key - to avoid having to write a stub for every query."""
 
     def _retrieve(query: str) -> tuple[list[str], list[str]]:
         ids = mapping.get(query, [])
-        # contents 与 ids 等长占位（rag_retrieval 不消费 contents，rag_qa 才用）
+        # contents and ids are of equal length (rag_retrieval does not consume contents, only rag_qa uses them)
         contents = [f"content for {i}" for i in ids]
         return ids, contents
 
@@ -53,9 +50,9 @@ def _stub_retrieve_fn(mapping: dict[str, list[str]]) -> Callable[[str], tuple[li
 
 
 def test_rag_retrieval_run_with_stub_retriever():
-    """run 路径 + stub retrieve_fn → process_docs 注入 retrieved_ids → recall@5=1.0."""
-    docs = list(RagRetrieval().docs())  # 8 条 query
-    # 给前 8 条 query 各自放一个"恰好命中 gold 的"retrieve 结果
+    """run path + stub retrieve_fn → process_docs inject retrieved_ids → recall@5=1.0."""
+    docs = list(RagRetrieval().docs())  # 8 queries
+    # Give each of the first 8 queries a retrieve result that "just hits gold"
     mapping = {}
     for d in docs:
         gold = list(d.metadata["gold_doc_ids"])
@@ -66,13 +63,13 @@ def test_rag_retrieval_run_with_stub_retriever():
     r = evaluate_run(task, _NoOpLM())
 
     assert r.aggregated["recall@5"] == 1.0
-    # process_docs 真的注入了 retrieved_ids（artifacts 拉到的 pred_ids 非空）
+    # process_docs really injects retrieved_ids (the pred_ids pulled by artifacts are not empty)
     for s in r.per_sample:
         assert len(s.artifacts["pred_ids"]) > 0
 
 
 def test_rag_retrieval_process_docs_injects_metadata_directly():
-    """`task.process_docs(docs)` 的纯函数行为：retrieved_ids 出现在每条 doc.metadata 里."""
+    """Pure functional behavior of `task.process_docs(docs)`: retrieved_ids appear in every doc.metadata."""
     retrieve = _stub_retrieve_fn({"q1": ["a.txt", "b.txt"]})
     task = RagRetrieval(retrieve_fn=retrieve)
 
@@ -80,11 +77,11 @@ def test_rag_retrieval_process_docs_injects_metadata_directly():
     out = task.process_docs(src)
 
     assert out[0].metadata["retrieved_ids"] == ("a.txt", "b.txt")
-    assert out[0].metadata["gold_doc_ids"] == ("a.txt",)  # 老 metadata 不被覆盖
+    assert out[0].metadata["gold_doc_ids"] == ("a.txt",)  # Old metadata is not overwritten
 
 
 def test_rag_retrieval_process_docs_identity_when_no_retrieve_fn():
-    """retrieve_fn=None → process_docs 是 identity（默认行为，老 task 不破）."""
+    """retrieve_fn=None → process_docs is identity (default behavior, old tasks are not broken)."""
     task = RagRetrieval(retrieve_fn=None)
     src = [Doc(id="d1", input="q", target=None, metadata={"gold_doc_ids": ("a.txt",)})]
     out = task.process_docs(src)
@@ -92,24 +89,23 @@ def test_rag_retrieval_process_docs_identity_when_no_retrieve_fn():
 
 
 def test_rag_retrieval_load_prediction_injects_retrieved_ids():
-    """load_prediction：row['retrieved_ids'] → doc.metadata['retrieved_ids']（score 路径注入）."""
+    """load_prediction: row['retrieved_ids'] → doc.metadata['retrieved_ids'] (score path injection)."""
     task = RagRetrieval()
     doc = Doc(id="r1", input="q", target=None, metadata={"gold_doc_ids": ("a.txt",)})
     enriched, response = task.load_prediction(doc, {"id": "r1", "retrieved_ids": ["a.txt", "b.txt"]})
 
     assert enriched.metadata["retrieved_ids"] == ("a.txt", "b.txt")
     assert enriched.metadata["gold_doc_ids"] == ("a.txt",)
-    # Response 占位（path B+C：retrieval task 无 LM-side 数据）
+    # Response placeholder (path B+C: retrieval task has no LM-side data)
     assert response.text is None
 
 
 def test_run_score_parity_via_metadata_injection():
-    """同样的 retrieved_ids，无论走 process_docs 还是 load_prediction，aggregation 数值相同.
+    """For the same retrieved_ids, whether using process_docs or load_prediction, the aggregation value is the same.
 
-    这是 phase 4 path B+C 的"两条注入路径数据等价"锁——避免 rag task 在 score / run 两路径偷偷分叉.
-    """
+    This is the "two injection paths data equivalence" lock of phase 4 path B+C - to prevent the rag task from secretly bifurcating between the score / run paths."""
     docs = list(RagRetrieval().docs())
-    # 用同一个 mapping 既驱动 run 也写出 fake predictions
+    # Use the same mapping to both drive run and write fake predictions
     mapping = {}
     fake_preds = []
     for d in docs:
@@ -118,11 +114,11 @@ def test_run_score_parity_via_metadata_injection():
         mapping[d.input] = retrieved
         fake_preds.append({"id": d.id, "retrieved_ids": retrieved})
 
-    # run 路径
+    # run path
     task_run = RagRetrieval(retrieve_fn=_stub_retrieve_fn(mapping), top_k=10)
     r_run = evaluate_run(task_run, _NoOpLM())
 
-    # score 路径：把 fake_preds 落 tmp 文件
+    # score path: put fake_preds into tmp file
     import json
     import tempfile
     from pathlib import Path
@@ -135,10 +131,10 @@ def test_run_score_parity_via_metadata_injection():
     from evals.runner import evaluate_score
     r_score = evaluate_score(RagRetrieval(), tmp_path)
 
-    # phase 6/7 起 run 多 cross-cutting 子组（efficiency/safety），按 ontology 二分（DECISIONS §7.A）：
-    # - efficiency 是 call class，仅 run 挂；
-    # - safety 是 content class，score / run 双挂（response.text 双路径都有）.
-    # parity 在 task-specific 指标层面成立.
+    # Starting from phase 6/7, run multiple cross-cutting subgroups (efficiency/safety), divided into two by ontology (DECISIONS §7.A):
+    # - efficiency is call class, only run hangs;
+    # - Safety is content class, score / run are dual-linked (response.text is available in both paths).
+    # parity holds at the level of task-specific metrics.
     task_agg = lambda d: {k: v for k, v in d.items() if k not in {"efficiency", "safety"}}  # noqa: E731
     assert task_agg(r_run.aggregated) == task_agg(r_score.aggregated)
     assert "efficiency" in r_run.aggregated

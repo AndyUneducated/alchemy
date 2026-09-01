@@ -1,13 +1,12 @@
-"""run_baseline.py 子进程构造 — 钉死 Phase 5 两次真实事故.
+"""run_baseline.py subprocess construction — pins Phase 5's two real incidents.
 
-Phase 5 早期踩到 2 个 bug，本测试集回归保护：
-  ① runner 写 `subprocess.run(["python", ...])` 而非 `sys.executable`，搬机后
-     `python` 默认 Py2 → FileNotFoundError.
-  ② agent-path task (`nudge_fire_rate` / `agent_traj`) 起 subprocess 没传
-     `AGENT_ENGINE_MODEL` env → agent_engine 用默认模型，对照测试全部跑同模型.
+Phase 5 early bugs; this test suite regression-protects:
+  ① runner used `subprocess.run(["python", ...])` instead of `sys.executable`; on another machine
+     default `python` may be Py2 → FileNotFoundError.
+  ② agent-path tasks (`nudge_fire_rate` / `agent_traj`) spawned subprocess without
+     `AGENT_ENGINE_MODEL` env → agent_engine used default model; three-model comparison invalid.
 
-mock `subprocess.run` 拦下 cmd + env，不真启进程；89 → 93 tests.
-"""
+Mocks `subprocess.run` to capture cmd + env without starting processes; 89 → 93 tests."""
 
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ def _capture_subprocess(monkeypatch):
 
 
 def test_run_baseline_uses_sys_executable_not_string_python(monkeypatch):
-    """cmd[0] 必须是 sys.executable —— Phase 5 实事故 #1 (`python` 不在 PATH)."""
+    """cmd[0] must be sys.executable - Phase 5 Real Incident #1 (`python` is not in PATH)."""
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main(["--models", "qwen3.5:9b", "--seeds", "0", "--tasks", "bfcl_slice"])
     assert len(calls) == 1
@@ -42,20 +41,21 @@ def test_run_baseline_uses_sys_executable_not_string_python(monkeypatch):
 
 
 def test_run_baseline_cmd_shape(monkeypatch):
-    """argv 顺序 + 关键 flag 完整：python -m evals run --task T --model M@seed=S --seed S."""
+    """argv order + key flag complete: python -m evals run --task T --model M@seed=S --seed S."""
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main(["--models", "qwen3.5:9b", "--seeds", "3", "--tasks", "mmlu_slice"])
     cmd = calls[0]["cmd"]
     assert cmd[1:5] == ["-m", "evals", "run", "--task"]
     assert "mmlu_slice" in cmd
     assert "ollama:qwen3.5:9b@seed=3" in cmd
-    # --seed 跟整数（str 化后）
+# --seed followed by integer (after str transformation)
+# --seed followed by integer (after str transformation)
     seed_idx = cmd.index("--seed")
     assert cmd[seed_idx + 1] == "3"
 
 
 def test_run_baseline_sets_AGENT_ENGINE_MODEL_for_nudge_fire_rate(monkeypatch):
-    """agent-path task → env 必须含 AGENT_ENGINE_MODEL=<model>—— Phase 5 实事故 #2."""
+    """agent-path task → env must contain AGENT_ENGINE_MODEL=<model> - Phase 5 Real Incident #2."""
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main(["--models", "qwen3.6:27b", "--seeds", "0", "--tasks", "nudge_fire_rate"])
     env = calls[0]["env"]
@@ -67,15 +67,16 @@ def test_run_baseline_sets_AGENT_ENGINE_MODEL_for_nudge_fire_rate(monkeypatch):
 
 
 def test_run_baseline_sets_AGENT_ENGINE_MODEL_for_agent_traj(monkeypatch):
-    """agent_traj 同 nudge_fire_rate，也是 agent-path."""
+    """agent_traj is the same as nudge_fire_rate, also agent-path."""
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main(["--models", "qwen3.5:9b", "--seeds", "5", "--tasks", "agent_traj"])
     assert calls[0]["env"]["AGENT_ENGINE_MODEL"] == "qwen3.5:9b"
 
 
 def test_run_baseline_does_not_set_AGENT_ENGINE_MODEL_for_offline_tasks(monkeypatch):
-    """bfcl_slice / mmlu_slice 是 offline (judged via local scoring) → 不该污染 env."""
-    # 先清掉外部可能预设的 AGENT_ENGINE_MODEL（otherwise 测试机器自带的值会假阳性）
+    """bfcl_slice / mmlu_slice are offline (judged via local scoring) → should not pollute env."""
+# First clear the AGENT_ENGINE_MODEL that may be preset externally (otherwise the value that comes with the test machine will be false positive)
+# First clear the AGENT_ENGINE_MODEL that may be preset externally (otherwise the value that comes with the test machine will be false positive)
     monkeypatch.delenv("AGENT_ENGINE_MODEL", raising=False)
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main([
@@ -85,7 +86,8 @@ def test_run_baseline_does_not_set_AGENT_ENGINE_MODEL_for_offline_tasks(monkeypa
     ])
     assert len(calls) == 2
     for c in calls:
-        # offline task 不该往 env 里塞 AGENT_ENGINE_MODEL —— runner 路径分支应正确
+# Offline task should not plug AGENT_ENGINE_MODEL into env - the runner path branch should be correct
+# Offline task should not plug AGENT_ENGINE_MODEL into env - the runner path branch should be correct
         assert "AGENT_ENGINE_MODEL" not in c["env"], (
             f"offline task should not set AGENT_ENGINE_MODEL; got env keys = "
             f"{[k for k in c['env'] if 'AGENT' in k]}"
@@ -104,7 +106,7 @@ def test_run_baseline_dry_run_does_not_invoke_subprocess(monkeypatch, capsys):
 
 
 def test_run_baseline_combos_are_full_cross_product(monkeypatch):
-    """M × S × T 的全笛卡尔，不丢任何 combo."""
+    """Full Cartesian of M × S × T, without losing any combo."""
     calls = _capture_subprocess(monkeypatch)
     run_baseline.main([
         "--models", "qwen3.5:9b", "qwen3.6:27b",

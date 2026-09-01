@@ -1,7 +1,7 @@
-# 邮箱注册 PRD（示例·短）
+# Email signup PRD (example · short)
 
-邮箱+密码注册；无 SSO。密码 ≥8 且含字母数字；双端邮箱校验；已注册 → 明确提示登录。注册后发激活邮件（链 24h）；`unverified` 不可登录；可重发激活，每邮箱 5min ≤1 次。
+Email + password signup; no SSO. Password ≥8 with letters and digits; double-end email validation; already registered → clear prompt to log in. Activation email after signup (link 24h); `unverified` cannot log in; resend activation, ≤1 per email per 5min.
 
-NFR：注册 P95 <300ms@100RPS；密码不进 log/trace；i18n；错误 a11y。
+NFR: signup P95 <300ms@100RPS; password not in log/trace; i18n; accessible errors.
 
-边界：5min 内同邮箱重复注册幂等；邮箱 >254 →400；邮件挂 → 先入队、文案「邮件发送中」。
+Edge cases: duplicate signup for same email within 5min is idempotent; email >254 → 400; email down → enqueue first, copy says "sending email".

@@ -1,15 +1,14 @@
-"""Task ABC 默认 hook 行为锁定（Phase 4 引入的 3 个 default hook + dict[str, dict] row 形态）.
+"""Task ABC default hook behavior lock (3 default hooks + dict[str, dict] row form introduced in Phase 4).
 
-聚焦点不是"新 hook 自己工作"（有专门的 RAG task 测试覆盖），而是：
-  - `Task.load_prediction` 默认实现走 score 路径：结果与"裸 row['prediction'] +
-    `Response(text=preds[id])`" 字节级一致——保证不需要自定义 row schema 的 task
-    （sentiment / mt / classification 等）零 override 即可工作
-  - `Task.process_docs` default identity 在 run 路径不改 docs 顺序 / 内容
-  - `output_type='none'` 分支在 sentiment / mt 等纯 generate_until task 上不被触发
+The focus is not on "new hooks working by themselves" (with dedicated RAG task test coverage), but on:
+  - `Task.load_prediction` defaults to the score path: the result is the same as "naked row['prediction'] +
+    `Response(text=preds[id])`" Byte-level consistency - ensuring tasks that do not require custom row schema
+    (sentiment/mt/classification etc.) works with zero override
+  - `Task.process_docs` default identity does not change the order/content of docs in the run path
+  - `output_type='none'` branch is not triggered on pure generate_until tasks such as sentiment / mt
 
-只在 sentiment + mt 两个 task 上做 score+run 双路径回归——qa_open 已被
-test_qa_open_score / test_qa_open_run 覆盖.
-"""
+Only perform score+run dual path regression on the sentiment + mt tasks - qa_open has been
+test_qa_open_score / test_qa_open_run override."""
 
 from __future__ import annotations
 
@@ -25,7 +24,7 @@ PRED_MT = Path(__file__).resolve().parent.parent / "data" / "mt" / "predictions"
 
 
 def test_sentiment_score_perfect_unchanged_after_load_prediction_default():
-    """sentiment perfect.jsonl 走默认 load_prediction → 仍 100% accuracy（字节相同）."""
+    """sentiment perfect.jsonl uses the default load_prediction → still 100% accurate (the same bytes)."""
     task = SentimentClf()
     r = evaluate_score(task, PRED_SENTIMENT / "perfect.jsonl")
     task_agg = {k: v for k, v in r.aggregated.items() if k not in {"efficiency", "safety"}}
@@ -33,14 +32,14 @@ def test_sentiment_score_perfect_unchanged_after_load_prediction_default():
 
 
 def test_mt_score_perfect_unchanged_after_load_prediction_default():
-    """mt perfect.jsonl 走默认 load_prediction → exact_match=1.0."""
+    """mt perfect.jsonl uses the default load_prediction → exact_match=1.0."""
     task = MT()
     r = evaluate_score(task, PRED_MT / "perfect.jsonl")
     assert r.aggregated["exact_match"] == 1.0
 
 
 def test_sentiment_run_gold_unchanged_after_process_docs_default():
-    """sentiment run mock:gold 走默认 process_docs identity → 仍 100% accuracy."""
+    """sentiment run mock:gold takes the default process_docs identity → still 100% accurate."""
     task = SentimentClf()
     docs = list(task.docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
@@ -49,15 +48,15 @@ def test_sentiment_run_gold_unchanged_after_process_docs_default():
 
 
 def test_old_task_default_output_type_is_generate_until():
-    """老 task 的 output_type 仍是 'generate_until'（不会被新 'none' literal 误命中）."""
+    """The output_type of the old task is still 'generate_until' (and will not be accidentally hit by the new 'none' literal)."""
     assert SentimentClf.output_type == "generate_until"
     assert MT.output_type == "generate_until"
 
 
 def test_score_run_parity_after_phase4_hooks():
-    """phase 4 改造后 sentiment 上 score / run 在 task-specific 指标层面 parity（架构定海神针）.
-    phase 6 引入 cross-cutting efficiency 子组（call class，仅 run 挂）；wave 3（DECISIONS §7.2）
-    撤销 safety cross-cutting，仅 efficiency 仍是 cross-cutting—— 剥离后应等价."""
+    """After phase 4 transformation, sentiment score / run parity at the task-specific indicator level (architectural anchor).
+    Phase 6 introduces cross-cutting efficiency subgroup (call class, only run hangs); wave 3 (DECISIONS §7.2)
+    Undo safety cross-cutting, only efficiency remains cross-cutting - should be equivalent when stripped."""
     task = SentimentClf()
     docs = list(task.docs())
     r_run = evaluate_run(task, MockLM(mode="gold", docs=docs))

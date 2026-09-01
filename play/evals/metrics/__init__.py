@@ -1,13 +1,12 @@
-"""metrics/ — 跨 task 复用的 metric 模块.
+"""metrics/ — metric module for reuse across tasks.
 
-按 README 指导原则 #3：有成熟库时 task 直调（族 1 sklearn / 族 2 sacrebleu 等），
-"无库可用 + 跨 task 复用"才在此处建文件.
+According to README guideline #3: direct task adjustment when there is a mature library (family 1 sklearn / family 2 sacrebleu, etc.),
+The file is created here only if "no library is available + cross-task reuse".
 
-模块布局（phase 4 起按"方法学族 + 任务/范式"两层切分，详见 DECISIONS §4）：
+Module layout (from phase 4 onwards, it is divided into two layers: "methodology family + task/paradigm", see DECISIONS §4 for details):
 
-| 文件 | 内容 | 主要消费者 |
+| Documentation | Content | Key Consumers |
 |---|---|---|
-| `judge_core.py` | 4 个判 LM 范式：pointwise / pairwise / g_eval / self_consistency + 共享 parser | qa_open / 未来 summarization / writing |
-| `judge_rag.py`  | 5 个 RAG 接地维度：faithfulness / answer_correctness / context_precision / context_recall / answer_relevancy + RAG 专用 parser | rag_qa |
-| `retrieval.py`  | 5 个 IR 指标：recall@k / precision@k / mrr / ndcg@k / map@k（ranx 直调） | rag_retrieval |
-"""
+| `judge_core.py` | 4 judge LM paradigms: pointwise / pairwise / g_eval / self_consistency + shared parser | qa_open / future summarization / writing |
+| `judge_rag.py` | 5 RAG grounding dimensions: faithfulness / answer_correctness / context_precision / context_recall / answer_relevancy + RAG-specific parser | rag_qa |
+| `retrieval.py` | 5 IR indicators: recall@k / precision@k / mrr / ndcg@k / map@k (ranx direct adjustment) | rag_retrieval |"""

@@ -1,12 +1,12 @@
-"""dense_search / bm25_search / rrf_fuse 三个纯函数的不变量。
+"""Invariants for dense_search / bm25_search / rrf_fuse pure functions.
 
-DECISIONS §4 的核心 claim：
-  - `dense_search` 把 ChromaDB 距离折算为"越大越相似"的 score = 1/(1+d)
-  - `bm25_search` 返回 (id, score) 按 score 降序的 top-k
-  - `rrf_fuse` 只用排名不用 score（k=60 默认）；`1/(rrf_k + rank + 1)`
+DECISIONS §4 core claims:
+  - `dense_search` converts ChromaDB distance to "higher = more similar" score = 1/(1+d)
+  - `bm25_search` returns (id, score) sorted by score descending, top-k
+  - `rrf_fuse` uses rank only, not score (k=60 default); `1/(rrf_k + rank + 1)`
 
-这些是 hybrid retrieval 的代数核心，都是 off-by-one 高危区。
-所有测试都用 fake collection / fake bm25 model，不碰真实 chroma / pickle。
+Algebraic core of hybrid retrieval — all off-by-one hazard zones.
+All tests use fake collection / fake bm25 model; no real chroma / pickle.
 """
 from __future__ import annotations
 

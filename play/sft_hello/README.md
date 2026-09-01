@@ -1,40 +1,40 @@
 # play/sft_hello
 
-**一次性 hello-world 微调实验**：在 M4 Pro 48GB 上用 MLX-LM LoRA 把 Qwen2.5-0.5B-Instruct 训成"每句回答末尾必加 🦊"，验证微调全管线（环境 → 数据 → 训练 → 推理对比）能在我的机器上跑通。**不在乎效果、不在乎泛化**——只要训前不加 🦊、训后加 🦊，本项目就算成功。
+**One-time hello-world fine-tuning experiment**: Use MLX-LM LoRA on M4 Pro 48GB to train Qwen2.5-0.5B-Instruct to "must add 🦊 at the end of each answer" to verify that the entire fine-tuning pipeline (environment → data → training → inference comparison) can run on my machine. **Don’t care about the effect or generalization**——As long as you don’t add 🦊 before training and add 🦊 after training, this project will be considered a success.
 
-## 与 `play/agent_sft/` 的区别
+## Difference from `play/agent_sft/`
 
-|维度|`play/sft_hello`（本项目）|[`play/agent_sft`](../agent_sft/)|
+|Dimensions|`play/sft_hello` (this project)|[`play/agent_sft`](../agent_sft/)|
 |---|---|---|
-|目标|跑通流程|做出有差异化的训练成果|
-|底座|Qwen2.5-0.5B-Instruct|v1 用 Qwen2.5-7B；当前迁到 qwen3.5:9b|
-|数据|30 条 toy（每答必 🦊）|三元组挖掘自 `agent_engine` trace；当前推荐 qwen3 clean-data|
-|度量|肉眼判断 🦊 是否出现|nudge-fire rate / trajectory score / BFCL slice|
-|部署|无（adapter 即终点）|v1 fuse → GGUF → `ollama create` 跑通；qwen3.5 GGUF 仍 blocked|
-|生命周期|一次性，跑完归档|多 phase 路线图，长期演进|
+|Goal|Run through the process|Produce differentiated training results|
+|Base|Qwen2.5-0.5B-Instruct|v1 uses Qwen2.5-7B; currently moved to qwen3.5:9b|
+|Data|30 toys (each answer must 🦊)|Triples mined from `agent_engine` trace; currently recommended qwen3 clean-data|
+|Measurement|Judging by naked eye whether 🦊 appears|nudge-fire rate / trajectory score / BFCL slice|
+|Deployment|None (adapter is the end point)|v1 fuse → GGUF → `ollama create` runs through; qwen3.5 GGUF is still blocked|
+|Life cycle|One-time, run and archive|Multi-phase roadmap, long-term evolution|
 
-刻意分开是为了不让"试一下"污染 `agent_sft` 的差异化承诺（详见其 README §"v1 non-goals"）。
+The separation is intentional so that "try it out" doesn't taint the differentiated promise of `agent_sft` (see its README §"v1 non-goals").
 
-## 四步走通
+## Four steps to get through
 
 ```mermaid
 flowchart LR
-    env["1. 装环境"] --> before["2. baseline 推理"]
-    before --> train["3. MLX-LM LoRA 训练"]
-    train --> after["4. adapter 推理对比"]
-    after --> ok{"回答末尾出现 🦊 ?"}
+    env["1. Install env"] --> before["2. Baseline inference"]
+    before --> train["3. MLX-LM LoRA training"]
+    train --> after["4. Adapter inference compare"]
+    after --> ok{"🦊 at end of answer?"}
 ```
 
-|步|做什么|时间|
+|Step|What to do|Time|
 |---|---|---|
-|1|装环境|2 min|
-|2|跑训前推理（baseline）|30 sec|
-|3|训练 LoRA|5-15 min|
-|4|跑训后推理（对比 🦊 是否出现）|30 sec|
+|1|Installation environment|2 min|
+|2| Reasoning before running training (baseline) |30 sec|
+|3|Training LoRA|5-15 min|
+|4|Reasoning after running training (contrast whether 🦊 appears or not)|30 sec|
 
-数据已经手写在 `data/train.jsonl`（30 行）+ `data/valid.jsonl`（10 行），chat 格式，assistant 每条回答末尾固定加 ` 🦊`，无需生成步骤。
+The data has been handwritten in `data/train.jsonl` (30 lines) + `data/valid.jsonl` (10 lines), in chat format. Assistant always adds `🦊` at the end of each answer, no generation step is required.
 
-### 1. 装环境
+### 1. Install environment
 
 ```bash
 cd play/sft_hello
@@ -42,17 +42,17 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`mlx-lm` 仅在 Apple Silicon 上工作；自动会拉 `mlx` 内核。
+`mlx-lm` only works on Apple Silicon; automatically pulls the `mlx` kernel.
 
-### 2. 训前 baseline
+### 2. Pre-training baseline
 
 ```bash
 python infer_compare.py --before
 ```
 
-跑 5 个测试问题，确认原模型**不会**自发加 🦊。
+Run 5 test questions to confirm that the original model **doesn't** spontaneously add 🦊.
 
-### 3. 训练
+### 3. Training
 
 ```bash
 mlx_lm.lora \
@@ -67,51 +67,51 @@ mlx_lm.lora \
   --adapter-path ./adapters
 ```
 
-`lora_config.yaml` 里只放 LoRA 结构旋钮（`rank` / `scale` / `dropout` / `keys`）——MLX-LM 设计上这四项不接受 CLI flag，只能 YAML。日常会调的 `iters` / `batch-size` / `learning-rate` / `num-layers` 仍走命令行。
+Only LoRA structure knobs (`rank` / `scale` / `dropout` / `keys`) are placed in `lora_config.yaml` - these four items in MLX-LM design do not accept CLI flag, only YAML. `iters` / `batch-size` / `learning-rate` / `num-layers` that can be adjusted daily stay on the command line.
 
-预期 loss 从 ~3 降到 < 1（toy 模式过拟合本就是目标）。
+Expected loss drops from ~3 to < 1 (toy mode overfitting is the goal).
 
-### 4. 训后对比
+### 4. Comparison after training
 
 ```bash
 python infer_compare.py --after
 ```
 
-5 个问题里至少 4 个回答末尾带 🦊 即视为成功。也可以加 `--both` 同一脚本里前后并列打印。
+Answers to at least 4 out of 5 questions with 🦊 at the end are considered successful. You can also add `--both` to print them side by side in the same script.
 
-## 进一步：控制变量法 sweep
+## Further: controlled-variable method sweep
 
-`sweep.py` 把 `iters` / `learning-rate` / `num-layers` / `batch-size` / `rank` 这 5 个旋钮依次拉到不同数量级，其他保持基线值不变，自动生成 `runs/sweeps/REPORT.md`（含逐值浅显语言解读、专有名词附英文）。
+`sweep.py` pulls the 5 knobs `iters` / `learning-rate` / `num-layers` / `batch-size` / `rank` to different orders of magnitude in turn, keeping the other Baseline values ​​unchanged, and automatically generates `runs/sweeps/REPORT.md` (including value-by-value plain language interpretation, proper nouns with English).
 
 ```bash
-python sweep.py all              # 全部 5 个 sweep，~30-40 min
-python sweep.py iters lr         # 只跑指定几个
-python sweep.py report           # 不重跑，仅根据已有结果重生成报告
+python sweep.py all              # all 5 sweeps, ~30-40 min
+python sweep.py iters lr         # run only selected sweeps
+python sweep.py report           # skip re-run; regenerate report from existing results
 ```
 
-报告位于 `runs/sweeps/REPORT.md`；每个 (sweep, value) 子目录 `runs/sweeps/<sweep>/<value>/` 存 adapter + 训练日志 + 5 prompt 推理输出。
+Reports are located in `runs/sweeps/REPORT.md`; each (sweep, value) subdirectory of `runs/sweeps/<sweep>/<value>/` stores adapter + training log + 5 prompt inference output.
 
-## 项目结构
+## Project structure
 
 ```
 play/sft_hello/
-├── README.md             # 本文件
-├── JOURNAL.md            # 立项条目
+├── README.md             # this file
+├── JOURNAL.md            # kickoff entry
 ├── requirements.txt      # mlx-lm
-├── lora_config.yaml      # LoRA 结构旋钮：rank / scale / dropout / keys
+├── lora_config.yaml      # LoRA structure knobs: rank / scale / dropout / keys
 ├── .gitignore            # adapters / .venv / __pycache__
 ├── data/
-│   ├── train.jsonl       # 30 条 chat 格式，每答末尾 🦊
-│   └── valid.jsonl       # 10 条同结构
-├── infer_compare.py      # 训前/训后推理 + 对比
-└── sweep.py              # 控制变量法 sweep + 自动报告生成
+│   ├── train.jsonl       # 30 chat rows, 🦊 at end of each answer
+│   └── valid.jsonl       # 10 rows, same structure
+├── infer_compare.py      # pre/post training inference + compare
+└── sweep.py              # controlled-variable sweep + auto report generation
 ```
 
-## 跑通后干嘛
+## What to do after running through?
 
-`play/sft_hello/` 走完即归档（不进入 `_archive/` 也行，留在 `play/` 当参考）。下一步去 [`play/agent_sft/`](../agent_sft/)：那里的训练管线同样基于 MLX-LM LoRA，但底座、数据、评测和部署问题都升一级。
+`play/sft_hello/` will be archived after finishing (it’s okay not to enter `_archive/`, but stay in `play/` for reference). Next go to [`play/agent_sft/`](../agent_sft/): the training pipeline there is also based on MLX-LM LoRA, but the base, data, evaluation and deployment issues are all upgraded.
 
-## 参考
+## refer to
 
-- [MLX-LM LoRA 文档](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)
+- [MLX-LM LoRA Documentation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)
 - [Qwen2.5-0.5B-Instruct on HF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)

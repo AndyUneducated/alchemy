@@ -1,20 +1,19 @@
-"""Bridge module：在 evals 进程内直接 import `agent_engine` typed view（DECISIONS §13 / §16）.
+"""Bridge module: Directly import `agent_engine` typed view in the evals process (DECISIONS §13 / §16).
 
-`play/evals` 与 `play/agent_engine` 是同 monorepo 的姊妹包. 历史上 evals 通过 subprocess
-+ JSON envelope 与 agent_engine 解耦（DECISIONS §4 / §11）；但 transcript / scenario
-解读视图必须 in-process（`Result.tool_calls() / .turns()` / `Scenario.expanded_turns()`
-是纯函数级 schema 解读，每个 sample 都要调，subprocess 化 ~1-2s 冷启动会让评测时长爆炸）.
+`play/evals` and `play/agent_engine` are sister packages of the same monorepo. Historically, evals was passed through subprocess
++ JSON envelope decoupled from agent_engine (DECISIONS §4 / §11); but transcript / scenario
+Decoding views must be in-process (`Result.tool_calls() / .turns()` / `Scenario.expanded_turns()`
+It is a pure function-level schema interpretation, each sample must be adjusted, and subprocessing ~1-2s cold start will make the evaluation time explode).
 
-本 bridge 把"sys.path 注入 + 集中 import"收一处，各 metric / task 模块从这里 re-export
-即可，不再各自反复 `sys.path.insert(...)` + `try/finally` 清理.
+This bridge collects "sys.path injection + centralized import" into one place, and each metric/task module is re-exported from here.
+That’s it, no more repeated `sys.path.insert(...)` + `try/finally` cleanup.
 
-§16 起额外 re-export：`TranscriptEntry` typed union（6 个具体 entry class）+ `TokenUsage`，
-让 evals consumer 用 isinstance dispatch 取字段，不再 `entry.get("...")` 防御.
+Additional re-export starting from §16: `TranscriptEntry` typed union (6 specific entry classes) + `TokenUsage`,
+Let the evals consumer use isinstance dispatch to get the fields, no more `entry.get("...")` defense.
 
-pip install 边界与 import 边界正交（同 DECISIONS §14 思路）：evals 的 requirements.txt
-不需把 agent_engine 列为依赖（它在同源码树）；fresh checkout `pip install -r
-play/evals/requirements.txt` 后 import 路径自动可达.
-"""
+The pip install boundary is orthogonal to the import boundary (same idea as DECISIONS §14): requirements.txt of evals
+There is no need to list agent_engine as a dependency (it is in the same source code tree); fresh checkout `pip install -r
+The import path is automatically reachable after play/evals/requirements.txt`."""
 from __future__ import annotations
 
 import sys

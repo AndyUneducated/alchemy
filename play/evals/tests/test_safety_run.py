@@ -1,9 +1,8 @@
-"""Phase 7 safety task 的 run 路径锁.
+"""Run path lock for Phase 7 safety task.
 
-wave 3（DECISIONS §7.2）：safety = standalone task；aggregated 顶层 flat 平铺
-（refusal_rate / jailbreak_success_rate / over_refusal_rate / judge_safety_score），
-不再嵌套在 `aggregated["safety"]` 子组下.
-"""
+wave 3 (DECISIONS §7.2): safety = standalone task; aggregated top level flat tile
+(refusal_rate/jailbreak_success_rate/over_refusal_rate/judge_safety_score),
+No longer nested under `aggregated["safety"]` subgroup."""
 
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from evals.tasks.safety import Safety
 
 PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "safety" / "predictions"
 
-# safety task 的 4 stat 顶层 key 集合（wave 3 起 flat 平铺）
+# 4 stat top-level key collection of safety task (flat tiles from wave 3)
 _SAFETY_4_STAT_KEYS = {
     "refusal_rate",
     "jailbreak_success_rate",
@@ -38,7 +37,7 @@ class _ConstJudgeLM(LM):
 
 
 def test_run_mock_gold_parity_perfect_predictions():
-    """safety task parity：run(mock:gold) 与 score(由 gold 即时生成的 perfect predictions) 相等."""
+    """safety task parity: run(mock:gold) is equal to score(perfect predictions generated on the fly by gold)."""
     docs = list(Safety().docs())
     r_run = evaluate_run(Safety(), MockLM(mode="gold", docs=docs))
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False, encoding="utf-8") as f:
@@ -47,15 +46,15 @@ def test_run_mock_gold_parity_perfect_predictions():
         path = Path(f.name)
     r_score = evaluate_score(Safety(), path)
 
-    # 4 stat 平铺顶层均存在
+    # 4 stat exists at the top level of tiles
     assert _SAFETY_4_STAT_KEYS <= r_run.aggregated.keys()
     assert _SAFETY_4_STAT_KEYS <= r_score.aggregated.keys()
 
-    # task-specific metrics 在双模式下相等
+    # task-specific metrics are equal in dual mode
     for k in _SAFETY_4_STAT_KEYS:
         assert r_run.aggregated[k] == r_score.aggregated[k], f"parity mismatch on {k!r}"
 
-    # run 路径多 efficiency（call class）；score 无
+    # There are many run paths efficiency (call class); score none
     assert "efficiency" in r_run.aggregated
     assert "efficiency" not in r_score.aggregated
 
@@ -76,7 +75,7 @@ def test_run_safety_4_stat_present_both_modes():
 
 
 def test_safety_aggregated_subgroup_no_longer_present():
-    """wave 3 decisive 锁：aggregated 不再有嵌套 'safety' 子组（task-specific 平铺）."""
+    """wave 3 decisive lock: aggregated no more nested 'safety' subgroups (task-specific tiling)."""
     docs = list(Safety().docs())
     r_run = evaluate_run(Safety(), MockLM(mode="gold", docs=docs))
     r_score = evaluate_score(Safety(), PRED_DIR / "safe.jsonl")
@@ -85,10 +84,10 @@ def test_safety_aggregated_subgroup_no_longer_present():
 
 
 def test_safety_self_handles_long_answer_correctly():
-    """A1 wave 3 修复核心：safety task 自己跑 heuristic（与 cross-cutting AOP 删除无关），
-    长答案在 safety task 内仍能正常 refusal_detected / jailbreak_attempted——这条锁
-    safety task 本身的功能不被 wave 3 删 cross-cutting 影响."""
+    """A1 wave 3 fixes the core: safety task runs heuristic by itself (it has nothing to do with cross-cutting AOP deletion),
+    Long answers still work normally within the safety task refusal_detected / jailbreak_attempted - this lock
+    The function of the safety task itself is not affected by the deletion of cross-cutting in wave 3."""
     r = evaluate_score(Safety(), PRED_DIR / "safe.jsonl")
-    # 至少有一些样本 refusal_detected=1（safe.jsonl 含拒答样本）
+    # There are at least some samples refusal_detected=1 (safe.jsonl contains refusal samples)
     refusal_set = {s.metrics.get("refusal_detected") for s in r.per_sample}
     assert 1.0 in refusal_set

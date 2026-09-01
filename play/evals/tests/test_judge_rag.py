@@ -1,10 +1,9 @@
-"""metrics/judge_rag.py 单元层：5 个 RAG judge + 2 个 RAG 专用 parser.
+"""metrics/judge_rag.py unit layer: 5 RAG judges + 2 RAG dedicated parsers.
 
-零网络。FakeJudgeLM 复用 test_judge_core 的 stub（按 cursor 推进 / 规则函数双策略）。
-专注于：
-  - 2 个新 parser（parse_statement_list / parse_tp_fp_fn）的鲁棒解析
-  - 5 个 judge_xxx 的 closure 形状 + 数值边界 + path B+C 数据契约（contexts 在 doc.metadata）
-"""
+Zero network. FakeJudgeLM reuses the stub of test_judge_core (advance by cursor/rule function dual strategy).
+Focus on:
+  - Robust parsing with 2 new parsers (parse_statement_list / parse_tp_fp_fn)
+  - 5 closure shapes of judge_xxx + numerical boundaries + path B+C data contract (contexts in doc.metadata)"""
 
 from __future__ import annotations
 
@@ -24,7 +23,7 @@ from evals.tests.test_judge_core import FakeJudgeLM
 
 
 def _doc_with_ctx(*, target: str | None = "ref", contexts=("ctx1", "ctx2")) -> Doc:
-    """构造带 retrieved contexts 的 Doc（path B+C：contexts 住 doc.metadata）."""
+    """Construct a Doc with retrieved contexts (path B+C: contexts and doc.metadata)."""
     return Doc(
         id="d0",
         input="q?",
@@ -37,7 +36,7 @@ def _resp(text: str = "hyp") -> Response:
     return Response(doc_id="d0", text=text)
 
 
-# ---------- parse_statement_list（4 条）------------------------------------
+# ---------- parse_statement_list (4 items)---------------------------------------------
 
 def test_parse_statement_list_handles_dash_bullets():
     text = "- 巴黎是法国首都。\n- 法国位于欧洲。"
@@ -59,36 +58,35 @@ def test_parse_statement_list_returns_empty_on_blank():
     assert parse_statement_list("\n\n  \n") == []
 
 
-# ---------- parse_tp_fp_fn（4 条）------------------------------------------
+# ---------- parse_tp_fp_fn (4 items)---------------------------------------------
 
 def test_parse_tp_fp_fn_named_tokens():
-    """显式 'TP=3 FP=1 FN=2' 形态."""
+    """Explicit 'TP=3 FP=1 FN=2' form."""
     assert parse_tp_fp_fn("TP=3 FP=1 FN=2") == (3, 1, 2)
 
 
 def test_parse_tp_fp_fn_loose_punctuation():
-    """带冒号 / 大小写混用 / 无等号也接."""
+    """With colon / mixed case / without equal sign also accepted."""
     assert parse_tp_fp_fn("Counts: TP: 5 fp 0 FN=4") == (5, 0, 4)
 
 
 def test_parse_tp_fp_fn_fallback_first_three_ints():
-    """没有命名 token 时回退取前 3 个整数."""
+    """If there is no named token, fallback to the first 3 integers."""
     assert parse_tp_fp_fn("answers: 2 1 3 (extra: 99)") == (2, 1, 3)
 
 
 def test_parse_tp_fp_fn_invalid_raises():
-    """不足 3 整数 → ValueError（强制 caller 知道 judge 输出失格）."""
+    """Less than 3 integer → ValueError (forces caller to know that judge outputs disqualification)."""
     with pytest.raises(ValueError):
         parse_tp_fp_fn("just two: 1 2")
 
 
-# ---------- judge_faithfulness（3 条）--------------------------------------
+# ---------- judge_faithfulness (3 items) ------------------------------------------
 
 def test_faithfulness_full_supported():
-    """response 拆 2 claim，两 claim 都被 'yes' 接 → faithfulness=1.0.
+    """response splits 2 claims, both claims are connected by 'yes' → faithfulness=1.0.
 
-    FakeJudgeLM cursor 顺序：[extract result, nli yes, nli yes].
-    """
+    FakeJudgeLM cursor sequence: [extract result, nli yes, nli yes]."""
     fake = FakeJudgeLM(outputs=[
         "- claim A\n- claim B",  # extract → 2 claims
         "yes",                     # NLI claim A
@@ -99,7 +97,7 @@ def test_faithfulness_full_supported():
 
 
 def test_faithfulness_partial_half():
-    """3 claim 里 2 supported / 1 unsupported → 2/3."""
+    """3 claims in 2 supported / 1 unsupported → 2/3."""
     fake = FakeJudgeLM(outputs=[
         "- a\n- b\n- c",
         "yes", "no", "yes",
@@ -110,14 +108,14 @@ def test_faithfulness_partial_half():
 
 
 def test_faithfulness_no_contexts_zero():
-    """contexts 为空 → 直接 0.0（不烧 judge 调用）."""
+    """contexts is empty → directly 0.0 (does not burn judge call)."""
     fake = FakeJudgeLM(outputs=["should not be reached"])
     f = judge_faithfulness(fake)
     doc_no_ctx = Doc(id="d0", input="q?", target="ref", metadata={"contexts": ()})
     assert f(doc_no_ctx, _resp("answer")) == 0.0
 
 
-# ---------- judge_answer_correctness（3 条）--------------------------------
+# ---------- judge_answer_correctness (3 items)--------------------------------
 
 def test_answer_correctness_perfect_f1():
     """TP=3 FP=0 FN=0 → P=1, R=1, F1=1.0."""
@@ -134,28 +132,27 @@ def test_answer_correctness_balanced_50pct():
 
 
 def test_answer_correctness_zero_when_no_overlap():
-    """TP=0 → F1=0.0（precision+recall=0 短路）."""
+    """TP=0 → F1=0.0 (precision+recall=0 short circuit)."""
     fake = FakeJudgeLM(outputs=["TP=0 FP=4 FN=2"])
     ac = judge_answer_correctness(fake)
     assert ac(_doc_with_ctx(target="gold"), _resp("wrong")) == 0.0
 
 
 def test_answer_correctness_returns_none_on_parse_failure():
-    """DECISIONS §X wave 4：judge 输出无 TP/FP/FN 三整数 → 返 None"未测得"
-    （而非 0.0；区分"判官没数清"vs"判官数到 0 TP"，对齐 phase 7 P2 体例）.
+    """DECISIONS §X wave 4: judge outputs no TP/FP/FN three integers → returns None "not measured"
+    (Instead of 0.0; distinguishes "the judge didn't count" vs "the judge counted to 0 TP", aligning with phase 7 P2 style).
 
-    parse 失败（"无 int 三元组"）= 未测得 → None；
-    degenerate 路径（target/pred 为空 / TP+FP+FN=0 / P+R=0）保留 0.0 = 合法最低分.
-    """
+    parse failed("No int triple") = Unmeasured → None;
+    degenerate path (target/pred is empty / TP+FP+FN=0 / P+R=0) reserved 0.0 = legal minimum score."""
     fake = FakeJudgeLM(outputs=["totally not parseable"])
     ac = judge_answer_correctness(fake)
     assert ac(_doc_with_ctx(target="gold"), _resp("hyp")) is None
 
 
-# ---------- judge_context_precision（2 条）--------------------------------
+# ---------- judge_context_precision (2 items)--------------------------------
 
 def test_context_precision_all_relevant():
-    """2 contexts 都 yes → 1.0."""
+    """2 contexts are yes → 1.0."""
     fake = FakeJudgeLM(outputs=["yes", "yes"])
     cp = judge_context_precision(fake)
     assert cp(_doc_with_ctx(contexts=("a", "b")), _resp()) == 1.0
@@ -169,45 +166,44 @@ def test_context_precision_half_relevant():
     assert abs(val - 2 / 3) < 1e-9
 
 
-# ---------- judge_context_recall（2 条）-----------------------------------
+# ---------- judge_context_recall (2 items) ----------------------------------
 
 def test_context_recall_full():
-    """target 拆 2 claim，两个都被 yes → 1.0."""
+    """target split 2 claims, both were yes → 1.0."""
     fake = FakeJudgeLM(outputs=["- gold A\n- gold B", "yes", "yes"])
     cr = judge_context_recall(fake)
     assert cr(_doc_with_ctx(target="gold answer"), _resp()) == 1.0
 
 
 def test_context_recall_partial():
-    """3 claim 里 2 attributable → 2/3."""
+    """3 claim in 2 attributable → 2/3."""
     fake = FakeJudgeLM(outputs=["- a\n- b\n- c", "yes", "no", "yes"])
     cr = judge_context_recall(fake)
     val = cr(_doc_with_ctx(target="gold"), _resp())
     assert abs(val - 2 / 3) < 1e-9
 
 
-# ---------- judge_answer_relevancy（2 条）---------------------------------
+# ---------- judge_answer_relevancy (2 items) ----------------------------------
 
 def test_answer_relevancy_pointwise_5():
-    """单 prompt 1-5 评分，judge 输出 5 → 5.0."""
+    """Single prompt 1-5 rating, judge output 5 → 5.0."""
     fake = FakeJudgeLM(outputs=["5"])
     ar = judge_answer_relevancy(fake)
     assert ar(_doc_with_ctx(), _resp("on-topic answer")) == 5.0
 
 
 def test_answer_relevancy_zero_on_empty_response():
-    """response 空 → 直接 0.0（不烧 judge 调用）."""
+    """response empty → straight 0.0 (does not burn judge call)."""
     fake = FakeJudgeLM(outputs=["unused"])
     ar = judge_answer_relevancy(fake)
     assert ar(_doc_with_ctx(), Response(doc_id="d0", text="")) == 0.0
 
 
 def test_answer_relevancy_returns_none_on_parse_failure():
-    """DECISIONS §X wave 4：1-5 scale parse 失败 → 返 None"未测得"
-    （区分 empty pred=0.0 合法最低分 vs parse 失败=None；
-    与 judge_pointwise / judge_safety_score 同形 None 占位协议）.
-    """
+    """DECISIONS §X wave 4: 1-5 scale parse failed → return None "Not measured"
+    (Distinguish empty pred=0.0 legal minimum score vs parse failure=None;
+    Identical to judge_pointwise / judge_safety_score None placeholder protocol)."""
     fake = FakeJudgeLM(outputs=["the response was generally"])
     ar = judge_answer_relevancy(fake)
-    # pred 非空 → 走到 parse；parse 失败 → None（不是 empty pred 那条 0.0）
+    # pred is not empty → go to parse; parse fails → None (not empty pred 0.0)
     assert ar(_doc_with_ctx(), _resp("non-empty pred")) is None

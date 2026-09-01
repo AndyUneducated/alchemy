@@ -1,14 +1,16 @@
-"""段落感知 chunker 的不变量测试。
+"""Invariant tests for the paragraph-aware chunker.
 
-`chunker.split_text` 的核心承诺（DECISIONS §2 / README）：
-  1. 输入空 / 全空白 → `[]`
-  2. 短文本（≤chunk_size）保持单 chunk 不破段落
-  3. 多段落贪心打包：单 chunk 内所有 sub-paragraph 必须是原文完整段落
-  4. 超长段落（>chunk_size）走 `_split_long` 字符级硬切，且相邻 chunk 有 overlap
-  5. 段落级 overlap：正常路径下，每个 chunk 拆 `\n\n` 后的每一段都还原为输入段落
-     —— "永远不从段落中间开始"
+Core promises of `chunker.split_text` (DECISIONS §2 / README):
+  1. Empty / all-whitespace input → `[]`
+  2. Short text (≤chunk_size) stays one chunk without breaking paragraphs
+  3. Multi-paragraph greedy packing: every sub-paragraph in a chunk is a full
+     original paragraph
+  4. Overlong paragraph (>chunk_size) uses `_split_long` char-level hard split
+     with overlap between adjacent chunks
+  5. Paragraph-level overlap: on the normal path, every segment after splitting
+     a chunk on `\n\n` restores an input paragraph — "never start mid-paragraph"
 
-这些都是纯函数行为，不需要 chromadb / ollama / 任何外部依赖。
+Pure-function behavior; no chromadb / ollama / external deps.
 """
 from __future__ import annotations
 

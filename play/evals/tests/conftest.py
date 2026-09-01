@@ -1,17 +1,16 @@
-"""Phase 3 起 live LM 测试落地，需要在 conftest 做两层 probe：
+"""Starting from Phase 3, the live LM test needs to be implemented in conftest with two layers of probes:
 
-  ① 服务可达：GET /api/tags 通 → ollama 守护进程在跑
-  ② 模型已拉：返回的 model 列表里有 EVALS_TEST_OLLAMA_MODEL（默认 qwen3.6:27b）
+  ① The service is reachable: GET /api/tags → ollama daemon is running
+  ② The model has been pulled: EVALS_TEST_OLLAMA_MODEL is included in the returned model list (default qwen3.6:27b)
 
-任一不满足 → 整文件 skip + 友好提示（告诉用户怎么 `ollama pull` 或换 env）。
-auto-probe 的好处是 CI 干净（默认无 ollama 自动 skip）+ 本地 dev 起了 ollama 自然就跑。
+If any of them are not satisfied → skip the entire file + friendly prompt (tell the user how to `ollama pull` or change env).
+The advantage of auto-probe is that the CI is clean (no ollama is automatically skipped by default) + ollama will run naturally when the local dev is started.
 
-测试默认模型选 qwen3.6:27b 的理由：本地已有避免额外 pull / judge 质量更稳让 `>=3.5` 阈值不 flake；EVALS_TEST_OLLAMA_MODEL 可降档到 qwen3.5:9b 提速（CI 友好）或升档到更大模型。
+The reason for choosing qwen3.6:27b as the default model for testing: the local version already exists to avoid extra pull/judge and the quality is more stable so that the `>=3.5` threshold is not flake; EVALS_TEST_OLLAMA_MODEL can be downshifted to qwen3.5:9b to speed up (CI friendly) or upgraded to a larger model.
 
-phase 4 起加 VDB probe（rag_retrieval / rag_qa live e2e 用）：
-  ③ vdb 目录存在：`play/rag/vdb/<name>/{chroma.sqlite3, bm25.pkl}` 都齐
-不齐 → 该 vdb 相关 live 测试 skip + 提示用户 `python ingest.py --docs ... --output vdb/<name>`.
-"""
+Add VDB probe from phase 4 (for rag_retrieval / rag_qa live e2e):
+  ③ The vdb directory exists: `play/rag/vdb/<name>/{chroma.sqlite3, bm25.pkl}`
+Uneven → The vdb-related live tests skip + prompt the user `python ingest.py --docs ... --output vdb/<name>`."""
 
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ RAG_VDB_DIR = REPO_ROOT / "play" / "rag" / "vdb"
 
 
 def _ollama_models() -> set[str] | None:
-    """返回本地已拉的 model tag 集合；服务不可达返回 None."""
+    """Returns the locally pulled model tag collection; returns None if the service is unreachable."""
     try:
         with urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=1.0) as r:
             data = json.loads(r.read())
@@ -60,7 +59,7 @@ ollama_required = pytest.mark.skipif(bool(_SKIP_REASON), reason=_SKIP_REASON)
 
 
 def _vdb_ok(name: str) -> tuple[Path | None, str]:
-    """检查 play/rag/vdb/<name>/ 是否齐备；返回 (path or None, skip_reason)."""
+    """Check if play/rag/vdb/<name>/ is complete; return (path or None, skip_reason)."""
     vdb = RAG_VDB_DIR / name
     if not vdb.exists():
         return None, (
@@ -81,7 +80,7 @@ _TEST_VDB, _TEST_VDB_SKIP = _vdb_ok("test_vdb")
 panel_vdb_required = pytest.mark.skipif(
     bool(_PANEL_SKIP), reason=_PANEL_SKIP or "panel vdb required"
 )
-# 注意：变量名前缀避开 'test_'，否则 pytest collection 会误识为 test 函数
+# Note: Avoid the variable name prefix 'test_', otherwise pytest collection will misunderstand it as the test function
 sample_vdb_required = pytest.mark.skipif(
     bool(_TEST_VDB_SKIP), reason=_TEST_VDB_SKIP or "sample (test_vdb) required"
 )
@@ -90,7 +89,7 @@ sample_vdb_required = pytest.mark.skipif(
 # ---------- agent_engine probe（phase 5）-----------------------------------
 
 def _agent_engine_ok() -> tuple[Path | None, str]:
-    """检查 play/agent_engine/ 包 + 至少一个 scenario 可见；返回 (play_dir, skip_reason)."""
+    """Check play/agent_engine/ package + at least one scenario is visible; return (play_dir, skip_reason)."""
     play_dir = REPO_ROOT / "play"
     pkg = play_dir / "agent_engine"
     if not (pkg / "__init__.py").exists():
@@ -110,7 +109,7 @@ agent_engine_required = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def ollama_model() -> str:
-    """test 用 model tag；EVALS_TEST_OLLAMA_MODEL env 可 override."""
+    """test uses model tag; EVALS_TEST_OLLAMA_MODEL env can be override."""
     return _TEST_MODEL
 
 
@@ -121,7 +120,7 @@ def ollama_base_url() -> str:
 
 @pytest.fixture(scope="session")
 def panel_vdb_path() -> Path:
-    """panel VDB 路径（rag_retrieval / rag_qa e2e live 用）；缺则 skip."""
+    """panel VDB path (used by rag_retrieval / rag_qa e2e live); skip if missing."""
     if _PANEL_VDB is None:
         pytest.skip(_PANEL_SKIP)
     return _PANEL_VDB
@@ -129,10 +128,9 @@ def panel_vdb_path() -> Path:
 
 @pytest.fixture(scope="session")
 def sample_vdb_path() -> Path:
-    """sample (test_vdb) 路径（5 行 facts，subprocess wrapper smoke 用）；缺则 skip.
+    """sample (test_vdb) path (5 lines of facts, used by subprocess wrapper smoke); if missing, skip.
 
-    fixture 名 'sample_vdb_path' 而非 'test_vdb_path' 避开 pytest collection 对 'test_' 前缀的误识.
-    """
+    The fixture name is 'sample_vdb_path' instead of 'test_vdb_path' to avoid pytest collection's misunderstanding of the 'test_' prefix."""
     if _TEST_VDB is None:
         pytest.skip(_TEST_VDB_SKIP)
     return _TEST_VDB

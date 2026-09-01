@@ -1,10 +1,9 @@
-"""models/rag_retrieve.py 单元测试：subprocess + JSON envelope 解析逻辑.
+"""models/rag_retrieve.py unit test: subprocess + JSON envelope parsing logic.
 
-零网络 / 零 VDB：用 monkeypatch 替换 subprocess.run 拦截调用 + 注入伪 envelope，
-锁住"调用形参"和"envelope → (ids, contents) 解析"两条契约.
+Zero Network/Zero VDB: Replace subprocess.run interception calls with monkeypatch + inject fake envelope,
+Lock the two contracts of "calling formal parameters" and "envelope → (ids, contents) parsing".
 
-live e2e（真跑 play/rag/query.py + ollama）放在 test_rag_live.py 走 vdb-probe gate.
-"""
+live e2e (real run play/rag/query.py + ollama) is placed in test_rag_live.py and runs vdb-probe gate."""
 
 from __future__ import annotations
 
@@ -40,14 +39,14 @@ def test_subprocess_command_shape(monkeypatch):
     assert "--mode" in captured["cmd"]
     assert "hybrid" in captured["cmd"]
     assert "--json" in captured["cmd"]
-    # cwd 必须 = RAG_DIR（play/rag/query.py 走相对 import config / bm25）
+    # cwd must = RAG_DIR (play/rag/query.py is relative to import config/bm25)
     assert captured["cwd"] == str(RAG_DIR)
     assert ids == ["a.txt"]
     assert contents == ["x"]
 
 
 def test_rerank_flag_added_when_enabled(monkeypatch):
-    """rerank=True → 命令多一个 --rerank flag."""
+    """rerank=True → One more command --rerank flag."""
     captured = {}
 
     def fake_run(cmd, **kwargs):
@@ -66,7 +65,7 @@ def test_rerank_flag_added_when_enabled(monkeypatch):
 
 
 def test_dedup_chunks_to_unique_sources(monkeypatch):
-    """同源 chunk 多条 → 仅保留首位 rank（去重 by source）."""
+    """Multiple chunks from the same origin → only retain the first rank (remove duplication by source)."""
 
     def fake_run(cmd, **kwargs):
         envelope = {
@@ -74,7 +73,7 @@ def test_dedup_chunks_to_unique_sources(monkeypatch):
             "data": [
                 {"source": "doc_a.txt", "content": "chunk 1 of A"},
                 {"source": "doc_b.txt", "content": "chunk 1 of B"},
-                {"source": "doc_a.txt", "content": "chunk 2 of A"},  # 同源应被剔
+                {"source": "doc_a.txt", "content": "chunk 2 of A"},  # Homology should be eliminated
                 {"source": "doc_c.txt", "content": "chunk 1 of C"},
             ],
             "meta": {},
@@ -91,7 +90,7 @@ def test_dedup_chunks_to_unique_sources(monkeypatch):
 
 
 def test_subprocess_failure_raises_with_stderr(monkeypatch):
-    """play/rag/query.py 非零退出 → RuntimeError 携 stderr（fail-fast 而非静默空 list）."""
+    """play/rag/query.py non-zero exit → RuntimeError with stderr (fail-fast instead of silent empty list)."""
 
     def fake_run(cmd, **kwargs):
         return subprocess.CompletedProcess(
@@ -106,7 +105,7 @@ def test_subprocess_failure_raises_with_stderr(monkeypatch):
 
 
 def test_skip_empty_source_chunks(monkeypatch):
-    """source 字段缺失或空 → 该 chunk 被跳（不污染 ids 列表）."""
+    """The source field is missing or empty → the chunk is skipped (does not pollute the ids list)."""
 
     def fake_run(cmd, **kwargs):
         envelope = {

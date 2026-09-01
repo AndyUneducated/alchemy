@@ -1,17 +1,17 @@
 """Download MMLU 6-subject slice (~96 examples) → gold.jsonl.
 
-数据契约（每行）：
-  - id        : "<subject>_<idx>"（subject 内 0-based 顺序）
-  - input     : 题干（不含选项；选项在 metadata 里）
-  - target    : "A" / "B" / "C" / "D"
-  - choices   : tuple[str, str, str, str]（与 Doc.choices 字段对齐）
-  - metadata  :
-      subject : MMLU subject name（用于 by_subject breakdown）
-      raw_choices : 四个选项原文 list（与 choices 重复，但保留 list 形态便于 prompt 模板）
+Data contract (per row):
+  - id: "<subject>_<idx>" (0-based order within subject)
+  - input: question stem (without options; options are in metadata)
+  - target : "A" / "B" / "C" / "D"
+  - choices : tuple[str, str, str, str] (aligned with Doc.choices field)
+  - metadata:
+      subject: MMLU subject name (for by_subject breakdown)
+      raw_choices: original list of four options (duplicate with choices, but retains the list form for prompt template)
 
-抽样设计（按 plan §1.E 6 个 subject × 16 例 ≈ 100 例覆盖 STEM/人文/社科/常识）：
+Sampling design (according to plan §1.E 6 subjects × 16 cases ≈ 100 cases covering STEM/humanities/social sciences/general knowledge):
 
-|subject|category|样本数|
+|subject|category|Number of samples|
 |---|---|---|
 |abstract_algebra|STEM-math|16|
 |college_computer_science|STEM-cs|16|
@@ -20,12 +20,11 @@
 |philosophy|humanities|16|
 |econometrics|social science|16|
 
-每个 subject 的 test split 各取前 16 行——MMLU test split 行序与原 Hendrycks CSV 一致.
+The test split of each subject takes the first 16 rows - the row order of the MMLU test split is consistent with the original Hendrycks CSV.
 
 Usage:
     cd play/evals/data/mmlu_slice
-    python _fetch.py
-"""
+    python_fetch.py"""
 
 from __future__ import annotations
 
@@ -58,7 +57,7 @@ LETTERS = ["A", "B", "C", "D"]
 
 
 def _download_parquet(subject: str) -> Path:
-    """走 curl + 缓存到 $TMPDIR——HF revision 钉死，缓存按 (subject, rev) 复用."""
+    """Go curl + cache to $TMPDIR - HF revision is nailed, cache is reused by (subject, rev)."""
     url = URL_TEMPLATE.format(rev=HF_REVISION, subject=subject)
     out = Path(tempfile.gettempdir()) / f"mmlu_{subject}_{HF_REVISION[:8]}.parquet"
     if not out.exists():
@@ -83,7 +82,7 @@ def main() -> None:
                 "id": f"{subject}_{i}",
                 "input": row["question"],
                 "target": LETTERS[answer_idx],
-                "choices": choices,  # 给 Doc.choices 用
+                "choices": choices,  # For Doc.choices
                 "metadata": {
                     "subject": subject,
                     "raw_choices": choices,

@@ -1,17 +1,16 @@
-"""OllamaLM 适配层 live 测试（auto-probe gate）.
+"""OllamaLM adaptation layer live test (auto-probe gate).
 
-唯一一个真正打 Ollama HTTP 的文件。conftest 双层 probe（服务可达 + 模型已拉）任一失败 → 整文件 skip + 友好提示.
+The only one that really hits Ollama HTTP. Either of the conftest double-layer probe (service reachable + model pulled) fails → skip the entire file + friendly prompt.
 
-不锁具体输出文本（模型差异 + 温度抖动）；只锁形状与边界：
-  - generate_until 返回非空
-  - until 截断生效
-  - max_tokens 上界生效
-  - batched 顺序独立
-  - name 字段格式
-  - loglikelihood 抛 NotImplementedError（phase 9 calibration 再开）
+The specific output text (model difference + temperature jitter) is not locked; only the shape and boundary are locked:
+  - generate_until returns non-empty
+  - until truncation takes effect
+  - max_tokens upper bound takes effect
+  - batched order independent
+  - name field format
+  - loglikelihood throws NotImplementedError (restart phase 9 calibration)
 
-按 plan §二.4 6 条断言；#5 / #6 是结构性测试不依赖 live，但保留在本文件以集中"OllamaLM 单元".
-"""
+As per plan §2.4 6 assertions; #5/#6 are structural tests that do not depend on live, but are kept in this document to centralize the "OllamaLM unit"."""
 
 from __future__ import annotations
 
@@ -25,7 +24,7 @@ pytestmark = ollama_required
 
 
 def test_ollama_generate_until_returns_nonempty(ollama_model: str):
-    """端到端 sanity：能拿到非空 text response."""
+    """End-to-end sanity: can get non-empty text response."""
     lm = OllamaLM(model=ollama_model)
     req = Request(
         doc_id="d0",
@@ -52,12 +51,12 @@ def test_ollama_until_stop_seq_truncates(ollama_model: str):
     )
     [resp] = lm.generate_until([req])
     text = resp.text or ""
-    # 截断 contract：返回文本不含换行（或换行被 stop 吞掉，剩下是首句）
+    # Truncate contract: the returned text does not contain line breaks (or the line breaks are swallowed by stop, leaving the first sentence)
     assert "\n" not in text
 
 
 def test_ollama_max_tokens_capped(ollama_model: str):
-    """max_tokens 极小值（4）能封顶——返回的 token 数明显少于无限制 case."""
+    """The minimum value of max_tokens (4) can be capped - the number of tokens returned is significantly less than the unlimited case."""
     lm = OllamaLM(model=ollama_model)
     req = Request(
         doc_id="d0",
@@ -67,12 +66,12 @@ def test_ollama_max_tokens_capped(ollama_model: str):
     )
     [resp] = lm.generate_until([req])
     text = resp.text or ""
-    # 4 token 在中文 BPE 下 < 16 char loose 上界（不同模型 tokenizer 差异）
+    # 4 token under Chinese BPE < 16 char loose upper bound (different model tokenizer differences)
     assert len(text) <= 32, f"max_tokens=4 should produce short output, got {len(text)} chars"
 
 
 def test_ollama_batched_calls_independent(ollama_model: str):
-    """两条 request 顺序与输入一致；doc_id 不串供（曾发生过的客户端 bug）."""
+    """The order of the two requests is consistent with the input; doc_id does not collide (a client bug that has occurred)."""
     lm = OllamaLM(model=ollama_model)
     reqs = [
         Request(doc_id="alpha", prompt="只回答字母 X：", max_tokens=4, until=("\n",)),
@@ -85,30 +84,27 @@ def test_ollama_batched_calls_independent(ollama_model: str):
 
 
 def test_ollama_lm_name_includes_model_tag(ollama_model: str):
-    """`name == ollama:<model>`——落到 EvalResult.model 字段，show 命令能区分.
+    """`name == ollama:<model>`——Falls into the EvalResult.model field and can be distinguished by the show command.
 
-    结构性测试，不需 live 网络（但放在本文件保持 OllamaLM 单元集中）.
-    """
+    Structural testing, no live network required (but placed in this document to keep the OllamaLM unit centralized)."""
     lm = OllamaLM(model=ollama_model)
     assert lm.name == f"ollama:{ollama_model}"
 
 
 def test_ollama_loglikelihood_not_implemented(ollama_model: str):
-    """loglikelihood 走 ABC 默认抛 NotImplementedError；phase 9 calibration 再开.
+    """Loglikelihood runs ABC and throws NotImplementedError by default; restart phase 9 calibration.
 
-    结构性测试.
-    """
+    Structural testing."""
     lm = OllamaLM(model=ollama_model)
     with pytest.raises(NotImplementedError):
         lm.loglikelihood([Request(doc_id="d0", prompt="test", request_type="loglikelihood")])
 
 
 def test_ollama_response_carries_efficiency_fields(ollama_model: str):
-    """phase 6：Ollama /api/generate 返 prompt_eval_count / eval_count / total_duration
-    → Response.usage / latency_ms 字段被填上（非 None + 数值合理）.
+    """phase 6: Ollama /api/generate returns prompt_eval_count / eval_count / total_duration
+    → Response.usage / latency_ms field is filled in (not None + reasonable value).
 
-    Ollama 0.1+ 默认返回这三字段；老 daemon 缺字段 → None（efficiency_aggregated 兼容）.
-    """
+    Ollama 0.1+ returns these three fields by default; the old daemon lacks fields → None (efficiency_aggregated compatible)."""
     lm = OllamaLM(model=ollama_model)
     req = Request(
         doc_id="d0",
@@ -117,9 +113,9 @@ def test_ollama_response_carries_efficiency_fields(ollama_model: str):
         until=("\n",),
     )
     [resp] = lm.generate_until([req])
-    # 至少 latency_ms 非 None（total_duration 是 stable contract）
+    # At least latency_ms is not None (total_duration is a stable contract)
     assert resp.latency_ms is not None and resp.latency_ms > 0
-    # usage 同 contract：有 tokens_in / tokens_out
+    # usage is the same as contract: there are tokens_in / tokens_out
     assert resp.usage is not None
     assert resp.usage.tokens_in is not None and resp.usage.tokens_in > 0
     assert resp.usage.tokens_out is not None and resp.usage.tokens_out > 0

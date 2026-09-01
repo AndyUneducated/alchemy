@@ -1,31 +1,31 @@
 """Triple extractor: agent_engine envelope + scenario → list of (failed, nudge, corrected) triples.
 
-DECISIONS §13 后直连 `agent_engine.Scenario / Result / TurnView`：transcript 切段
-（`Result.turns()`，`TurnView.start_offset` 提供全局 offset）+ 段内 attempt 切分
-（`TurnView.attempts(agent)`）+ 静态 step 展开（`Scenario.expanded_turns()`，含
-`instruction` 透传）全部由 agent_engine 提供。§16 升级到 `TranscriptEntry` typed
-union（`SpeakerEntry / ToolCallEntry / ArtifactEventEntry / ...`），消费侧用 isinstance
-dispatch 取字段，不再 `entry.get("...")` 防御。本模块仅保留：
-  - "first attempt 失败 → 后续 attempt 成功" 配对挑选
-  - failure_mode 分类（仍 `from evals.metrics.nudge import classify_failure_mode`，
-    这是 evals 公开面，跨项目 import 合法）
-  - SFT triple schema 形态
+DECISIONS §13 Post-direct connection `agent_engine.Scenario / Result / TurnView`: transcript segmentation
+(`Result.turns()`, `TurnView.start_offset` provide global offset) + intra-segment attempt segmentation
+(`TurnView.attempts(agent)`) + static step expansion (`Scenario.expanded_turns()`, including
+`instruction` transparent transmission) are all provided by agent_engine. §16 Upgrade to `TranscriptEntry` typed
+union (`SpeakerEntry / ToolCallEntry / ArtifactEventEntry / ...`), use isinstance on the consumer side
+dispatch takes fields, no more `entry.get("...")` defense. This module only retains:
+  - "first attempt fails → subsequent attempts succeed" pair selection
+  - failure_mode classification (still `from evals.metrics.nudge import classify_failure_mode`,
+    This is the public side of evals, cross-project import is legal)
+  - SFT triple schema form
 
-Triple schema（与 plan §Schemas 对齐）：
+Triple schema (aligned with plan §Schemas):
   - run_id, scenario, turn_idx, step_id, agent, required_tool, failure_mode
-  - context: transcript prefix until first attempt's speaker entry（list[TranscriptEntry]，
-    JSON 序列化时由 dataclasses.asdict 转 list[dict]）
+  - context: transcript prefix until first attempt's speaker entry (list[TranscriptEntry],
+    Convert dataclasses.asdict to list[dict] during JSON serialization)
   - instruction: step.instruction (raw scenario YAML)
-  - failed_response: first attempt 的 SpeakerEntry.content（诊断用，不进 F1 input）
-  - nudge: 引擎硬编码 nudge 文本（按 required_tool 复原；不进 F1 input）
-  - corrected_response: 最终成功 attempt 的 SpeakerEntry.content（F1 target）
+  - SpeakerEntry.content of failed_response: first attempt (for diagnostic purposes, does not enter F1 input)
+  - nudge: engine hardcoded nudge text (restored by required_tool; do not enter F1 input)
+  - corrected_response: SpeakerEntry.content (F1 target) of the final successful attempt
 
-不产生 triple 的情况：
-  - 第一次 attempt 就成功 → 无失败信号
-  - 全部 attempts 失败 → 无正样本，丢弃
-  - segment 数 < expected turn_idx（subprocess 中途崩）→ 无 attempt 数据
-  - failure_mode == 'wrong_args'（deferred to Phase 5 in metrics/nudge.py）→ 防御性 skip
-"""
+The case where triple is not generated:
+  - The first attempt is successful → no failure signal
+  - All attempts failed → no positive samples, discarded
+  - segment number < expected turn_idx (subprocess crashes midway) → no attempt data
+  - failure_mode == 'wrong_args' (deferred to Phase 5 in metrics/nudge.py) → defensive skip"""
+  - failure_mode == 'wrong_args' (deferred to Phase 5 in metrics/nudge.py) → defensive skip"""
 
 from __future__ import annotations
 
@@ -35,8 +35,19 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-# agent_engine 与 evals.metrics.nudge.classify_failure_mode 都是同 monorepo 姊妹包，
-# 单向 sys.path 注入即可让 import 解析；与 evals/_ae_bridge.py 同思路.
+# agent_engine and evals.metrics.nudge.classify_failure_mode are both sister packages of the same monorepo.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
+# One-way sys.path injection allows import to resolve; the same idea as evals/_ae_bridge.py.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAY_DIR = REPO_ROOT / "play"
 if str(PLAY_DIR) not in sys.path:
@@ -56,21 +67,21 @@ from evals.metrics.nudge import (  # noqa: E402  pylint: disable=wrong-import-po
     classify_failure_mode,
 )
 
-# 引擎 nudge 文本格式（discussion.py 硬编码）；按 required_tool 复原
-NUDGE_TEMPLATE = "你刚才没有调用 `{tool}` 工具。请现在补上该调用以完成本轮任务。"
+# Engine nudge text format (hardcoded in discussion.py); press required_tool to restore
+NUDGE_TEMPLATE = "You did not call the `{tool}` tool just now. Please make the call now to complete this round of tasks."
 
-# scenarios_root / filename 解析：默认走 mine_triples 同款 fast 副本（max_retries=0
-# / 删 open+finalize / 短 max_tokens），--upstream 切回 agent_engine/scenarios/<name>.md.
-# 必须与 envelope 生成时所用 scenario YAML 保持一致——Scenario.expanded_turns 按 step
-# 顺序展开 turn_idx，fast 副本删了 open / finalize 后 turn_idx 与上游相差 1，混用会
-# 导致 expected agent / required_tool / step.instruction 全部错位（synthesize 仍 0
-# triple，extractor 看 attempts 跨 segment 也会全 miss）.
+# scenarios_root / filename analysis: default to the same fast copy of mine_triples (max_retries=0
+# / delete open+finalize / short max_tokens), --upstream switch back to agent_engine/scenarios/<name>.md.
+# Must be consistent with the scenario YAML used when generating the envelope - Scenario.expanded_turns press step
+# Expand turn_idx sequentially. After the fast copy deletes open / finalize, the difference between turn_idx and the upstream is 1. Mixing will cause
+# Cause expected agent / required_tool / step.instruction to be all misplaced (synthesize is still 0
+# triple, extractor will miss all attempts across segments).
 FAST_SCENARIOS_DIR = REPO_ROOT / "play" / "agent_sft" / "data" / "scenarios"
 UPSTREAM_SCENARIOS_DIR = REPO_ROOT / "play" / "agent_engine" / "scenarios"
 
 
 def resolve_scenario_path(scenario_name: str, *, upstream: bool) -> Path:
-    """Mirror mine_triples.py 的 fast / upstream 路径选择策略."""
+    """Fast / upstream path selection strategy for Mirror mine_triples.py."""
     if upstream:
         return UPSTREAM_SCENARIOS_DIR / f"{scenario_name}.md"
     return FAST_SCENARIOS_DIR / f"{scenario_name}_fast.md"
@@ -78,7 +89,7 @@ def resolve_scenario_path(scenario_name: str, *, upstream: bool) -> Path:
 
 @dataclass
 class Triple:
-    """一条 (failed, nudge, corrected) 监督三元组，准备喂给 formatter."""
+    """A (failed, nudge, corrected) supervision triple, ready to be fed to the formatter."""
 
     run_id: int
     scenario: str
@@ -97,8 +108,8 @@ class Triple:
 def _attempt_called_required(
     events: list[TranscriptEntry], agent: str, tool: str,
 ) -> bool:
-    """attempt 内是否有 `(caller=agent, tool=required_tool)` 工具事件——同 agent_engine
-    `discussion._called_tool` 检查面."""
+    """Is there a `(caller=agent, tool=required_tool)` tool event in attempt - the same as agent_engine"""
+`discussion._called_tool` inspection surface."""
     for e in events:
         if isinstance(e, (ToolCallEntry, ArtifactEventEntry)):
             if e.caller == agent and e.tool == tool:
@@ -134,7 +145,7 @@ def extract_triples(
 
         seg_idx = turn_idx - 1
         if seg_idx >= len(turns):
-            continue  # subprocess 中途崩 / scenario 截断 — 无 attempt 可挖
+            continue  # subprocess crashes/scenario truncation — no attempt to mine
         tv = turns[seg_idx]
 
         attempts = tv.attempts(agent)
@@ -143,9 +154,9 @@ def extract_triples(
             if isinstance(e, SpeakerEntry) and e.speaker == agent
         ]
         if not attempts or not speaker_entries:
-            continue  # agent 在该 segment 完全沉默
+            continue  #The agent is completely silent in this segment
         if _attempt_called_required(attempts[0], agent, required_tool):
-            continue  # 第一次 attempt 就成功 — 无 supervision signal
+            continue  # The first attempt succeeds — no supervision signal
 
         success_idx = next(
             (
@@ -155,13 +166,13 @@ def extract_triples(
             None,
         )
         if success_idx is None:
-            continue  # 全部失败 — 无正样本
+            continue  # All failed - no positive samples
         if success_idx >= len(speaker_entries):
-            continue  # 防御：speaker entry 与 attempt 应 1:1 对应
+            continue  # Defense: speaker entry and attempt should correspond 1:1
 
         failure_mode = classify_failure_mode(attempts[0], agent, required_tool)
         if failure_mode == "wrong_args":
-            continue  # deferred；防御性 skip
+            continue  # deferred; defensive skip
 
         first_speaker_local_idx, first_speaker_entry = speaker_entries[0]
         _, success_speaker_entry = speaker_entries[success_idx]
@@ -202,6 +213,7 @@ def write_triples_jsonl(triples: list[Triple], out_path: str | Path) -> None:
 
 def _parse_envelope_name(stem: str) -> tuple[str, int]:
     """'tool_chain-r3' → ('tool_chain', 3)."""
+    """'tool_chain-r3' → ('tool_chain', 3)."""
     if "-r" not in stem:
         raise ValueError(f"envelope filename must match '<scenario>-r<N>': {stem!r}")
     scen, _, run = stem.rpartition("-r")
@@ -227,12 +239,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--upstream", action="store_true",
-        help="用上游 agent_engine/scenarios/<name>.md 解析（与 baseline eval 一致）；"
-             "默认走 fast 副本 data/scenarios/<name>_fast.md，必须匹配 mine_triples 用的版本",
+help="Use upstream agent_engine/scenarios/<name>.md to parse (consistent with baseline eval);"
+"The default is to use fast copy data/scenarios/<name>_fast.md, which must match the version used by mine_triples",
     )
     parser.add_argument(
         "--scenarios-root", default=None,
-        help="显式覆盖 scenarios 目录，少用——优先用 --upstream / 默认 fast 副本",
+help="Explicitly overwrite the scenarios directory, use less - prefer --upstream / default fast copy",
     )
     args = parser.parse_args(argv)
 

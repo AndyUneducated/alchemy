@@ -1,16 +1,16 @@
-"""ArtifactStore + 6 工具的契约单测（DECISIONS §6 / §9）.
+"""ArtifactStore + 6 tools contract tests (DECISIONS §6 / §9).
 
-直接对 `ArtifactStore.dispatch` / `render` / `build_tool_defs` 打点，不经
-Engine / Discussion / Agent ——锁死 artifact 子系统的对外 API 形态：
-  - 6 工具命中 / 未命中各自的 OK / error JSON
-  - section mode (replace / append) 的写入边界
-  - `tool_owners` ACL 同时影响 `build_tool_defs` (LLM 看不见) 与
-    `dispatch` (硬路径阻断 caller 误调)
-  - `finalize_artifact` 幂等
-  - `drain_events` 单次取 + 清空
-  - `render()` markdown 形态稳定（消费者 `--save-artifact` 文件依赖）
+Direct tests on `ArtifactStore.dispatch` / `render` / `build_tool_defs`, bypassing
+Engine / Discussion / Agent — locks artifact subsystem public API:
+  - 6 tools OK / error JSON paths
+  - section mode (replace / append) write boundaries
+  - `tool_owners` ACL affects `build_tool_defs` (LLM invisible) and
+    `dispatch` (hard block wrong caller)
+  - `finalize_artifact` idempotent
+  - `drain_events` single take + clear
+  - `render()` markdown shape stable (`--save-artifact` consumers depend on it)
 
-任何对 artifact 工具语义 / 事件 schema / ACL 行为的破坏性改动都会让本测试失败.
+Breaking artifact tool semantics / event schema / ACL behavior fails this test.
 """
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def test_write_section_missing_name_returns_error():
 
 
 def test_write_section_append_only_section_returns_error():
-    """声明 mode=append 的 section 用 write_section 写入 → error，不修改状态."""
+    """Declared mode=append section + write_section → error, state unchanged."""
     store = ArtifactStore(initial_sections=[{"name": "记录", "mode": "append"}])
     out = _payload(store.dispatch(
         "write_section", {"name": "记录", "content": "x"}, caller="A",
@@ -192,8 +192,8 @@ def test_finalize_artifact_requires_decision_and_rationale():
 # ---------- tool_owners ACL -------------------------------------------
 
 def test_build_tool_defs_filters_by_tool_owners_acl():
-    """`tool_owners` 限制：未授权 caller 的 `build_tool_defs` 不返回该 tool——
-    LLM 在 schema 层就看不见."""
+    """`tool_owners` restriction: unauthorized caller's `build_tool_defs` omits tool —
+    LLM never sees it in schema."""
     store = ArtifactStore(tool_owners={
         "finalize_artifact": ["M"],
         "propose_vote": ["M"],
@@ -204,13 +204,13 @@ def test_build_tool_defs_filters_by_tool_owners_acl():
     assert "propose_vote" in moderator_defs
     assert "finalize_artifact" not in member_defs
     assert "propose_vote" not in member_defs
-    # 未声明的工具默认全员可见
+    # undeclared tools default to visible to all agents
     assert "read_artifact" in member_defs
     assert "cast_vote" in member_defs
 
 
 def test_dispatch_blocks_caller_not_in_tool_owners():
-    """ACL 是双层防御：即使 LLM 凭空伪造一个 tool_call，dispatch 层也拦得住."""
+    """ACL is two-layer defense: even if LLM fabricates tool_call, dispatch blocks it."""
     store = ArtifactStore(tool_owners={"finalize_artifact": ["M"]})
     out = _payload(store.dispatch(
         "finalize_artifact",
@@ -242,8 +242,8 @@ def test_dispatch_unknown_tool_returns_error():
 
 
 def test_artifact_tool_names_constant_matches_handlers():
-    """`ARTIFACT_TOOL_NAMES` 是 `scenario.py` 路由 artifact 工具的依据；
-    若有人加 / 删 artifact 工具但忘了同步常量，本测试立刻发现."""
+    """`ARTIFACT_TOOL_NAMES` is how `scenario.py` routes artifact tools;
+    add/remove artifact tool without syncing constant fails here immediately."""
     store = ArtifactStore()
     for name in ARTIFACT_TOOL_NAMES:
         out = store.dispatch(name, {}, caller="A")
@@ -254,7 +254,7 @@ def test_artifact_tool_names_constant_matches_handlers():
 
 
 def test_render_includes_sections_votes_and_final_decision():
-    """`--save-artifact` 落盘格式锁定：消费者期望 markdown 形如
+    """`--save-artifact` on-disk format locked: consumers expect markdown like
     `## <section>\n<body>` + `## Votes` block + `## Final Decision`."""
     store = ArtifactStore(initial_sections=["数据"])
     store.sections["数据"] = "value"
@@ -278,7 +278,7 @@ def test_render_includes_sections_votes_and_final_decision():
 
 @pytest.mark.parametrize("tool", sorted(ARTIFACT_TOOL_NAMES))
 def test_each_artifact_tool_appears_in_build_tool_defs_when_unrestricted(tool):
-    """无 ACL 的 store 应当对**任何 caller** 暴露所有 6 个 artifact 工具."""
+    """Store without ACL exposes all 6 artifact tools to any caller."""
     store = ArtifactStore()
     names = {d["function"]["name"] for d in store.build_tool_defs("anyone")}
     assert tool in names

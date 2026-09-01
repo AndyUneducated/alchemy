@@ -1,19 +1,18 @@
-"""CLI 用户命令端到端：list-tasks / show / build_parser / main(argv) 入口锁.
+"""CLI user commands end-to-end: list-tasks / show / build_parser / main(argv) entry lock.
 
-补 `test_cli_spec.py` 的盲区 —— 那边只覆盖 `parse_model_spec` /
-`_build_task_with_optional_deps` / `_fmt_kv` / `_print_aggregated` 等内部 helper，
-不打用户真实入口；只要 argparse 子命令名 / required flag 漂移 / set_defaults 漏写
-`func`，CLI 用户立即炸但本地 pytest 全绿.
+Fill in the blind area of `test_cli_spec.py` - only `parse_model_spec` is covered there /
+`_build_task_with_optional_deps` / `_fmt_kv` / `_print_aggregated` and other internal helpers,
+No real user entry is required; only the argparse subcommand name/required flag drift/set_defaults is missing
+`func`, CLI user immediately explodes but local pytest is all green.
 
-本文件锁：
-  ① `cmd_list_tasks(args)` — 端到端打印 12 个 task name + return 0
-  ② `cmd_show` 跨 run 索引浏览 — 真起 storage.save 落盘 + 按 task/mode/last 过滤
-  ③ `cmd_show` 单 run drill-down — 验 result.json json.dumps + 可选 samples
-  ④ `build_parser()` argparse 形状 — required flag / choices / defaults
-  ⑤ `main(argv)` 入口 — 显式 argv list 走全栈 dispatch（替代 sys.argv 副作用）
+This file lock:
+  ① `cmd_list_tasks(args)` — print 12 task names end-to-end + return 0
+  ② `cmd_show` Cross-run index browsing - start storage.save and filter + filter by task/mode/last
+  ③ `cmd_show` single run drill-down — check result.json json.dumps + optional samples
+  ④ `build_parser()` argparse shape — required flag / choices / defaults
+  ⑤ `main(argv)` entry - explicit argv list uses full stack dispatch (replacing sys.argv side effects)
 
-零网络 / 零 LM：所有打分子命令路径用 `MockLM(mode='gold')` 或假 result 落盘.
-"""
+Zero network/zero LM: Use `MockLM(mode='gold')` or false result to drop all sub-command paths."""
 
 from __future__ import annotations
 
@@ -23,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from evals import tasks  # noqa: F401  — @register_task 副作用
+from evals import tasks  # noqa: F401 — @register_task side effects
 from evals.api import EvalResult, SampleResult
 from evals.cli import (
     build_parser,
@@ -38,7 +37,7 @@ from evals.storage import save
 # ---------- ① cmd_list_tasks ---------------------------------------------
 
 def test_cmd_list_tasks_prints_all_registered_names_and_returns_zero(capsys):
-    """全 12 task 一行一名打印 + return 0；与 `list_tasks()` 同源，UI 不漂."""
+    """All 12 tasks are printed one per line + return 0; it has the same origin as `list_tasks()`, and the UI is not beautiful."""
     rc = cmd_list_tasks(argparse.Namespace())
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
@@ -47,13 +46,13 @@ def test_cmd_list_tasks_prints_all_registered_names_and_returns_zero(capsys):
         f"  printed: {out}\n"
         f"  expected: {list_tasks()}"
     )
-    # 每行恰好一个 token（无前缀格式化）—— 让 `python -m evals list-tasks | xargs -I X ...`
-    # bash 管道用法稳定（避免误加 bullet / 缩进）.
+    # Exactly one token per line (no prefix formatting) - let `python -m evals list-tasks | xargs -I X ...`
+    # Stable bash pipe usage (avoid accidentally adding bullet / indentation).
     for line in out:
         assert line.strip() == line and " " not in line, f"task name 行带额外字符：{line!r}"
 
 
-# ---------- helpers：构造 fake EvalResult / 落盘 -------------------------
+# ---------- helpers: construct fake EvalResult / drop disk -----------------------
 
 def _make_eval_result(
     *,
@@ -87,10 +86,10 @@ def _make_eval_result(
     )
 
 
-# ---------- ② cmd_show 跨 run 索引浏览 ----------------------------------
+# ---------- ② cmd_show cross-run index browsing ----------------------------------
 
 def test_cmd_show_lists_index_rows_when_no_run_id(tmp_path, capsys):
-    """无 --run-id → 走 index.jsonl 列出所有 run，按 created_at 排序."""
+    """None --run-id → Go to index.jsonl to list all runs, sorted by created_at."""
     save(_make_eval_result(run_id="20250101T000001"), runs_dir=tmp_path)
     save(
         _make_eval_result(run_id="20250101T000002", task="qa_open", accuracy=0.5),
@@ -112,7 +111,7 @@ def test_cmd_show_lists_index_rows_when_no_run_id(tmp_path, capsys):
 
 
 def test_cmd_show_filter_by_task(tmp_path, capsys):
-    """--task X → 只列该 task 的 run."""
+    """--task X → List only the runs of this task."""
     save(_make_eval_result(run_id="20250101T000001"), runs_dir=tmp_path)
     save(_make_eval_result(run_id="20250101T000002", task="qa_open"), runs_dir=tmp_path)
 
@@ -126,7 +125,7 @@ def test_cmd_show_filter_by_task(tmp_path, capsys):
 
 
 def test_cmd_show_filter_by_mode(tmp_path, capsys):
-    """--mode score → 只列 score run（与 run mode 区分）."""
+    """--mode score → List only score run (different from run mode)."""
     save(_make_eval_result(run_id="20250101T000001", mode="score"), runs_dir=tmp_path)
     save(_make_eval_result(run_id="20250101T000002", mode="run"), runs_dir=tmp_path)
 
@@ -140,7 +139,7 @@ def test_cmd_show_filter_by_mode(tmp_path, capsys):
 
 
 def test_cmd_show_last_n_keeps_only_tail(tmp_path, capsys):
-    """--last N → 仅显示按 created_at 排序后的最后 N 条."""
+    """--last N → Show only the last N items sorted by created_at."""
     for i in range(5):
         save(
             _make_eval_result(run_id=f"20250101T0000{i:02d}", accuracy=i / 10),
@@ -153,13 +152,13 @@ def test_cmd_show_last_n_keeps_only_tail(tmp_path, capsys):
     cmd_show(args)
     lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
     assert len(lines) == 2
-    # 取最后两条按 created_at 排序：03 + 04
+    # Take the last two items and sort them by created_at: 03 + 04
     assert "20250101T000003" in lines[0]
     assert "20250101T000004" in lines[1]
 
 
 def test_cmd_show_empty_runs_dir_prints_nothing(tmp_path, capsys):
-    """index.jsonl 不存在（首次跑 / 误删）→ 0 行输出 + return 0（不 crash）."""
+    """index.jsonl does not exist (first run/accidentally deleted) → 0 lines of output + return 0 (no crash)."""
     args = argparse.Namespace(
         run_id=None, task=None, mode=None, last=None, samples=0, runs_dir=tmp_path,
     )
@@ -168,10 +167,10 @@ def test_cmd_show_empty_runs_dir_prints_nothing(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-# ---------- ③ cmd_show 单 run drill-down --------------------------------
+# ---------- ③ cmd_show single run drill-down --------------------------------
 
 def test_cmd_show_with_run_id_dumps_result_json(tmp_path, capsys):
-    """--run-id X → result.json 全文 dump（json.dumps indent=2）."""
+    """--run-id X → result.json full text dump (json.dumps indent=2)."""
     save(_make_eval_result(run_id="20250101T000001", n=3), runs_dir=tmp_path)
 
     args = argparse.Namespace(
@@ -181,7 +180,7 @@ def test_cmd_show_with_run_id_dumps_result_json(tmp_path, capsys):
     rc = cmd_show(args)
     assert rc == 0
     out = capsys.readouterr().out
-    # 应是格式化 json（indent=2 → "  \"" 缩进）
+    # Should be formatted json (indent=2 → " \"" indent)
     parsed = json.loads(out)
     assert parsed["run_id"] == "20250101T000001"
     assert parsed["n"] == 3
@@ -189,7 +188,7 @@ def test_cmd_show_with_run_id_dumps_result_json(tmp_path, capsys):
 
 
 def test_cmd_show_with_run_id_and_samples_prints_per_sample(tmp_path, capsys):
-    """--run-id X --samples K → result json 后追加 K 行 sample 摘要."""
+    """--run-id X --samples K → Append K lines of sample summary after result json."""
     save(_make_eval_result(run_id="20250101T000001", n=4), runs_dir=tmp_path)
 
     args = argparse.Namespace(
@@ -199,18 +198,18 @@ def test_cmd_show_with_run_id_and_samples_prints_per_sample(tmp_path, capsys):
     cmd_show(args)
     out = capsys.readouterr().out
     assert "samples (first 2)" in out
-    # 摘要行格式："  d0  pred=...  target=...  acc=..."
+    # Summary line format: "d0 pred=... target=... acc=..."
     assert "d0" in out
     assert "d1" in out
     assert "pred=pos" in out
     assert "target=pos" in out
-    # 仅打 2 条不打 d2/d3
+    # Only play 2 bars without playing d2/d3
     assert "d2" not in out
     assert "d3" not in out
 
 
 def test_cmd_show_unknown_run_id_raises(tmp_path):
-    """--run-id 不存在 → FileNotFoundError（fail-fast，不 silently 退 0）."""
+    """--run-id does not exist → FileNotFoundError (fail-fast, not silently back 0)."""
     args = argparse.Namespace(
         run_id="not_a_run", task=None, mode=None,
         last=None, samples=0, runs_dir=tmp_path,
@@ -219,26 +218,26 @@ def test_cmd_show_unknown_run_id_raises(tmp_path):
         cmd_show(args)
 
 
-# ---------- ④ build_parser argparse 形状 --------------------------------
+# ---------- ④ build_parser argparse shape --------------------------------
 
 def test_build_parser_returns_argparse_parser():
-    """build_parser() 返 argparse.ArgumentParser 实例（而非自定义 wrapper）."""
+    """build_parser() returns an argparse.ArgumentParser instance (not a custom wrapper)."""
     p = build_parser()
     assert isinstance(p, argparse.ArgumentParser)
 
 
 def test_build_parser_subcommands_full_set():
-    """4 个子命令 + 各自 set_defaults(func=...) 必须齐全（漏装 set_defaults
-    会让 main() 在 args.func 处 AttributeError）."""
+    """4 subcommands + each set_defaults(func=...) must be complete (set_defaults is missing
+    will give main() an AttributeError at args.func)."""
     p = build_parser()
-    # subparsers 是 _SubParsersAction
+    # subparsers is _SubParsersAction
     sub_action = next(
         a for a in p._actions if isinstance(a, argparse._SubParsersAction)
     )
     assert set(sub_action.choices.keys()) == {"list-tasks", "score", "run", "show"}, (
         f"子命令集漂移：{sorted(sub_action.choices.keys())}"
     )
-    # 每个子 parser 都应在 set_defaults 里塞了 func
+    # Each child parser should have func stuffed in set_defaults
     for name, sub_parser in sub_action.choices.items():
         defaults = sub_parser._defaults  # type: ignore[attr-defined]
         assert "func" in defaults, f"子命令 {name!r} 漏 set_defaults(func=...)"
@@ -246,26 +245,25 @@ def test_build_parser_subcommands_full_set():
 
 
 def test_build_parser_score_required_args_enforced():
-    """score 子命令：缺 --task / --predictions 时 argparse SystemExit."""
+    """score subcommand: argparse SystemExit when --task / --predictions are missing."""
     p = build_parser()
     with pytest.raises(SystemExit):
         p.parse_args(["score"])
     with pytest.raises(SystemExit):
-        p.parse_args(["score", "--task", "sentiment_clf"])  # 缺 --predictions
+        p.parse_args(["score", "--task", "sentiment_clf"])  # Missing --predictions
 
 
 def test_build_parser_run_task_required():
-    """run 子命令：缺 --task → SystemExit."""
+    """run subcommand: missing --task → SystemExit."""
     p = build_parser()
     with pytest.raises(SystemExit):
         p.parse_args(["run"])
 
 
 def test_build_parser_run_default_values_locked():
-    """run 子命令默认值：--num-fewshot=0 / --fewshot-seed=0 / --seed=0 /
+    """Default value of run subcommand: --num-fewshot=0 / --fewshot-seed=0 / --seed=0 /
     --retrieve-top-k=5 / --retrieve-mode=hybrid / --rerank=False / --model=None.
-    任一漂移会改变 zero-shot 默认行为或 RAG 默认配置——CLI 用户的"裸跑"语义直接破坏.
-    """
+    Either drift would change the zero-shot default behavior or the RAG default configuration - directly breaking the "naked" semantics for CLI users."""
     p = build_parser()
     args = p.parse_args(["run", "--task", "sentiment_clf"])
     assert args.num_fewshot == 0
@@ -281,18 +279,18 @@ def test_build_parser_run_default_values_locked():
 
 
 def test_build_parser_run_retrieve_mode_choices_locked():
-    """--retrieve-mode 必须 ∈ {dense, bm25, hybrid}；非法值 SystemExit."""
+    """--retrieve-mode must ∈ {dense, bm25, hybrid}; illegal value SystemExit."""
     p = build_parser()
     with pytest.raises(SystemExit):
         p.parse_args(["run", "--task", "rag_qa", "--retrieve-mode", "magic"])
-    # 三个合法值必须解析通过
+    # Three legal values ​​must be parsed through
     for mode in ("dense", "bm25", "hybrid"):
         args = p.parse_args(["run", "--task", "rag_qa", "--retrieve-mode", mode])
         assert args.retrieve_mode == mode
 
 
 def test_build_parser_show_mode_choices_locked():
-    """show --mode 必须 ∈ {score, run}（避免拼写错过滤静默全空）."""
+    """show --mode must ∈ {score, run} (to avoid misspellings and filter silent empty)."""
     p = build_parser()
     with pytest.raises(SystemExit):
         p.parse_args(["show", "--mode", "score_typo"])
@@ -303,7 +301,7 @@ def test_build_parser_show_mode_choices_locked():
 
 
 def test_build_parser_show_defaults_browse_index():
-    """show 无任何 flag → 走 index 浏览（run_id=None / task=None / mode=None / samples=0）."""
+    """show without any flag → browse through index (run_id=None / task=None / mode=None / samples=0)."""
     p = build_parser()
     args = p.parse_args(["show"])
     assert args.run_id is None
@@ -314,7 +312,7 @@ def test_build_parser_show_defaults_browse_index():
 
 
 def test_build_parser_score_runs_dir_is_path():
-    """--runs-dir 应被 type=Path 转 Path 而非保留 str（storage 层接 Path）."""
+    """--runs-dir should be type=Path converted to Path instead of retaining str (storage layer converted to Path)."""
     p = build_parser()
     args = p.parse_args([
         "score", "--task", "sentiment_clf",
@@ -326,16 +324,16 @@ def test_build_parser_score_runs_dir_is_path():
 
 
 def test_build_parser_no_subcommand_raises():
-    """裸 `python -m evals` 无子命令 → argparse SystemExit（required=True）."""
+    """Bare `python -m evals` without subcommand → argparse SystemExit(required=True)."""
     p = build_parser()
     with pytest.raises(SystemExit):
         p.parse_args([])
 
 
-# ---------- ⑤ main(argv) 入口 -------------------------------------------
+# ---------- ⑤ main(argv) entry -----------------------------------------------
 
 def test_main_list_tasks_returns_zero(capsys):
-    """`main(['list-tasks'])` 端到端：完整 argparse → cmd_list_tasks → return 0."""
+    """`main(['list-tasks'])` end-to-end: full argparse → cmd_list_tasks → return 0."""
     rc = main(["list-tasks"])
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
@@ -343,14 +341,14 @@ def test_main_list_tasks_returns_zero(capsys):
 
 
 def test_main_show_index_empty_dir(tmp_path, capsys):
-    """`main(['show', '--runs-dir', tmp])` 空目录 → 0 行 + return 0."""
+    """`main(['show', '--runs-dir', tmp])` Empty directory → 0 lines + return 0."""
     rc = main(["show", "--runs-dir", str(tmp_path)])
     assert rc == 0
     assert capsys.readouterr().out == ""
 
 
 def test_main_show_with_run_id_uses_runs_dir(tmp_path, capsys):
-    """`main(['show', '--run-id', X, '--runs-dir', tmp])` 端到端 dump result.json."""
+    """`main(['show', '--run-id', X, '--runs-dir', tmp])` end-to-end dump result.json."""
     save(_make_eval_result(run_id="20250101T000099"), runs_dir=tmp_path)
 
     rc = main(["show", "--run-id", "20250101T000099", "--runs-dir", str(tmp_path)])
@@ -360,12 +358,12 @@ def test_main_show_with_run_id_uses_runs_dir(tmp_path, capsys):
 
 
 def test_main_unknown_subcommand_exits():
-    """未知子命令 → SystemExit（与 list-tasks/score/run/show 集合排他）."""
+    """Unknown subcommand → SystemExit (exclusively set with list-tasks/score/run/show)."""
     with pytest.raises(SystemExit):
         main(["totally-not-a-subcommand"])
 
 
 def test_main_score_missing_task_exits():
-    """`main(['score', '--predictions', ...])` 缺 --task → SystemExit."""
+    """`main(['score', '--predictions', ...])` missing --task → SystemExit."""
     with pytest.raises(SystemExit):
         main(["score", "--predictions", "p.jsonl"])

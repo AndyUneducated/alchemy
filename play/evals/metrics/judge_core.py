@@ -1,26 +1,25 @@
-"""族 3 LLM-as-judge 核心范式（pointwise / pairwise / g_eval / self_consistency）.
+"""Family 3 LLM-as-judge core paradigm (pointwise / pairwise / g_eval / self_consistency).
 
-按 README 指导原则 #3 触发新建：跨 task 复用（qa_open / 未来 summarization / writing 都会用）
-+ 无成熟库可调（RAGAS 是 RAG 专用、deepeval 与本项目 task-decoupled 不兼容）.
+Trigger new creation according to README guideline #3: cross-task reuse (qa_open / future summarization / writing will be used)
++ There is no mature library to adjust (RAGAS is exclusive to RAG, deepeval is incompatible with task-decoupled of this project).
 
-phase 4 起拆为 `judge_core.py`（本文件）+ `judge_rag.py`（RAG 接地维度），
-理由：核心范式是"评分方法学"，RAG 维度是"评分对象"，两层正交，避免单文件膨胀.
+Phase 4 will be split into `judge_core.py` (this file) + `judge_rag.py` (RAG ground dimension),
+Reason: The core paradigm is "scoring methodology", and the RAG dimension is "scoring object". The two layers are orthogonal to avoid single file expansion.
 
-四个 judge 的主舞台分配（详见 plan §六）：
-  - judge_pointwise   task 层主舞台（任务上 lexical vs judge 分歧叙事）
-  - judge_pairwise    本文件主舞台（位置偏置 / swap 去偏）
-  - g_eval            本文件主舞台（多维 form-filling / 多采样替代 logprob）
-  - self_consistency  本文件主舞台（majority vote + tiebreak）
+The main stage allocation of the four judges (see plan §6 for details):
+  - judge_pointwise task layer main stage (lexical vs judge difference narrative on the task)
+  - judge_pairwise Main stage of this file (position offset/swap debiasing)
+  - g_eval Main stage of this file (multi-dimensional form-filling / multi-sampling instead of logprob)
+  - self_consistency Main stage of this document (majority vote + tiebreak)
 
-设计 highlights：
-  - **closure 工厂模式**：`judge_pointwise(lm, ...)` 返回 `(doc, resp) -> float` 闭包，
-    便于 self_consistency 这种 wrapper 套用，也便于 task.process_results 复用同一份 callable.
-  - **不依赖 logprob**：Ollama /api/chat 不返回 logprobs；G-Eval 用 n-sample 多次采样
-    估计离散分布，等价于"logprob 加权 mean"的非 logprob 通路。OpenAI 适配上线时可加
-    `g_eval_logprob` 二级实现，不改默认.
-  - **swap 去偏**：pairwise 默认 `swap=True`——A/B 与 B/A 双跑，不一致计 tie，
-    把"位置偏置"当作 noise 而非信号.
-"""
+Design highlights:
+  - **closure factory pattern**: `judge_pointwise(lm, ...)` returns `(doc, resp) -> float` closure,
+    It is convenient for wrappers like self_consistency to be applied, and it is also convenient for task.process_results to reuse the same callable.
+  - **Does not depend on logprob**: Ollama /api/chat does not return logprobs; G-Eval uses n-sample to sample multiple times
+    Estimates a discrete distribution, equivalent to the non-logprob path of "logprob weighted mean". OpenAI adaptation can be added when it comes online
+    `g_eval_logprob` Second level implementation, do not change the default.
+  - **swap debiasing**: pairwise defaults to `swap=True` - A/B and B/A double running, inconsistency will be counted as tie,
+    Treat "position offset" as noise rather than signal."""
 
 from __future__ import annotations
 
@@ -34,18 +33,17 @@ from ..models.base import LM
 PairwiseVerdict = Literal["a", "b", "tie"]
 
 
-# ---------- closure-internal LM 调用 recorder（DECISIONS §7.3 wave 3）----------
+# ---------- closure-internal LM calls recorder (DECISIONS §7.3 wave 3) ----------
 
 class _JudgeRecorder:
-    """closure 内部用：拦 lm.generate_until 调用，副本 append 到 responses 列表.
+    """Internal use of closure: block lm.generate_until call, append copy to responses list.
 
-    DECISIONS §7.3：让 judge closure 自报数，runner 通过 task.collect_judge_responses
-    拉取，挂 aggregated["efficiency"]["judge"]——评估工具 call class（双路径都挂）.
+    DECISIONS §7.3: Let the judge closure self-report the number, and the runner passes task.collect_judge_responses
+    Pull, hang aggregated["efficiency"]["judge"]——evaluation tool call class (hang on both paths).
 
-    所有 judge factory（judge_pointwise / judge_pairwise / g_eval +
-    metrics/judge_rag.py 的 5 个 RAG factory）内部把原来直接 `judge_lm.generate_until(...)`
-    的调用改走 recorder，runner 端从 closure._recorder 拉响应列表.
-    """
+    all judge factory (judge_pointwise / judge_pairwise / g_eval +
+    5 RAG factories of metrics/judge_rag.py) internally directly `judge_lm.generate_until(...)`
+    The call is changed to recorder, and the runner side pulls the response list from closure._recorder."""
 
     def __init__(self, lm: LM):
         self.lm = lm
@@ -58,11 +56,11 @@ class _JudgeRecorder:
         return out
 
     def reset(self) -> None:
-        """testing helper：复用 closure 时手动清状态."""
+        """testing helper: Manually clear the state when reusing a closure."""
         self.responses = []
 
 
-# ---------- 默认 prompt 模板 ----------
+# ----------Default prompt template ----------
 
 DEFAULT_POINTWISE_TEMPLATE = (
     "Rate the response on a scale of 1-5 (1=poor, 5=excellent).\n"
@@ -93,21 +91,20 @@ DEFAULT_G_EVAL_TEMPLATE = (
 # ---------- parse helpers ----------
 
 def parse_pointwise_score(text: str, *, scale: tuple[int, int] = (1, 5)) -> int:
-    """从 judge 输出文本提取 int score.
+    """Extract int score from judge output text.
 
-    解析策略（鲁棒优先）：
-      ① 找 text 中所有整数（含负数）
-      ② 若有任意 int 落在 [lo, hi] 范围内 → 返回首个
-      ③ 否则把第一个 int clamp 到 [lo, hi] 返回
-      ④ 一个 int 都没有 → ValueError
+    Parsing strategy (robust first):
+      ① Find all integers (including negative numbers) in text
+      ② If any int falls within the range [lo, hi] → return the first one
+      ③ Otherwise, clamp the first int to [lo, hi] and return
+      ④ There is not an int → ValueError
 
-    示例：
-      "Score: 4/5" → 找到 [4, 5]，4 在 [1,5] → 4
-      "Score: 7/5" → 找到 [7, 5]，5 在 [1,5] → 5（优先 in-range）
-      "0"          → 找到 [0]，无 in-range → clamp(0)=1
-      "999"        → 找到 [999]，无 in-range → clamp(999)=5
-      "totally not a score" → 无 int → ValueError
-    """
+    Example:
+      "Score: 4/5" → found [4, 5], 4 in [1,5] → 4
+      "Score: 7/5" → found [7, 5], 5 in [1,5] → 5 (priority in-range)
+      "0" → found [0], no in-range → clamp(0)=1
+      "999" → found [999], no in-range → clamp(999)=5
+      "totally not a score" → None int → ValueError"""
     lo, hi = scale
     ints = [int(m) for m in re.findall(r"-?\d+", text or "")]
     if not ints:
@@ -119,13 +116,13 @@ def parse_pointwise_score(text: str, *, scale: tuple[int, int] = (1, 5)) -> int:
 
 
 def parse_pairwise_verdict(text: str) -> PairwiseVerdict:
-    """从 judge 输出提取 A/B/tie verdict（大小写不敏感）.
+    """Extract A/B/tie verdict from judge output (case-insensitive).
 
-    优先级：
-      ① 显式 "tie" / "equal" / "draw" / "neither" → tie
-      ② 优先匹配 \\b[Aa]\\b → "a"，\\b[Bb]\\b → "b"
-      ③ 若 'A' 与 'B' 都出现，取首个出现的
-      ④ 完全无信号 → tie（保守）
+    Priority:
+      ① explicit "tie" / "equal" / "draw" / "neither" → tie
+      ② prefer \\b[Aa]\\b → "a", \\b[Bb]\\b → "b"
+      ③ if both 'A' and 'B' appear, take first occurrence
+      ④ no signal at all → tie (conservative)
     """
     s = (text or "").strip().lower()
     if not s:
@@ -155,18 +152,17 @@ def judge_pointwise(
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
 ) -> Callable[[Doc, Response], float | None]:
-    """生成一个 (doc, response) -> float score | None 的闭包.
+    """Generates a closure of (doc, response) -> float score | None.
 
-    模板字段：`{input}` / `{reference}` / `{response}`. 缺失字段会被 .format 忽略
-    （如果模板没引用），所以测试可以用极简模板 `"rate: {response}"`.
+    Template fields: `{input}` / `{reference}` / `{response}`. Missing fields will be ignored by .format
+    (If the template is not quoted), so the test can use the minimalist template `"rate: {response}"`.
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取
-    judge LM 调用记录，runner 挂 `aggregated["efficiency"]["judge"]`.
+    DECISIONS §7.3: closure holds `_recorder` attribute for task.collect_judge_responses to pull
+    judge LM calls the record, and the runner hangs `aggregated["efficiency"]["judge"]`.
 
-    DECISIONS §X (wave 4)：parser 抛 ValueError（LM 输出无 int 可解析）→ 闭包返 None；
-    与 phase 7 wave 2 P2 立的"None vs 0 语义分离"原则一致——1-5 scale 0 越界，
-    None 显式表"未测得"，下游 aggregator 过滤后空集→None，与 safety.judge_safety_score 同形.
-    """
+    DECISIONS §X (wave 4): parser throws ValueError (LM output no int to parse) → closure returns None;
+    Consistent with the "None vs 0 semantic separation" principle established by phase 7 wave 2 P2 - 1-5 scale 0 is out of bounds,
+    None explicit table "not measured", the downstream aggregator filters the empty set →None, the same shape as safety.judge_safety_score."""
     rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> float | None:
@@ -198,13 +194,12 @@ def judge_pairwise(
     swap: bool = True,
     max_tokens: int = 16,
 ) -> Callable[[Doc, Response, Response], PairwiseVerdict]:
-    """返回一个 (doc, resp_a, resp_b) -> "a"/"b"/"tie" 的闭包.
+    """Returns a closure of (doc, resp_a, resp_b) -> "a"/"b"/"tie".
 
-    `swap=True`（默认）：双跑 A/B 与 B/A，把翻译回原序后两次结果一致才计胜负，
-    否则计 tie——这是去除"位置偏置"的标准做法（Zheng et al. 2023, MT-Bench）.
+    `swap=True` (default): Double run A/B and B/A, and the winner will be calculated after the two results are consistent after the translation back to the original sequence.
+    Otherwise count tie - this is the standard practice to remove "positional bias" (Zheng et al. 2023, MT-Bench).
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
-    """
+    DECISIONS §7.3: The closure holds the `_recorder` attribute for task.collect_judge_responses to pull."""
     rec = _JudgeRecorder(judge_lm)
 
     def _ask(doc: Doc, a: Response, b: Response) -> PairwiseVerdict:
@@ -244,10 +239,9 @@ def pairwise_winrate(
     prompt_template: str = DEFAULT_PAIRWISE_TEMPLATE,
     swap: bool = True,
 ) -> dict[str, float]:
-    """聚合多对样本的 pairwise verdict → {a, b, tie} 比例.
+    """Aggregate the pairwise verdict → {a, b, tie} proportions of multiple pairs of samples.
 
-    cross-task utility：score-pairwise CLI（phase 3.5）会直接调.
-    """
+    cross-task utility: score-pairwise CLI (phase 3.5) will adjust directly."""
     verdict_fn = judge_pairwise(judge_lm, prompt_template=prompt_template, swap=swap)
     counts = {"a": 0, "b": 0, "tie": 0}
     for doc, ra, rb in pairs:
@@ -269,18 +263,17 @@ def g_eval(
     scale: tuple[int, int] = (1, 5),
     max_tokens: int = 16,
 ) -> Callable[[Doc, Response], dict[str, float | None]]:
-    """返回一个 (doc, response) -> {dim: score | None} 的闭包.
+    """Returns a closure of (doc, response) -> {dim: score | None}.
 
-    每维 `n_samples` 次采样 + mean——替代 logprob 加权的离散分布估计（OpenAI 没 logprobs
-    的本地 ollama / 兼容路径）.
+    `n_samples` samples per dimension + mean - alternative to logprob for weighted discrete distribution estimates (OpenAI does not have logprobs
+    local ollama/compatible path).
 
-    模板字段：`{input}` / `{reference}` / `{response}` / `{dimension}`.
+    Template fields: `{input}` / `{reference}` / `{response}` / `{dimension}`.
 
-    DECISIONS §7.3：closure 持有 `_recorder` 属性供 task.collect_judge_responses 拉取.
+    DECISIONS §7.3: The closure holds the `_recorder` attribute for task.collect_judge_responses to pull.
 
-    DECISIONS §X (wave 4)：单次 sample parser 失败 → 跳过该 sample；该维 valid sample 全空
-    → 维返 None（"未测得"占位，与 phase 7 P2 同形）；部分失败按 valid mean.
-    """
+    DECISIONS §X (wave 4): A single sample parser failed → skip the sample; the valid sample in this dimension is all empty
+    → Dimension returns None ("not measured" placeholder, the same shape as phase 7 P2); partial failure is reported as valid mean."""
     rec = _JudgeRecorder(judge_lm)
 
     def _score(doc: Doc, response: Response) -> dict[str, float | None]:
@@ -317,17 +310,16 @@ def self_consistency(
     *,
     n_samples: int = 5,
 ) -> Callable[..., Any]:
-    """把任意 base_judge 包成"采样 N 次取众数"的版本.
+    """Wrap any base_judge into a "sample N times and take the majority" version.
 
-    适用于：
-      - judge_pointwise 闭包（int score 的众数）
-      - 任意返回 hashable 的 callable（pairwise verdict / 类别 label / ...）
+    Applies to:
+      - judge_pointwise closure (mode of int score)
+      - any callable that returns a hashable (pairwise verdict / category label / ...)
 
-    平票取首个出现的众数（first-seen tiebreak）——deterministic，避免字典序 / 随机.
+    Tie break takes the first-seen tiebreak - deterministic, avoiding dictionary order/randomness.
 
-    DECISIONS §7.3：透传 base 的 `_recorder` 属性——base 内部多次调用都会被同一 recorder
-    收集，wrapper 不需自己另开 recorder.
-    """
+    DECISIONS §7.3: Transparently transmit the `_recorder` attribute of base - multiple calls inside base will be accessed by the same recorder
+    To collect and wrapper, you don’t need to open a new recorder yourself."""
 
     def _wrapped(*args: Any, **kwargs: Any) -> Any:
         results = [base_judge(*args, **kwargs) for _ in range(n_samples)]

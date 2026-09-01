@@ -122,10 +122,10 @@ class Discussion:
                 artifact_events = self.artifact.drain_events()
                 self.history.extend(artifact_events)
 
-            # require_tool 检查同时覆盖 tracer (非 artifact 工具如 retrieve_docs)
-            # 与 artifact 事件——前者过去被遗漏，导致 require_tool 只对 artifact 工
-            # 具有效；本期补全（DECISIONS §11 / agent_sft phase 1.B 引入两个新
-            # require_tool: retrieve_docs 场景的前置依赖）.
+            # require_tool checks both tracer (non-artifact tools like retrieve_docs)
+            # and artifact events — tracer was previously omitted, so require_tool
+            # only worked for artifact tools; wired up in DECISIONS §12 (prerequisite
+            # for agent_sft phase 1.B retrieve_docs scenarios).
             events: list[ToolCallEntry | ArtifactEventEntry] = (
                 list(tracer_events) + list(artifact_events)
             )
@@ -147,8 +147,8 @@ class Discussion:
                 flush=True,
             )
             current_instruction = (
-                f"你刚才没有调用 `{require_tool}` 工具。"
-                f"请现在补上该调用以完成本轮任务。"
+                f"You did not call the `{require_tool}` tool."
+                f"Please make that call now to complete this turn."
             )
 
     def _print_header(self, total_turns: int) -> None:

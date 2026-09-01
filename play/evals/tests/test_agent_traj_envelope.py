@@ -1,21 +1,20 @@
-"""agent_traj envelope 契约：跨项目 JSON 形状 + 派生字段抽取的 contract test.
+"""agent_traj envelope contract: contract test for cross-project JSON shape + derived field extraction.
 
-不跑 agent_engine subprocess（live e2e 在 test_agent_traj_run_live.py），仅在
-evals 这一侧锁:
+Do not run agent_engine subprocess (live e2e in test_agent_traj_run_live.py), only
+evals lock on this side:
   ① envelope schema：`{transcript, artifact, warnings, success, usage}` → AgentTraj
-     可以正确派生 tool_calls / tool_seq / decision 写回 doc.metadata['trajectory']
-  ② AgentTraj.load_prediction：score 路径用 row 直接当 envelope 的同型映射
+     Can correctly derive tool_calls / tool_seq / decision and write back doc.metadata['trajectory']
+  ② AgentTraj.load_prediction: The score path uses row directly as the same type mapping of envelope.
 
-DECISIONS §16 起 envelope 5 字段（usage 字段加入）；transcript / usage 两侧都是
-typed dataclass，asdict 序列化为 dict 形态保存到 predictions JSONL.
+DECISIONS §16 envelope 5 field (usage field added); transcript / usage on both sides
+typed dataclass, asdict is serialized into dict form and saved to predictions JSONL.
 
-为什么独立成文：phase 5 与 phase 4 同源——data shape 是 cross-project 接口契约，
-比纯 metric 单测更接近"线上事故来源"，单独留一个 file 让 grep 'envelope' 能直接撞到.
+Why it is written independently: phase 5 and phase 4 have the same origin - data shape is a cross-project interface contract.
+It is closer to the "source of online accidents" than the pure metric single test. Leave a separate file so that grep 'envelope' can hit it directly.
 
-DECISIONS §13 后 transcript 内"工具调用规约"+"decision 抽取"的等价覆盖已迁到
-[`agent_engine/tests/test_result_views.py`]；本文件只保留 evals 自身的契约：envelope
-字段 ↔ Result 同源 + `_pin_trajectory` 注入形状 + `AgentTraj.load_prediction` 行为.
-"""
+After DECISIONS §13, the equivalent coverage of "tool calling convention" + "decision extraction" in transcript has been moved to
+[`agent_engine/tests/test_result_views.py`]; This file only retains the contract of evals itself: envelope
+Fields ↔ Result origin + `_pin_trajectory` injection shape + `AgentTraj.load_prediction` behavior."""
 
 from __future__ import annotations
 
@@ -28,17 +27,17 @@ from evals.api import Doc
 from evals.tasks.agent_traj import AgentTraj, _pin_trajectory
 
 
-# ---------- envelope schema 同源 -------------------------------------
+# ---------- envelope schema homology ---------------------------------------------
 
 def test_envelope_field_names_match_result_dataclass():
-    """envelope 必须 1:1 对应 agent_engine.Result 的字段名（cli.py 用 dataclasses.asdict）."""
+    """envelope must correspond 1:1 to the field name of agent_engine.Result (cli.py uses dataclasses.asdict)."""
     result_fields = {f.name for f in dataclasses.fields(Result)}
     expected = {"artifact", "transcript", "success", "warnings", "usage"}
     assert result_fields == expected
 
 
 def test_dataclasses_asdict_matches_envelope_shape():
-    """`dataclasses.asdict(Result(...))` 写出的 dict 就是 evals 期望的 envelope."""
+    """The dict written by `dataclasses.asdict(Result(...))` is the envelope expected by evals."""
     r = Result(
         artifact={"x": "y"},
         transcript=[SpeakerEntry(speaker="A", content="hi")],
@@ -49,7 +48,7 @@ def test_dataclasses_asdict_matches_envelope_shape():
     envelope = dataclasses.asdict(r)
     assert set(envelope.keys()) == {"artifact", "transcript", "warnings", "success", "usage"}
     assert isinstance(envelope["transcript"], list)
-    assert isinstance(envelope["transcript"][0], dict)  # asdict 递归展平
+    assert isinstance(envelope["transcript"][0], dict)  # asdict recursive flattening
     assert envelope["transcript"][0]["type"] == "speaker"
     assert isinstance(envelope["artifact"], dict)
     assert isinstance(envelope["warnings"], list)
@@ -57,10 +56,10 @@ def test_dataclasses_asdict_matches_envelope_shape():
     assert isinstance(envelope["usage"], list)
 
 
-# ---------- _pin_trajectory：注入完整契约 ---------------------------
+# ---------- _pin_trajectory: Inject the complete contract ----------------------------
 
 def test_pin_trajectory_writes_all_required_keys():
-    """pin 后 doc.metadata['trajectory'] 必须有 phase 5 metric 全部依赖的 8 个 key."""
+    """After pin, doc.metadata['trajectory'] must have 8 keys that phase 5 metric all depends on."""
     doc = Doc(id="x", input="...", target=None, metadata={"existing": "v"})
     envelope = dataclasses.asdict(Result(
         transcript=[ArtifactEventEntry(
@@ -79,12 +78,12 @@ def test_pin_trajectory_writes_all_required_keys():
         assert key in traj, f"trajectory missing {key!r}"
     assert traj["decision"] == "关停"
     assert traj["tool_seq"] == ["finalize_artifact"]
-    # 既有 metadata 字段保留
+    # Existing metadata fields are retained
     assert pinned.metadata["existing"] == "v"
 
 
 def test_pin_trajectory_does_not_mutate_input_doc():
-    """immutability：pin 返回新 Doc（dataclass replace），输入 doc.metadata 不变."""
+    """immutability: pin returns new Doc (dataclass replace), input doc.metadata unchanged."""
     doc = Doc(id="x", input="...", target=None, metadata={})
     envelope = {
         "transcript": [], "artifact": {},
@@ -97,7 +96,7 @@ def test_pin_trajectory_does_not_mutate_input_doc():
 # ---------- AgentTraj.load_prediction --------------------------------
 
 def test_load_prediction_translates_row_to_trajectory():
-    """row 内 envelope 字段 → doc.metadata['trajectory']；Response 占位（output_type='none'）."""
+    """Row inner envelope field → doc.metadata['trajectory']; Response placeholder (output_type='none')."""
     task = AgentTraj()
     doc = Doc(id="panel", input="...", target=None, metadata={})
     row = dataclasses.asdict(Result(
@@ -113,23 +112,23 @@ def test_load_prediction_translates_row_to_trajectory():
     row["id"] = "panel"
     enriched, response = task.load_prediction(doc, row)
     assert response.doc_id == "panel"
-    assert response.text is None  # output_type='none'，Response 仅占位 doc_id
+    assert response.text is None  # output_type='none', Response only takes place doc_id
     assert enriched.metadata["trajectory"]["tool_seq"] == ["cast_vote"]
     assert enriched.metadata["trajectory"]["success"] is True
 
 
 def test_load_prediction_strict_on_missing_envelope_field():
-    """§16 起 envelope 严格 5 字段——load_prediction 缺字段直接 KeyError."""
+    """Starting from §16, envelope strictly has 5 fields - load_prediction, missing fields will directly cause KeyError."""
     task = AgentTraj()
     doc = Doc(id="x", input="...", target=None, metadata={})
     with pytest.raises(KeyError):
         task.load_prediction(doc, {"id": "x"})
 
 
-# ---------- run_fn 缺失时的 fail-fast --------------------------------
+# ---------- fail-fast when run_fn is missing --------------------------------
 
 def test_process_docs_requires_scenario_path():
-    """run 路径 process_docs 走到没有 scenario_path 的 doc 必须 fail-fast."""
+    """Run path process_docs to doc without scenario_path must fail-fast."""
     def fake_run(_p):
         return dataclasses.asdict(Result(usage=[]))
     task = AgentTraj(run_fn=fake_run)

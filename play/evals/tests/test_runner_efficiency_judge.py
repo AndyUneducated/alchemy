@@ -1,12 +1,11 @@
-"""runner._evaluate_inner 挂 efficiency.judge.* 子组的端到端锁（DECISIONS §7.3）.
+"""runner._evaluate_inner holds an end-to-end lock on efficiency.judge.* subgroups (DECISIONS §7.3).
 
-锁定：
-  1. task 没接 judge_lm → aggregated 不出现 efficiency.judge 子组
-  2. task 接 judge_lm + run 路径 → efficiency 含 task 部分（latency_ms 等）+ judge 子组
-  3. task 接 judge_lm + score 路径 → efficiency 仅含 judge 子组（无 task 部分）
-  4. judge 调用次数与 sample 是 N:M 关系（pointwise 1:1 / g_eval n_dim×n_samples / RAG n_claim+1 等）
-  5. efficiency.judge 4 子组 schema 与 efficiency 顶层同形（latency_ms / tokens_in / tokens_out / cost_usd）
-"""
+Lock:
+  1. task does not receive judge_lm → aggregated does not appear in the efficiency.judge subgroup
+  2. task connects to judge_lm + run path → efficiency contains task part (latency_ms, etc.) + judge subgroup
+  3. task connects to judge_lm + score path → efficiency only contains the judge subgroup (no task part)
+  4. The relationship between the number of judge calls and sample is N:M (pointwise 1:1 / g_eval n_dim×n_samples / RAG n_claim+1, etc.)
+  5. efficiency.judge 4 subgroup schema is the same as the efficiency top level (latency_ms / tokens_in / tokens_out / cost_usd)"""
 
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ QA_PRED_DIR = Path(__file__).resolve().parent.parent / "data" / "qa_open" / "pre
 
 
 class _FakeJudgeLM(LM):
-    """返回固定 4 分 + 受控 latency / usage。"""
+    """Returns fixed 4 points + controlled latency / usage."""
 
     def __init__(self, label: str = "fake:judge") -> None:
         self.name = label
@@ -44,7 +43,7 @@ class _FakeJudgeLM(LM):
 
 
 def test_no_judge_no_judge_subgroup():
-    """task 没接 judge_lm → aggregated 不应出现 efficiency.judge 子组."""
+    """task is not connected to judge_lm → aggregated and the efficiency.judge subgroup should not appear."""
     docs = list(QAOpen().docs())
     r = evaluate_run(QAOpen(), MockLM(mode="gold", docs=docs))
     assert "efficiency" in r.aggregated
@@ -52,35 +51,35 @@ def test_no_judge_no_judge_subgroup():
 
 
 def test_run_with_judge_has_both_task_and_judge_efficiency():
-    """run 路径 + judge：efficiency 顶层含 task 4 子组 + judge 子组."""
+    """run path + judge:efficiency top level contains task 4 subgroup + judge subgroup."""
     docs = list(QAOpen().docs())
     task = QAOpen(judge_lm=_FakeJudgeLM())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
     eff = r.aggregated["efficiency"]
-    # task 部分（被测物 call class）
+    # task part (object under test call class)
     assert {"latency_ms", "tokens_in", "tokens_out", "cost_usd"} <= eff.keys()
-    # judge 部分（评估工具 call class）
+    # judge part (evaluation tool call class)
     assert "judge" in eff
     assert {"latency_ms", "tokens_in", "tokens_out", "cost_usd"} <= eff["judge"].keys()
 
 
 def test_score_with_judge_has_only_judge_efficiency():
-    """score 路径 + judge：efficiency 仅含 judge 子组（无 task 部分）—— DECISIONS §7.3 wave 3."""
+    """score path + judge:efficiency contains only the judge subgroup (no task part) - DECISIONS §7.3 wave 3."""
     task = QAOpen(judge_lm=_FakeJudgeLM())
     r = evaluate_score(task, QA_PRED_DIR / "perfect.jsonl")
     assert "efficiency" in r.aggregated
     eff = r.aggregated["efficiency"]
     assert "judge" in eff
-    # task 部分不应出现（被测物 call class 仅 run 挂）
+    # The task part should not appear (the object under test call class only runs)
     assert "latency_ms" not in eff
     assert "tokens_in" not in eff
-    # judge 子组数值非全 0（_FakeJudgeLM 报了 latency=200 + tokens 30/2）
+    # The value of the judge subgroup is not all 0 (_FakeJudgeLM reported latency=200 + tokens 30/2)
     assert eff["judge"]["latency_ms"]["mean"] == 200.0
     assert eff["judge"]["tokens_in"]["total"] > 0
 
 
 def test_judge_efficiency_call_count_matches_sample_count_for_pointwise():
-    """qa_open 是 pointwise judge：1 sample = 1 judge call —— tokens_in.total = sample 数 × 30."""
+    """qa_open is pointwise judge: 1 sample = 1 judge call —— tokens_in.total = number of samples × 30."""
     task = QAOpen(judge_lm=_FakeJudgeLM())
     r = evaluate_score(task, QA_PRED_DIR / "perfect.jsonl")
     judge_eff = r.aggregated["efficiency"]["judge"]
@@ -89,7 +88,7 @@ def test_judge_efficiency_call_count_matches_sample_count_for_pointwise():
 
 
 def test_judge_efficiency_schema_matches_task_efficiency():
-    """efficiency.judge 4 子组形态与 efficiency 顶层（被测物）同形 schema-on-write."""
+    """The efficiency.judge 4 subgroup shape is the same as the efficiency top level (the object under test) schema-on-write."""
     task = QAOpen(judge_lm=_FakeJudgeLM())
     docs = list(QAOpen().docs())
     r = evaluate_run(task, MockLM(mode="gold", docs=docs))
@@ -97,8 +96,8 @@ def test_judge_efficiency_schema_matches_task_efficiency():
     judge_eff = eff["judge"]
     # latency_ms 4 stat
     assert {"mean", "p50", "p95", "max"} == set(judge_eff["latency_ms"].keys())
-    # tokens_in/out 双 stat
+    # tokens_in/out double stat
     assert {"total", "mean"} == set(judge_eff["tokens_in"].keys())
     assert {"total", "mean"} == set(judge_eff["tokens_out"].keys())
-    # cost_usd 双 stat
+    # cost_usd double stat
     assert {"total", "mean"} == set(judge_eff["cost_usd"].keys())

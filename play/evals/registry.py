@@ -1,10 +1,11 @@
-"""Task 注册表：装饰器 + 字典.
+"""Task registry: decorator + dict.
 
-`@register_task("name")` 在类定义点直接登记，避免"改了 task 忘改注册表"的脏状态。
-代价：import time 副作用——`tasks/__init__.py` 里显式 `from . import sentiment_clf`
-触发装饰器，让 CLI 能看到。
+`@register_task("name")` registers at class definition time, avoiding dirty state
+where the task changes but the registry is not updated.
+Trade-off: import-time side effect — `tasks/__init__.py` explicitly
+`from . import sentiment_clf` to trigger decorators so the CLI can see tasks.
 
-同家族 pattern：Django URL、Flask/FastAPI route、pytest fixture。
+Same-family pattern: Django URLs, Flask/FastAPI routes, pytest fixtures.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ T = TypeVar("T", bound="Task")
 
 
 def register_task(name: str) -> Callable[[type[T]], type[T]]:
-    """Class decorator 把 Task 子类登记进 _TASKS，key 就是 CLI 里 --task 的参数值."""
+    """Class decorator registers Task subclass in _TASKS; key is the CLI --task value."""
 
     def deco(cls: type[T]) -> type[T]:
         if name in _TASKS:
@@ -32,7 +33,7 @@ def register_task(name: str) -> Callable[[type[T]], type[T]]:
 
 
 def get_task(name: str) -> "Task":
-    """字符串 → 实例化的 Task."""
+    """string → instantiated Task."""
     if name not in _TASKS:
         raise KeyError(
             f"unknown task: {name!r}; known = {sorted(_TASKS)}"
@@ -41,5 +42,5 @@ def get_task(name: str) -> "Task":
 
 
 def list_tasks() -> list[str]:
-    """所有已注册 task 名（CLI list-tasks 用）."""
+    """All registered task names (for CLI list-tasks)."""
     return sorted(_TASKS)

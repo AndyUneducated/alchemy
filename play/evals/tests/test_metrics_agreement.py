@@ -1,11 +1,10 @@
-"""metrics/agreement.py 单元锁：4 个手算 + 1 个共享 helper.
+"""metrics/agreement.py unit lock: 4 hand calculations + 1 shared helper.
 
-覆盖：
-  - scott_pi / gwet_ac1：textbook + kappa paradox 双向叙事 (Cohen κ ≈ 0 时 Gwet 仍正常)
-  - lins_ccc：perfect / shift penalty / negative / 退化常数
-  - icc_1_1：perfect / 反相关 / 中间值 + uneven 边界
-  - build_rater_matrix：with/without gold + 缺失 raters fail-loud
-"""
+Coverage:
+  - scott_pi / gwet_ac1: textbook + kappa paradox two-way narrative (Gwet is still normal when Cohen κ ≈ 0)
+  - lins_ccc: perfect / shift penalty / negative / degeneracy constant
+  - icc_1_1: perfect / anti-correlation / intermediate value + uneven boundary
+  - build_rater_matrix: with/without gold + missing raters fail-loud"""
 
 from __future__ import annotations
 
@@ -28,14 +27,14 @@ def test_scott_pi_perfect_agreement():
 
 
 def test_scott_pi_textbook_binary():
-    """5 samples binary, Po=0.6, 合并边际 q_1=0.6 q_0=0.4 → Pe=0.52, π=0.08/0.48."""
+    """5 samples binary, Po=0.6, combined margin q_1=0.6 q_0=0.4 → Pe=0.52, π=0.08/0.48."""
     y1 = [1, 1, 1, 0, 0]
     y2 = [1, 1, 0, 1, 0]
     assert scott_pi(y1, y2) == pytest.approx(0.08 / 0.48, abs=1e-9)
 
 
 def test_scott_pi_kappa_paradox_near_zero():
-    """高度不均衡 90/10 + constant majority → π 接近 0 (paradox 失明)."""
+    """Highly imbalanced 90/10 + constant majority → π close to 0 (paradox blindness)."""
     gold = ["a"] * 9 + ["b"]
     pred = ["a"] * 10
     pi = scott_pi(gold, pred)
@@ -44,7 +43,7 @@ def test_scott_pi_kappa_paradox_near_zero():
 
 
 def test_scott_pi_single_class_returns_one():
-    """边界：双方全押同一类 → Pe=1 退化返 1.0（不抛 ZeroDivisionError）."""
+    """Boundary: Both parties are all-in on the same category → Pe=1 and degenerates back to 1.0 (ZeroDivisionError is not thrown)."""
     assert scott_pi(["x"] * 5, ["x"] * 5) == 1.0
 
 
@@ -65,7 +64,7 @@ def test_gwet_ac1_perfect_agreement():
 
 
 def test_gwet_ac1_kappa_paradox_high():
-    """kappa paradox 解药 1：同 90/10 imbalanced 数据，AC1 仍诚实正 ≈ 0.89."""
+    """Kappa paradox antidote 1: Same as 90/10 imbalanced data, AC1 is still honest ≈ 0.89."""
     gold = ["a"] * 9 + ["b"]
     pred = ["a"] * 10
     # Po=0.9, K=2, q_a=0.95, q_b=0.05, Pe=(0.95*0.05+0.05*0.95)/1=0.095
@@ -76,14 +75,14 @@ def test_gwet_ac1_kappa_paradox_high():
 
 
 def test_gwet_ac1_binary_textbook():
-    """同 scott_pi binary 例：K=2, q_1=0.6, q_0=0.4 → Pe=0.48, AC1=0.12/0.52."""
+    """Same as scott_pi binary example: K=2, q_1=0.6, q_0=0.4 → Pe=0.48, AC1=0.12/0.52."""
     y1 = [1, 1, 1, 0, 0]
     y2 = [1, 1, 0, 1, 0]
     assert gwet_ac1(y1, y2) == pytest.approx(0.12 / 0.52, abs=1e-9)
 
 
 def test_gwet_ac1_single_class_returns_one():
-    """单类 (K=1) → 返 Po（理论上 Po=1，与 Gwet 论文约定一致）."""
+    """Single class (K=1) → returns Po (theoretically Po=1, consistent with the convention of Gwet paper)."""
     assert gwet_ac1(["x"] * 5, ["x"] * 5) == 1.0
 
 
@@ -99,7 +98,7 @@ def test_lins_ccc_perfect_match():
 
 
 def test_lins_ccc_shift_penalty():
-    """完美线性关系 + shift 1 → CCC < 1 (而 pearson r 仍 = 1)."""
+    """Perfect linear relationship + shift 1 → CCC < 1 (while pearson r still = 1)."""
     y1 = [1, 2, 3, 4, 5]
     y2 = [2, 3, 4, 5, 6]
     # mean1=3, mean2=4, pop var=2 each, cov=2
@@ -108,7 +107,7 @@ def test_lins_ccc_shift_penalty():
 
 
 def test_lins_ccc_negative_correlation():
-    """完全反相关 → CCC = -1.0."""
+    """Perfect anticorrelation → CCC = -1.0."""
     y1 = [1, 2, 3, 4, 5]
     y2 = [5, 4, 3, 2, 1]
     # mean1=mean2=3, var=2 each, cov=-2
@@ -117,7 +116,7 @@ def test_lins_ccc_negative_correlation():
 
 
 def test_lins_ccc_constant_equal_returns_one():
-    """双方都同常数 → CCC=1.0 (denom=0 退化协议)."""
+    """Both sides have the same constant → CCC=1.0 (denom=0 degenerate protocol)."""
     assert lins_ccc([3, 3, 3, 3], [3, 3, 3, 3]) == pytest.approx(1.0)
 
 
@@ -134,26 +133,26 @@ def test_lins_ccc_empty_raises():
 # ---------- icc_1_1 ----------
 
 def test_icc_1_1_perfect_agreement():
-    """完美一致：两 rater 对每个 subject 同分 → BMS>0, WMS=0, ICC=1."""
+    """Perfect agreement: both raters score equally for each subject → BMS>0, WMS=0, ICC=1."""
     matrix = [[5, 5], [4, 4], [3, 3], [2, 2], [1, 1]]
     assert icc_1_1(matrix) == pytest.approx(1.0)
 
 
 def test_icc_1_1_perfect_disagreement_negative():
-    """每个 subject 两 rater 完全相反但 subject 均值都=3 → BMS=0, WMS>0, ICC=-1."""
+    """The two raters of each subject are completely opposite, but the subject mean value=3 → BMS=0, WMS>0, ICC=-1."""
     matrix = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]]
     assert icc_1_1(matrix) == pytest.approx(-1.0, abs=1e-9)
 
 
 def test_icc_1_1_intermediate_textbook():
-    """部分一致：4.1/4.9 ≈ 0.8367 (手算 BMS=4.5 / WMS=0.4 / k=2)."""
+    """Partial agreement: 4.1/4.9 ≈ 0.8367 (hand calculation BMS=4.5 / WMS=0.4 / k=2)."""
     matrix = [[5, 4], [4, 5], [3, 3], [2, 1], [1, 2]]
     icc = icc_1_1(matrix)
     assert icc == pytest.approx(4.1 / 4.9, abs=1e-9)
 
 
 def test_icc_1_1_constant_returns_one():
-    """全部值相等 → denom=0 退化返 1.0."""
+    """All values ​​are equal → denom=0 degenerates back to 1.0."""
     assert icc_1_1([[3, 3], [3, 3], [3, 3]]) == 1.0
 
 
@@ -182,14 +181,14 @@ def _sr(doc_id: str, target: str, raters: list[str] | None) -> SampleResult:
 
 
 def test_build_rater_matrix_with_gold():
-    """include_gold=True：每行 [target, *raters]，宽 K+1."""
+    """include_gold=True: Each line [target, *raters], width K+1."""
     srs = [_sr("a", "1", ["1", "1", "0"]), _sr("b", "0", ["0", "0", "1"])]
     m = build_rater_matrix(srs, include_gold=True)
     assert m == [["1", "1", "1", "0"], ["0", "0", "0", "1"]]
 
 
 def test_build_rater_matrix_without_gold():
-    """include_gold=False：每行仅 raters，宽 K."""
+    """include_gold=False: only raters per line, K wide."""
     srs = [_sr("a", "1", ["1", "1", "0"])]
     m = build_rater_matrix(srs, include_gold=False)
     assert m == [["1", "1", "0"]]
@@ -200,14 +199,14 @@ def test_build_rater_matrix_empty_returns_empty():
 
 
 def test_build_rater_matrix_missing_raters_raises():
-    """契约违背 (artifacts 缺 raters) → fail-loud (lm-eval 哲学)."""
+    """Contract violation (artifacts missing raters) → fail-loud (lm-eval philosophy)."""
     sr = _sr("x", "1", raters=None)
     with pytest.raises(ValueError, match="raters"):
         build_rater_matrix([sr])
 
 
 def test_build_rater_matrix_uneven_raters_raises():
-    """各 sample raters 长度不一致 → ValueError."""
+    """The lengths of each sample raters are inconsistent → ValueError."""
     srs = [_sr("a", "1", ["1", "1", "0"]), _sr("b", "0", ["0", "1"])]
     with pytest.raises(ValueError, match="length"):
         build_rater_matrix(srs)

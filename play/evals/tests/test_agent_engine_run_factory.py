@@ -1,18 +1,17 @@
-"""models/agent_engine_run.py 单元测试：subprocess + envelope I/O 契约.
+"""models/agent_engine_run.py unit test: subprocess + envelope I/O contract.
 
-零 LLM / 零 agent_engine 真启动：用 monkeypatch 替换 `subprocess.run` 拦截调用 +
-注入伪 envelope dict 写入 `--save-result-json` 临时文件，锁住下列契约：
+Zero LLM / Zero agent_engine true start: replace `subprocess.run` with monkeypatch to intercept calls +
+Inject pseudo envelope dict and write to `--save-result-json` temporary file, locking the following contracts:
 
-  ① subprocess 命令形参（python -m agent_engine + --no-stream + --save-result-json）
-  ② cwd 锁 `play/`（让 `python -m agent_engine` 包可达）
-  ③ scenario_path 解析顺序（绝对 / 相对 scenarios_root / 不存在）
-  ④ 子进程非零退出 → RuntimeError 携 stderr（fail-fast）
-  ⑤ 临时文件 finally 清理（不论成败）
+  ① subprocess command parameters (python -m agent_engine + --no-stream + --save-result-json)
+  ② cwd lock `play/` (make the `python -m agent_engine` package reachable)
+  ③ scenario_path parsing order (absolute / relative scenarios_root / does not exist)
+  ④ The child process exits with non-zero → RuntimeError with stderr (fail-fast)
+  ⑤ Temporary files are finally cleaned (regardless of success or failure)
   ⑥ AGENT_ENGINE_RUN_TIMEOUT env override
 
-live e2e（真跑 `python -m agent_engine`）放在 test_new_scenarios_smoke.py 之类，
-本文件不依赖 agent_engine import 可达——纯 subprocess 形参 + envelope 解析锁.
-"""
+live e2e (real run `python -m agent_engine`) is placed in test_new_scenarios_smoke.py or the like,
+This file does not rely on agent_engine import and is reachable - pure subprocess formal parameters + envelope parsing lock."""
 
 from __future__ import annotations
 
@@ -27,7 +26,7 @@ from evals.models.agent_engine_run import PLAY_DIR, make_run_fn
 
 
 def _fake_envelope() -> dict:
-    """与 §16 后 `play/agent_engine/result.py::Result.asdict()` 同形的最小 envelope."""
+    """The smallest envelope of the same shape as `play/agent_engine/result.py::Result.asdict()` after §16."""
     return {
         "transcript": [],
         "artifact": {},
@@ -37,7 +36,7 @@ def _fake_envelope() -> dict:
     }
 
 
-# ---------- ① subprocess 命令形参 -------------------------------------
+# ---------- ① subprocess command parameter ---------------------------------------------
 
 def test_subprocess_command_shape(monkeypatch, tmp_path):
     """`python -m agent_engine <abs_scenario> --no-stream --save-result-json <tmp>`."""
@@ -50,7 +49,7 @@ def test_subprocess_command_shape(monkeypatch, tmp_path):
         captured["cmd"] = cmd
         captured["cwd"] = kwargs.get("cwd")
         captured["timeout"] = kwargs.get("timeout")
-        # 把 envelope 写到 --save-result-json 指向的 tmp 文件，模拟真实子进程行为
+        # Write the envelope to the tmp file pointed to by --save-result-json to simulate real child process behavior
         i = cmd.index("--save-result-json")
         Path(cmd[i + 1]).write_text(json.dumps(_fake_envelope()), encoding="utf-8")
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
@@ -61,25 +60,25 @@ def test_subprocess_command_shape(monkeypatch, tmp_path):
     out = fn(str(scenario))
 
     cmd = captured["cmd"]
-    # 第一个 token 是 sys.executable，第二/三是 -m agent_engine
+    # The first token is sys.executable, the second/third is -m agent_engine
     assert cmd[1:3] == ["-m", "agent_engine"], f"cmd 头不对：{cmd[:4]}"
     assert "--no-stream" in cmd
     assert "--save-result-json" in cmd
-    # save-result-json 后紧跟一个临时 json 路径
+    # save-result-json is followed by a temporary json path
     save_idx = cmd.index("--save-result-json")
     assert cmd[save_idx + 1].endswith(".json")
-    # scenario abs 路径出现在 cmd 中
+    # scenario abs path appears in cmd
     assert str(scenario.resolve()) in cmd
-    # cwd 锁 play/（让 `python -m agent_engine` 找到包）
+    # cwd locks play/ (let `python -m agent_engine` find the package)
     assert captured["cwd"] == str(PLAY_DIR), f"cwd 应是 PLAY_DIR，got {captured['cwd']}"
-    # envelope 解析回到 dict
+    # envelope parses back to dict
     assert out == _fake_envelope()
 
 
-# ---------- ② scenario_path 解析顺序 ----------------------------------
+# ---------- ② scenario_path parsing order ----------------------------------
 
 def test_absolute_scenario_path_passed_through(monkeypatch, tmp_path):
-    """绝对路径直接走，不走 scenarios_root 拼接."""
+    """Use the absolute path directly without using scenarios_root for splicing."""
     scenario = tmp_path / "abs_scenario.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -93,7 +92,7 @@ def test_absolute_scenario_path_passed_through(monkeypatch, tmp_path):
 
     monkeypatch.setattr(agent_engine_run.subprocess, "run", fake_run)
 
-    # scenarios_root 故意指向无关目录，验证绝对路径不被拼接
+    # scenarios_root intentionally points to irrelevant directories to verify that absolute paths are not spliced
     fn = make_run_fn(scenarios_root="/some/unrelated/dir")
     fn(str(scenario))
 
@@ -102,7 +101,7 @@ def test_absolute_scenario_path_passed_through(monkeypatch, tmp_path):
 
 
 def test_relative_scenario_path_resolved_against_scenarios_root(monkeypatch, tmp_path):
-    """相对路径以 `scenarios_root` 为根 resolve."""
+    """Relative paths resolve with `scenarios_root` as the root."""
     root = tmp_path / "scenes"
     root.mkdir()
     (root / "demo.yaml").write_text("ok", encoding="utf-8")
@@ -125,11 +124,10 @@ def test_relative_scenario_path_resolved_against_scenarios_root(monkeypatch, tmp
 
 
 def test_default_scenarios_root_is_play_dir(monkeypatch, tmp_path):
-    """scenarios_root=None → 默认 = `play/`（与 cli/agent_traj 默认一致）.
+    """scenarios_root=None → default = `play/` (same as cli/agent_traj default).
 
-    在 play/ 下放一个临时 scenario，验证 relative 路径以 PLAY_DIR 为根.
-    用绝对路径再次验证不会与默认根叠加.
-    """
+    Place a temporary scenario under play/ and verify that the relative path is rooted at PLAY_DIR.
+    Verify again with an absolute path that it does not overlap with the default root."""
     captured = {}
 
     def fake_run(cmd, **kwargs):
@@ -140,11 +138,11 @@ def test_default_scenarios_root_is_play_dir(monkeypatch, tmp_path):
 
     monkeypatch.setattr(agent_engine_run.subprocess, "run", fake_run)
 
-    # 在 PLAY_DIR 下临建一个 scenario 文件，确保 fn 能 resolve 到
+    # Create a scenario file under PLAY_DIR to ensure that fn can resolve
     play_scenario = PLAY_DIR / "_test_tmp_scenario_factory.yaml"
     play_scenario.write_text("ok", encoding="utf-8")
     try:
-        fn = make_run_fn()  # 走默认 PLAY_DIR
+        fn = make_run_fn()  # Go to default PLAY_DIR
         fn("_test_tmp_scenario_factory.yaml")
         assert str(play_scenario.resolve()) in captured["cmd"]
     finally:
@@ -152,7 +150,7 @@ def test_default_scenarios_root_is_play_dir(monkeypatch, tmp_path):
 
 
 def test_missing_scenario_raises_filenotfound(monkeypatch, tmp_path):
-    """文件不存在 → FileNotFoundError，且不会调 subprocess.run."""
+    """File does not exist → FileNotFoundError and subprocess.run will not be called."""
     called = []
 
     def fake_run(*a, **kw):
@@ -168,10 +166,10 @@ def test_missing_scenario_raises_filenotfound(monkeypatch, tmp_path):
     assert called == [], "scenario 不存在时不应调 subprocess.run"
 
 
-# ---------- ③ 子进程错误传播 ------------------------------------------
+# ---------- ③ Child process error propagation ---------------------------------------------
 
 def test_subprocess_failure_raises_with_stderr(monkeypatch, tmp_path):
-    """非零退出 → RuntimeError 携 stderr（避免静默返回空 envelope）."""
+    """Non-zero exit → RuntimeError with stderr (avoids silently returning an empty envelope)."""
     scenario = tmp_path / "s.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -188,7 +186,7 @@ def test_subprocess_failure_raises_with_stderr(monkeypatch, tmp_path):
 
 
 def test_subprocess_failure_cleans_up_tmpfile(monkeypatch, tmp_path):
-    """即便子进程失败，--save-result-json 的临时文件也得删（避免 /tmp 泄漏）."""
+    """Even if the child process fails, the temporary file of --save-result-json must be deleted (to avoid /tmp leakage)."""
     scenario = tmp_path / "s.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -197,7 +195,7 @@ def test_subprocess_failure_cleans_up_tmpfile(monkeypatch, tmp_path):
     def fake_run(cmd, **kwargs):
         i = cmd.index("--save-result-json")
         captured_tmp_path["p"] = Path(cmd[i + 1])
-        # 故意写一点东西，验证 finally 仍清理
+        # Write something intentionally and verify that finally still cleans up
         captured_tmp_path["p"].write_text("partial", encoding="utf-8")
         return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="boom")
 
@@ -214,7 +212,7 @@ def test_subprocess_failure_cleans_up_tmpfile(monkeypatch, tmp_path):
 
 
 def test_success_path_cleans_up_tmpfile(monkeypatch, tmp_path):
-    """成功路径同样清理（防止 finally 漏写）."""
+    """The success path is also cleaned up (to prevent finally missing writes)."""
     scenario = tmp_path / "s.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -234,10 +232,10 @@ def test_success_path_cleans_up_tmpfile(monkeypatch, tmp_path):
     assert not captured_tmp_path["p"].exists(), "tmpfile 成功路径未清理"
 
 
-# ---------- ④ timeout 透传 + env override -----------------------------
+# ---------- ④ timeout transparent transmission + env override --------------------------------
 
 def test_timeout_passed_to_subprocess_run(monkeypatch, tmp_path):
-    """`timeout=` kwarg 透传给 subprocess.run."""
+    """`timeout=` kwarg is passed transparently to subprocess.run."""
     scenario = tmp_path / "s.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -258,7 +256,7 @@ def test_timeout_passed_to_subprocess_run(monkeypatch, tmp_path):
 
 
 def test_timeout_env_var_overrides_default(monkeypatch, tmp_path):
-    """`AGENT_ENGINE_RUN_TIMEOUT` env 覆盖 timeout 参数（CI 上调长 / 本地调短）."""
+    """`AGENT_ENGINE_RUN_TIMEOUT` env overrides the timeout parameter (longer on CI / shorter locally)."""
     scenario = tmp_path / "s.yaml"
     scenario.write_text("ok", encoding="utf-8")
 
@@ -273,7 +271,7 @@ def test_timeout_env_var_overrides_default(monkeypatch, tmp_path):
     monkeypatch.setattr(agent_engine_run.subprocess, "run", fake_run)
     monkeypatch.setenv("AGENT_ENGINE_RUN_TIMEOUT", "9.5")
 
-    fn = make_run_fn(timeout=600.0)  # 显式传 600，应被 env 覆盖
+    fn = make_run_fn(timeout=600.0)  # Pass 600 explicitly and should be overwritten by env
     fn(str(scenario))
 
     assert captured["timeout"] == 9.5

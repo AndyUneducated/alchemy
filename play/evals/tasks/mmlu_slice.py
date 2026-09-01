@@ -1,23 +1,23 @@
-"""Phase 1 通用能力**防回归** baseline：MMLU 6-subject slice (96 例).
+"""Phase 1 general-capability **regression guard** baseline: MMLU 6-subject slice (96 examples).
 
-数据来源：[`data/mmlu_slice/SOURCE.md`](../data/mmlu_slice/SOURCE.md)（钉版 HF revision + 抓取脚本）.
+Data source: [`data/mmlu_slice/SOURCE.md`](../data/mmlu_slice/SOURCE.md) (pinned HF revision + fetch script).
 
-教学定位（agent_sft 视角）：
-  - in-dist : nudge_fire_rate / agent_traj 测\"被 SFT 影响的能力\"
-  - OOD-A   : bfcl_slice 测\"原本会的 function-calling 没掉\"
-  - **OOD-B here**: mmlu_slice 测\"通用知识没掉\"——SFT 数据全是 agent transcript，
-    经典 catastrophic forgetting 风险点正在这.
+Teaching role (agent_sft view):
+  - in-dist: nudge_fire_rate / agent_traj measure "capabilities affected by SFT"
+  - OOD-A: bfcl_slice measures "original function-calling did not drop"
+  - **OOD-B here**: mmlu_slice measures "general knowledge did not drop" — SFT data is all agent transcripts,
+    classic catastrophic forgetting risk lives here.
 
-度量函数 **内联**（accuracy 仅几行 if/else，独立模块属于\"为抽而抽\"）：
+Metric functions **inlined** (accuracy is a few lines of if/else; separate module would be "extract for extraction's sake"):
 
-|metric|含义|
+|metric|meaning|
 |---|---|
-|`accuracy`|全 96 题首字母 ∈ {A,B,C,D} 命中率|
-|`accuracy_by_subject`|（aggregation 内附 dict 子组）按 subject 拆 6 个准确率|
+|`accuracy`|hit rate on all 96 items: first letter ∈ {A,B,C,D}|
+|`accuracy_by_subject`|(subgroup dict inside aggregation) 6 accuracies split by subject|
 
-评测协议是 **generate_until + 取首字母**（不走 loglikelihood-of-letter）——更接近真实部署
-体感、不依赖 logprobs 接口；副作用是分数会比原 MMLU paper 略低（模型偶尔不出 A/B/C/D 字母时
-按错处理）.
+Evaluation protocol is **generate_until + take first letter** (not loglikelihood-of-letter) — closer to real deployment
+feel, no logprobs API; trade-off: scores run slightly below original MMLU paper (when model omits A/B/C/D letter,
+counted wrong).
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ PROMPT_TEMPLATE = (
 
 @register_task("mmlu_slice")
 class MmluSlice(Task):
-    """MMLU 6-subject 96-example slice，generate_until + 取首字母."""
+    """MMLU 6-subject 96-example slice, generate_until + take the first letter."""
 
     name: ClassVar[str] = "mmlu_slice"
     output_type: ClassVar[str] = "generate_until"
@@ -83,7 +83,7 @@ class MmluSlice(Task):
         pred_letter = parse_mcq_letter(response.text or "")
         target = (doc.target or "").upper()
         is_hit = 1.0 if pred_letter == target else 0.0
-        # 失格预测（提取不到字母）也算 0；用 artifact 区分\"模型给了无关字符\" vs \"给错字母\"
+        # Disqualified predictions (no letters can be extracted) are also counted as 0; use artifact to distinguish "the model gave irrelevant characters" vs "given the wrong letters"
         return SampleResult(
             doc_id=doc.id,
             prediction=pred_letter or "",
@@ -92,7 +92,7 @@ class MmluSlice(Task):
             artifacts={
                 "subject": doc.metadata.get("subject", "unknown"),
                 "raw_text": (response.text or "").strip(),
-                "pred_letter": pred_letter,  # None 即未抽出字母
+                "pred_letter": pred_letter,  # None means no letters are extracted
             },
         )
 
@@ -103,34 +103,34 @@ class MmluSlice(Task):
         }
 
     def higher_is_better(self) -> dict[str, bool]:
-        # 与 nudge_fire_rate 同 convention：嵌套 dict 子组（accuracy_by_subject）
-        # 不进 higher_is_better——只标量进，dict 由 CLI 渲染层逐键展开
+        # Same convention as nudge_fire_rate: nested dict subgroups (accuracy_by_subject)
+        # No advance higher_is_better - only scalar advance, dict is expanded key by key by CLI rendering layer
         return {"accuracy": True}
 
 
-# ---- 内联度量函数（plan §2：mmlu accuracy 仅几行；不抽到 metrics/） ----
+# ---- Inline measurement function (plan §2: mmlu accuracy only a few lines; metrics/ is not extracted) ----
 
 
 _VALID_LETTERS = {"A", "B", "C", "D"}
 
 
 def parse_mcq_letter(text: str) -> str | None:
-    """从模型输出抽 \"A/B/C/D\" 之一. 找不到返 None.
+    """Extract one of \"A/B/C/D\" from model output. Returns None if not found.
 
-    宽容策略（按 LLM 输出常见污染脏度排序，逐层尝试）：
-      1. 第一行非空 → 去 markdown / 标点
-      2. 首字符是 letter 即取
-      3. 否则寻找 \"Answer: X\" 这种 echo
-      4. 否则全文搜首个孤立 A/B/C/D（前后是非字母）
+    Lenient parsing (try common LLM output pollution, in order):
+      1. First non-empty line → strip markdown / punctuation
+      2. If first char is letter, take it
+      3. Else look for \"Answer: X\" echo
+      4. Else scan for first isolated A/B/C/D (non-letter before/after)
 
-    第 4 步的 \"孤立 letter\" 防止 \"according to A...\" 蒙混（A 是孤立字也算 echo，靠
-    第 1/2 步先抓 letter-only 输出过滤）.
+    Step 4 \"isolated letter\" avoids \"according to A...\" false positives (isolated A still
+    counts as echo; steps 1/2 filter letter-only outputs first).
     """
     if not text:
         return None
     s = text.strip()
 
-    # 第一行非空
+    # The first line is not empty
     for line in s.splitlines():
         line = line.strip()
         if line:
@@ -141,13 +141,13 @@ def parse_mcq_letter(text: str) -> str | None:
     if not s_clean:
         return None
 
-    # 首字符 letter only / letter + 标点
+    # First character letter only / letter + punctuation
     if s_clean[0].upper() in _VALID_LETTERS:
-        # 单字符 / 后面紧跟非字母 → 接受
+        # Single character / followed by non-letter → Accept
         if len(s_clean) == 1 or not s_clean[1].isalpha():
             return s_clean[0].upper()
 
-    # \"Answer: X\" / \"The answer is X\" 等 echo
+    # \"Answer: X\" / \"The answer is X\" etc. echo
     upper = s_clean.upper()
     for marker in ("ANSWER:", "ANSWER IS", "CORRECT ANSWER IS"):
         if marker in upper:
@@ -155,7 +155,7 @@ def parse_mcq_letter(text: str) -> str | None:
             if after and after[0] in _VALID_LETTERS:
                 return after[0]
 
-    # 全文找孤立的 letter
+    # Find isolated letters in the full text
     import re
     m = re.search(r"(?<![A-Za-z])([ABCD])(?![A-Za-z])", upper)
     if m:
@@ -171,7 +171,7 @@ def _overall_accuracy(srs: list[SampleResult]) -> float | None:
 
 
 def _accuracy_by_subject(srs: list[SampleResult]) -> dict[str, float] | None:
-    """嵌套 dict：每个 subject 的准确率（与 aggregated 横切子组 schema 同形）."""
+    """Nested dict: accuracy for each subject (identical to the aggregated crosscut subgroup schema)."""
     if not srs:
         return None
     bucket: dict[str, list[float]] = defaultdict(list)

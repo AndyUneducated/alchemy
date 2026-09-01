@@ -1,386 +1,386 @@
 # Decisions
 
-ADR 归档。每条以 `## n. 标题` + `- **Status**` / `- **Date**` 元信息开头，正文用标准 `Context / Options considered / Decision / Consequences` 四段。新决策追加末尾，被取代的条目改 Status 不删条目。日常进度见 [`JOURNAL.md`](JOURNAL.md)。
+ADR archive. Each article begins with `## n. Title` + `- **Status**` / `- **Date**` meta-information, and the text uses standard `Context / Options considered / Decision / Consequences` four paragraphs. The new decision is appended to the end, and the status of the replaced entry is changed without deleting the entry. See [`JOURNAL.md`](JOURNAL.md) for daily progress.
 
-## 1. Nudge-grounded SFT 作为项目中心问题
-
-- **Status**: accepted
-- **Date**: 2026-05-09
-
-### Context
-
-立项是面试 portfolio 的微调实战项。原想"做 tool-calling LoRA"——但 xLAM / ToolACE / Hammer / Watt-Tool 已是公开赛道，对面试官无差异化信号。需要**只有在我现有 `play/` 栈上才能做的**项目命题，让复现门槛即护城河。
-
-### Options considered
-
-|选项|数据来源|差异化|备注|
-|---|---|---|---|
-|A. 经典 tool-calling LoRA（xLAM / ToolACE）|公开|无|任何人都能复现|
-|B. 蒸馏 router（GPT-4 → 1.5B）|公开 + 合成|中|架构感 ≥ 微调感，故事单薄|
-|**C. Nudge-grounded SFT**（选）|`play/agent_engine` transcript|高|supervision 来源是自有 infra|
-|D. 自蒸馏（best-of-N + artifact 投票）|`play/agent_engine`|高|本地 7B best-of-N 推理成本太重|
-
-### Decision
-
-锁定 C：把 `require_tool` 机制下"模型该调没调 → 引擎 nudge → 模型补调"闭环作为 SFT supervision，让微调后模型在自己 trajectory 上把 nudge-fire rate 显著降低。下游度量与部署沿用 `play/evals` + `play/agent_engine`，三件套：**[engine 出数据] → [agent_sft 训] → [engine 用 + evals 测]**。
-
-### Consequences
-
-- 学术对位：self-improvement / self-correction（STaR / Self-Refine / Reflexion / Self-Rewarding）；工业对位反走"自有 trajectory → 我的 agent 系统更稳"，比走外部 tool-call 数据集（xLAM / Watt-Tool / Hammer）更窄但更可信。
-- 耦合 `agent_engine` transcript schema（`tool_call` event + `require_tool` step + nudge instruction）；schema 变 → 数据脚本变，训练框架不受影响。每条 triple 可反查 trace JSON 行。
-- 数据上限取决于 scenario 跑批次数，不够时合成补足；v1 supervision 仅 `require_tool`，未来失败模式（artifact ACL / 投票不通过）可线性扩池，v1 不预设。
-
-## 2. 训练框架选 MLX-LM
+## 1. Nudge-grounded SFT as the central issue of the project
 
 - **Status**: accepted
 - **Date**: 2026-05-09
 
 ### Context
 
-M4 Pro 48GB（Apple Silicon）。Unsloth 主战场是 NVIDIA CUDA + Triton；HF PEFT 走 MPS 吞吐有限；axolotl 是配置编排，特性强但学习成本高。MLX 是 Apple 官方 Apple Silicon 张量框架，[MLX-LM](https://github.com/ml-explore/mlx-lm) 是其 LM 训推工具集。
+Project establishment is a practical item for fine-tuning the interview portfolio. I originally wanted to "do tool-calling LoRA" - but xLAM / ToolACE / Hammer / Watt-Tool are already open channels, and there is no differentiated signal to the interviewer. I need a project proposition that can only be done on my existing `play/` stack, so that the recurrence threshold is the moat.
 
 ### Options considered
 
-|选项|Apple Silicon 性能|学习成本|备注|
+|Options|Data Sources|Differentiation|Notes|
 |---|---|---|---|
-|**A. MLX-LM**（选）|原生最优|低（CLI 三步）|官方维护活跃，生态偏小|
-|B. HF PEFT + transformers + MPS|可用但显著慢|中|Mac 不是其主战场|
-|C. Unsloth|CPU fallback|中|GPU 路径快，Mac 路径不是核心|
-|D. axolotl|底层仍 PEFT/Unsloth|高|工业级编排，本项目用不上|
+|A. Classic tool-calling LoRA (xLAM/ToolACE)|Public|None|Anyone can reproduce|
+|B. Distillation router (GPT-4 → 1.5B)|Public + Synthetic|Medium|A sense of architecture ≥ A sense of fine-tuning, a thin story|
+|**C. Nudge-grounded SFT** (selected)|`play/agent_engine` transcript|High|Supervision source is own infra|
+|D. Self-distillation (best-of-N + artifact voting) |`play/agent_engine`|High|Local 7B best-of-N inference cost is too heavy|
 
 ### Decision
 
-选 A。三步链路：`mlx_lm.lora --train` → `mlx_lm.fuse` → `mlx_lm.convert --quantize`（→ GGUF → `ollama create`）。失败信号面清晰：哪步报错就是哪步问题，不藏在编排框架里。
+Lock C: Use the closed loop of "model adjustment → engine nudge → model adjustment" under the `require_tool` mechanism as SFT supervision, so that the model after fine-tuning can significantly reduce the nudge-fire rate on its own trajectory. Downstream measurement and deployment follow `play/evals` + `play/agent_engine`, three-piece set: **[engine output data] → [agent_sft training] → [engine use + evals test]**.
 
 ### Consequences
 
-- MLX-LM 在 Apple Silicon 个人微调圈是事实标准（Awni Hannun / Simon Willison 背书；HF 自 2025 加 MLX backend）；训练 / 合并 / 量化全在一家工具不引入新 tooling。
-- HF safetensors 是通用中间格式，未来换 GPU 服务器迁移成本可控。
-- MLX-LM 当前不直接产 GGUF，需二段转换；走 `mlx_lm.convert` 直出还是 HF → `llama.cpp convert_hf_to_gguf.py → quantize` 留 Phase 4 再决（YAGNI）。
+- Academic counterpoint: self-improvement/self-correction (STaR/Self-Refine/Reflexion/Self-Rewarding); industrial counterpoint uses "own trajectory → my agent system is more stable", which is narrower but more credible than using external tool-call data sets (xLAM/Watt-Tool/Hammer).
+- Coupling `agent_engine` transcript schema (`tool_call` event + `require_tool` step + nudge instruction); schema changes → data script changes, the training framework is not affected. Each triple can be traced back to trace JSON lines.
+- The upper limit of data depends on the number of scenario batch runs, and will be supplemented by synthesis when insufficient; v1 supervision only has `require_tool`, and the future failure mode (artifact ACL/vote failure) can linearly expand the pool, and v1 is not preset.
 
-## 3. Phase 2 数据流水线设计
+## 2. Select MLX-LM as the training framework
 
-- **Status**: accepted（pipeline 与 1k × 2 模型 scale-up 均已落地，见 [`JOURNAL.md`](JOURNAL.md) 2026-05-10 三条里程碑）
+- **Status**: accepted
+- **Date**: 2026-05-09
+
+### Context
+
+M4 Pro 48GB (Apple Silicon). The main battlefield of Unsloth is NVIDIA CUDA + Triton; HF PEFT uses MPS and has limited throughput; axolotl is configuration orchestration with strong features but high learning cost. MLX is Apple's official Apple Silicon tensor framework, and [MLX-LM](https://github.com/ml-explore/mlx-lm) is its LM training tool set.
+
+### Options considered
+
+|Options|Apple Silicon Performance|Cost of Learning|Notes|
+|---|---|---|---|
+|**A. MLX-LM** (selected)|Native optimal|Low (CLI three steps)|Official maintenance is active, the ecosystem is small|
+|B. HF PEFT + transformers + MPS|Usable but significantly slow|Medium|Mac is not its main battlefield|
+|C. Unsloth|CPU fallback|Medium|GPU path is fast, Mac path is not core|
+|D. axolotl|The bottom layer is still PEFT/Unsloth|High|Industrial-level orchestration, which is not used in this project|
+
+### Decision
+
+Choose A. Three-step link: `mlx_lm.lora --train` → `mlx_lm.fuse` → `mlx_lm.convert --quantize` (→ GGUF → `ollama create`). The failure signal surface is clear: the error is reported at that step and is not hidden in the orchestration framework.
+
+### Consequences
+
+- MLX-LM is the de facto standard in the Apple Silicon personal fine-tuning circle (endorsed by Awni Hannun/Simon Willison; HF adds MLX backend since 2025); training/merging/quantification are all in one tool without introducing new tooling.
+- HF safetensors are a universal intermediate format, and the cost of future GPU server migration is controllable.
+- MLX-LM currently does not directly generate GGUF and requires two-stage conversion; go to `mlx_lm.convert` to go straight out or HF → `llama.cpp convert_hf_to_gguf.py → quantize` and leave Phase 4 for further decision (YAGNI).
+
+## 3. Phase 2 data pipeline design
+
+- **Status**: accepted (pipeline and 1k × 2 model scale-up have been implemented, see [`JOURNAL.md`](JOURNAL.md) 2026-05-10 three milestones)
 - **Date**: 2026-05-10
 
 ### Context
 
-从 `agent_engine` 跑批挖 (failed, nudge, corrected) 三元组，转 MLX-LM SFT 样本，按 run_id 切 train/val。最少代码体量交付端到端可重生流水线，并在真实 envelope 上量出 yield / failure_mode 分布 / token 长度以指导 scale-up。
+Run batch mining (failed, nudge, corrected) triples from `agent_engine`, convert them to MLX-LM SFT samples, and cut train/val according to run_id. Deliver an end-to-end regenerative pipeline with minimal code volume, and measure the yield / failure_mode distribution / token length on the real envelope to guide scale-up.
 
 ### Options considered
 
-|轴|选项|权衡|
+|Axis|Options|Trade-off|
 |---|---|---|
-|样本格式|F1（input 不含 nudge）/ F2（含 nudge 接续）|F1 教模型一次到位，与"降 nudge_fire_rate"目标语义一致|
-|train/val 切|by_run_id（per-scenario 末 20%）/ by_triple 随机 / by_scenario hold-out|by_run_id 保 in-dist + 防 trace 泄漏；scenario hold-out 太严苛（仅 2 scenario）|
-|scenario 范围|2（tool_chain + code_review）/ 4（+ example + panel）|2 个 require_tool 密集场景已 13 turn/run；扩 4 引入低密度噪声|
-|mining 模型|Qwen2.5-7B（同底座）/ Qwen2.5-32B（ceiling）|7B = "训自己"闭环；32B 失败少 → 多样性差但质量高|
-|seed handling|改 agent_engine 加 `--seed` / 用 run_id 做命名键|前者跨包改动；后者零侵入靠自然采样|
-|代码 / 数据布局|混 `data/` / 子目录 `data/triples/` / `scripts/` + `data/{raw,interim,processed}/`|仿 `eval/` + `eval/baselines/` 平行最便于跨 phase 复用|
+|Sample format|F1 (input does not include nudge)/F2 (contains nudge continuation)|F1 teaches the model in one go, consistent with the target semantics of "reduce nudge_fire_rate"|
+|train/val cut|by_run_id (per-scenario last 20%)/by_triple random/by_scenario hold-out|by_run_id keep in-dist + prevent trace leakage; scenario hold-out is too strict (only 2 scenarios)|
+|scenario range|2 (tool_chain + code_review) / 4 (+ example + panel) | 2 require_tool intensive scenarios have 13 turns/run; expansion 4 introduces low-density noise|
+|mining model|Qwen2.5-7B (same base)/Qwen2.5-32B (ceiling)|7B = "train yourself" closed loop; 32B has fewer failures → poor diversity but high quality|
+|seed handling|Change agent_engine and add `--seed`/use run_id as naming key|The former is a cross-package change; the latter is zero intrusion and relies on natural sampling|
+|Code/data layout|Mixed `data/`/subdirectory `data/triples/` / `scripts/` + `data/{raw,interim,processed}/`|Imitate `eval/` + `eval/baselines/` Parallel most convenient for cross-phase reuse|
 
 ### Decision
 
-|项|决策|
+|item|decision|
 |---|---|
-|样本格式|**F1 only**|
-|train/val 切|**per-scenario 末 20% run_id → val**；unique run_ids < 5 时全 train|
-|scenario 范围|**仅 `tool_chain` + `code_review`**|
-|mining 模型|**Qwen2.5-7B**——via `AGENT_ENGINE_MODEL` env override（1 行），不动 scenario YAML / Engine API|
-|seed handling|**不改 agent_engine**——run_id 作命名键 + split 索引，多样性靠 7B 自然采样|
-|布局|**仿 `eval/`**：`data/` 顶层 4 脚本（mine / extract / format / split）+ `data/triples/` 装产物|
-|nudge 文本复原|**按 `required_tool` 模板填 `NUDGE_TEMPLATE`**（与 `discussion.py` L141-144 一致），不进 F1 input|
+|Sample format|**F1 only**|
+|train/val cut|**per-scenario end 20% run_id → val**; unique run_ids < 5 when full train|
+|scenario range|**Only `tool_chain` + `code_review`**|
+|mining model|**Qwen2.5-7B**——via `AGENT_ENGINE_MODEL` env override (1 line), don’t move scenario YAML/Engine API|
+|seed handling|**Do not change agent_engine**——run_id as named key + split index, diversity relies on 7B natural sampling|
+|Structure|**Imitate `eval/`**: `data/` top-level 4 scripts (mine/extract/format/split) + `data/triples/` installed product|
+|nudge text recovery|**Fill in `NUDGE_TEMPLATE`** according to `required_tool` template (consistent with `discussion.py` L141-144), do not enter F1 input|
 
 ### Consequences
 
-- 4 脚本（mine / extract / format / split）单一职责可分别替换；对 evals 私 helper 的耦合在 [`§7`](#7-extractor--synthesize--formatter-直连-agent_engine删-evals-私有-import-反模式) 解除（直连 agent_engine 公开面）。
-- 每条 triple 含 `run_id` / `scenario` / `turn_idx` / `failure_mode` / 全 `context` prefix，可反查到 envelope 任一行；extractor / formatter / splitter 全可单测（无 LLM 依赖）。
-- F1 只把 `corrected_response.content` 当 assistant 目标的风险（pilot 观察到 text 说 X 但 tool_call event 是 Y）→ Phase 3 由 [`§4`](#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native) schema 升级解决。
-- `wrong_args` 桶整链路保留 placeholder（与 `metrics/nudge.py` taxonomy 同步），启用条件锁在 agent_engine dispatch error 路径补 event 之后。
+- 4 scripts (mine / extract / format / split) with single responsibilities can be replaced respectively; the coupling of evals private helper is released in [`§7`](#7-extractor--synthesize--formatter-directly connected-agent_enginedelete-evals-private-import-anti-pattern) (directly connected to the public side of agent_engine).
+- Each triple contains `run_id` / `scenario` / `turn_idx` / `failure_mode` / all `context` prefix, which can be traced back to any line of the envelope; extractor / formatter / splitter can all be tested individually (no LLM dependency).
+- The risk of F1 only treating `corrected_response.content` as the assistant target (pilot observed that text says X but tool_call event is Y) → Phase 3 is solved by [`§4`](#4-sft-target-schema-with-openai-tool_calls--top-level-tools-field qwen25-native) schema upgrade.
+- `wrong_args` bucket link reservation placeholder (synchronized with `metrics/nudge.py` taxonomy), enable condition lock after agent_engine dispatch error path compensation event.
 
-## 4. SFT target schema 用 OpenAI `tool_calls` + 顶层 `tools` 字段（Qwen2.5 native）
+## 4. SFT target schema uses OpenAI `tool_calls` + top-level `tools` field (Qwen2.5 native)
 
-- **Status**: accepted（supersedes §3 Consequences "F1 only 把 corrected_response.content 当 assistant target"）
+- **Status**: accepted (supersedes §3 Consequences "F1 only use corrected_response.content as assistant target")
 - **Date**: 2026-05-10
 
 ### Context
 
-§3 v1 formatter 把合成的 `corrected_response.content`（"好的，我现在调用 \`retrieve_docs\`：\n\nretrieve_docs("query")"）直接当 assistant text；下游 `agent_engine` 实际通过 Ollama function-call API 期望模型 emit `tool_calls` 字段（Qwen2.5 [chat template](https://raw.githubusercontent.com/chujiezheng/chat_templates/main/chat_templates/qwen2.5-instruct.jinja) 渲染成 `<tool_call>{"name":..., "arguments":...}</tool_call>` block）。schema 不对齐 → 训完模型可能"会说要调工具但不真 emit tool_call"，nudge-fire rate 不降反升。Phase 3 训练前必须锁 schema。
+§3 v1 formatter uses the synthesized `corrected_response.content` ("Okay, I now call \`retrieve_docs\`:\n\nretrieve_docs("query")") directly as assistant text; the downstream `agent_engine` actually expects the model emit `tool_calls` field through the Ollama function-call API (Qwen2.5 [chat template](https://raw.githubusercontent.com/chujiezheng/chat_templates/main/chat_templates/qwen2.5-instruct.jinja) is rendered into a `<tool_call>{"name":..., "arguments":...}</tool_call>` block). The schema is not aligned → After training, the model may "say it wants to adjust the tool but does not really emit tool_call", and the nudge-fire rate does not fall but rises. The schema must be locked before Phase 3 training.
 
 ### Options considered
 
-|选项|形态|与 Qwen2.5 chat template 关系|与下游 (Ollama → agent_engine `tool_call` event) 关系|
+|Options|Form|Relationship with Qwen2.5 chat template|Relationship with downstream (Ollama → agent_engine `tool_call` event)|
 |---|---|---|---|
-|A. text-only（v1 现状）|assistant content = "好的我现在调用 X(...)"|普通 text 渲染，无 `<tool_call>` 块|不发 tool_call → tool_call event 永远不触发 → nudge-fire 不降|
-|**B. OpenAI `tool_calls` JSON-string + 顶层 `tools`**（选）|messages.assistant.tool_calls + 顶层 tools|chat template 自动渲染成 native `<tool_call>` block|与 Ollama function-call 解析器原生对齐|
-|C. 字面量 XML 字符串写 content|content = `<tool_call>{...}</tool_call>`|跳过 chat template schema 校验|形态与 B 同，但 dataset schema 不通用|
+|A. text-only (v1 status quo)|assistant content = "Okay, I will call X(...) now"|Normal text rendering, no `<tool_call>` block|No tool_call → tool_call event will never be triggered → nudge-fire will not drop|
+|**B. OpenAI `tool_calls` JSON-string + top-level `tools`** (optional) | messages.assistant.tool_calls + top-level tools | chat template automatically rendered into native `<tool_call>` block | natively aligned with Ollama function-call parser |
+|C. Write literal XML string content|content = `<tool_call>{...}</tool_call>`|Skip chat template schema verification|The form is the same as B, but the dataset schema is not universal|
 
 ### Decision
 
-选 B。三层对齐：① **行业惯例** —— MLX-LM 自 [PR #995](https://github.com/ml-explore/mlx-examples/pull/995) 原生支持 `tools` data format（[LORA.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)），xLAM / ToolACE / Hermes-Function-Calling 全用此 schema；② **下游对齐** —— Qwen2.5 chat template `arguments | tojson` 把 JSON-string 渲染成 `<tool_call>` 块，Ollama 解析器原生识别；③ **schema 单源** —— 直接 import [`agent_engine.artifact._TOOL_DEFS`](../agent_engine/artifact.py) + 复用 [`scenario._resolve_tool_defs`](../agent_engine/scenario.py)，与 runtime 同源零 drift。
+Choose B. Three-layer alignment: ① **Industry practice** - MLX-LM since [PR #995](https://github.com/ml-explore/mlx-examples/pull/995) natively supports `tools` data format ([LORA.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LORA.md)), xLAM / ToolACE / Hermes-Function-Calling all use this schema; ② **Downstream alignment** - Qwen2.5 chat template `arguments | tojson` renders JSON-string into `<tool_call>` blocks, Ollama Native identification of the parser; ③ **schema single source** - direct import [`agent_engine.artifact._TOOL_DEFS`](../agent_engine/artifact.py) + reuse [`scenario._resolve_tool_defs`](../agent_engine/scenario.py), homologous to the runtime and zero drift.
 
 ### Consequences
 
-- [`data/formatter.py`](data/formatter.py) 重写：assistant message 改 `{role:"assistant", content:"", tool_calls:[{id, type:"function", function:{name, arguments<JSON-string>}}]}`；F1 sample 顶层加 `tools=[...]`（per-scenario，agent 视角，按 role 过滤 moderator-only 工具）。
-- 新增 args-dict 提取：把 [`synthesize._extract_call_template`](data/synthesize.py) 抓到的 `tool(arg1, arg2)` 字符串按 `tool_schema.parameters.properties` 顺序映射成 dict，再 `json.dumps` 成字符串塞 arguments。提取失败的样本（即 fallback wrapper 那 ~17%）整条丢弃——本 ADR 配套 user 决策"drop"，不再走 `arguments={}` 的弱信号样本。
-- [`data/synthesize.py`](data/synthesize.py) / [`data/extractor.py`](data/extractor.py) / [`data/split.py`](data/split.py) / [`data/mine_triples.py`](data/mine_triples.py) **不动**——`Triple` schema 已含 `required_tool` + `instruction` 文本，足以驱动新 formatter；mining envelope 与 `triples_*_1k.jsonl` 不重生。
-- 数据量微减：drop fallback 后 7B 766 train + 196 val（vs §3 终交付 966 + 246），32B 642 + 160（vs 842 + 210）；仍超过 README 早期 "≥1k 训练样本" demo 量级阈值。
-- 训练侧采用 `mlx_lm.lora --mask-prompt`（assistant-only loss），与 [TRL PR #5522](https://github.com/huggingface/trl/pull/5522) Qwen2.5 训练 template 同思想——梯度只作用在 `<tool_call>` 块。HF safetensors 仍是 SoT（[`§2`](#2-训练框架选-mlx-lm)），切 TRL / Unsloth 时同 jsonl 零改即可。
+- [`data/formatter.py`](data/formatter.py) rewrite: assistant message is changed to `{role:"assistant", content:"", tool_calls:[{id, type:"function", function:{name, arguments<JSON-string>}}]}`; F1 sample top level is added with `tools=[...]` (per-scenario, agent perspective, moderator-only tool filtered by role).
+- Added args-dict extraction: map the `tool(arg1, arg2)` string captured by [`synthesize._extract_call_template`](data/synthesize.py) into dict in `tool_schema.parameters.properties` order, and then `json.dumps` into a string and stuff arguments. The samples that failed to be extracted (i.e. ~17% of the fallback wrapper) are discarded entirely - this ADR supports the user decision "drop" and no longer uses the weak signal samples of `arguments={}`.
+- [`data/synthesize.py`](data/synthesize.py) / [`data/extractor.py`](data/extractor.py) / [`data/split.py`](data/split.py) / [`data/mine_triples.py`](data/mine_triples.py) **Not moving** - `Triple` schema already contains `required_tool` + `instruction` text, which is enough to drive the new formatter; mining envelope and `triples_*_1k.jsonl` are not reborn.
+- Data volume is slightly reduced: 7B 766 train + 196 val after drop fallback (vs §3 final delivery 966 + 246), 32B 642 + 160 (vs 842 + 210); still exceeds the early "≥1k training samples" demo magnitude threshold in the README.
+- The training side uses `mlx_lm.lora --mask-prompt` (assistant-only loss), which has the same idea as the [TRL PR #5522](https://github.com/huggingface/trl/pull/5522) Qwen2.5 training template - the gradient only acts on the `<tool_call>` block. HF safetensors are still SoT ([`§2`](#2-Training framework selection-mlx-lm)), just change the same jsonl when switching TRL / Unsloth.
 
-## 5. Phase 3 推荐 adapter 锁 BASE 配置；layers/rank sweep + 真效果决断推迟到 Phase 5
+## 5. Phase 3 recommends adapter lock BASE configuration; layers/rank sweep + true effect decision postponed to Phase 5
 
 - **Status**: accepted
 - **Date**: 2026-05-11
 
 ### Context
 
-Phase 3 6-run sweep（[`runs/sweeps/REPORT.md`](train/runs/sweeps/REPORT.md)）跑完，两个观察必须落 ADR——一影响"Phase 4 fuse 哪个 adapter"的具体动作，二影响"什么信号才算 SFT 真生效"的判据：
+After Phase 3 6-run sweep ([`runs/sweeps/REPORT.md`](train/runs/sweeps/REPORT.md)) is finished, two observations must fall into ADR - one affects the specific action of "Which adapter to fuse in Phase 4", and the other affects the criterion of "what signal is considered to be truly effective for SFT":
 
-|观察|数据|
+|Observation|Data|
 |---|---|
-|**`iters` dim 全程饱和**|`iters` ∈ {50, 200, 600} 三档 `train_loss`/`val_loss` 全收敛到 0.00，`tool_call_emit_rate` / `tool_name_match_rate` / `arg_set_match_rate` / `arg_value_match_rate` 全 100%|
-|**`lr` dim 仅 5e-4 劣化**|`lr=1e-5` / `1e-4` 全 100%；`lr=5e-4` `train_loss` 起 3.65 → 末 0.04 / `val_loss` 0.12 / emit 95.4% / name 93.9% / **arg_value 76.0%**|
+|**`iters` dim is fully saturated**|`iters` ∈ {50, 200, 600} The third gear `train_loss`/`val_loss` all converge to 0.00, `tool_call_emit_rate` / `tool_name_match_rate` / `arg_set_match_rate` / `arg_value_match_rate` all 100%|
+|**`lr` dim only 5e-4 degradation**|`lr=1e-5` / `1e-4` full 100%; `lr=5e-4` `train_loss` from 3.65 → end 0.04 / `val_loss` 0.12 / emit 95.4% / name 93.9% / **arg_value 76.0%**|
 
-[`eval_smoke.py`](train/eval_smoke.py) 4 项指标是 fast proxy（不走端到端，解析 `<tool_call>` 块对比 ground-truth）。`--mask-prompt` 让 loss 只覆盖 tool_call 段 → schema 信号高度可压缩，50 iter (≈0.25 epoch) 已学透形态；proxy 在 schema 学习维度上**饱和**——告诉我们"学透"，不告诉"是 memorize 还是 generalize"。
+[`eval_smoke.py`](train/eval_smoke.py) 4 indicators are fast proxy (not end-to-end, parse `<tool_call>` block and compare ground-truth). `--mask-prompt` Let loss only cover the tool_call segment → The schema signal is highly compressible, and the shape has been learned through 50 iter (≈0.25 epoch); the proxy is **saturated** in the schema learning dimension - telling us "learned through", but not "whether to memorize or generalize".
 
 ### Decision
 
-锁定三件事：
+Lock down three things:
 
-|条目|内容|
+|entry|content|
 |---|---|
-|**推荐 adapter**|[`train/runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/)——sweep `BASE` 配置（`iters=200` / `lr=1e-4` / `num_layers=16` / `rank=16` / `mask-prompt` on / LoRA on q/k/v/o），Phase 4 即从此 adapter 走 `mlx_lm.fuse` → GGUF → Modelfile|
-|**fast proxy 仅作 sweep 内排序信号**|"全 100%"不构成"SFT 起效"的证据；同理"95%/76%"不构成"配置严重失败"的证据；真决断信号 = **Phase 5 端到端 [`evals nudge_fire_rate`](../evals/metrics/nudge.py) 在原 scenario 上对比 base 7B / SFT 7B / 32B 三组**（README §Phase 5 锁定）|
-|**`layers` / `rank` sweep 推迟到 Phase 3.5**|触发条件单一明确：**仅当 Phase 5 真测显示 `(SFT 7B − base 7B) < (32B − base 7B) × 0.5`（即关闭一半 gap 都不到）时**回头扫；否则视为"v1 demo 量级足够"，转 Phase 6 反思|
+|**Recommended adapter**|[`train/runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/)——sweep `BASE` configuration (`iters=200` / `lr=1e-4` / `num_layers=16` / `rank=16` / `mask-prompt` on / LoRA on q/k/v/o), Phase 4, that is, from this adapter go `mlx_lm.fuse` → GGUF → Modelfile|
+|**fast proxy is only used as a sorting signal within the sweep**|"Full 100%" does not constitute evidence of "SFT taking effect"; similarly, "95%/76%" does not constitute evidence of "serious configuration failure"; true decision signal = **Phase 5 end-to-end [`evals nudge_fire_rate`](../evals/metrics/nudge.py) Compare base 7B / SFT 7B / 32B on the original scenario Three sets** (README §Phase 5 Locked) |
+|**`layers` / `rank` sweep is postponed to Phase 3.5**|The triggering condition is single and clear: **Only when the actual test of Phase 5 shows `(SFT 7B − base 7B) < (32B − base 7B) × 0.5` (that is, less than half of the gaps are closed) **Sweep back; otherwise, it is regarded as "v1 demo is of sufficient magnitude" and transferred to Phase 6 for reflection|
 
 ### Consequences
 
-- Phase 4 直接读 [`iters/200/`](train/runs/sweeps/iters/200/)；不需要再单独跑"3.D 选最佳配置主跑"——sweep BASE 已 = 最优 = 完整 adapter。
-- `lr=5e-4` 的 76% arg_value 是 sweep **唯一有信息量的负向单点**——印证 1e-4 是甜点，1e-3 不必再试（必发散）；该 negative datapoint 后续若被引用，固定指向 [`runs/sweeps/lr/0.0005/eval_smoke.json`](train/runs/sweeps/lr/0.0005/eval_smoke.json)。
-- **eval signal 升级路径**已规划——`eval_smoke` 在 schema 信号上饱和不代表 fast proxy 概念失败：Phase 5 数据回灌 + scenario 数学扩容（v2-B / v2-D 候选）后，可让 `eval_smoke` 切到"全新 scenario / 未见过的 tool name 组合"，重新成为 differentiating 信号。
+- Phase 4 directly reads [`iters/200/`](train/runs/sweeps/iters/200/); there is no need to run "3.D Select the best configuration main run" separately - sweep BASE has = optimal = complete adapter.
+- 76% arg_value of `lr=5e-4` is sweep **the only negative single point with informative content** - confirming that 1e-4 is a sweet spot, and 1e-3 does not need to be tried again (must be diverged); if this negative datapoint is referenced later, it will point to a fixed point [`runs/sweeps/lr/0.0005/eval_smoke.json`](train/runs/sweeps/lr/0.0005/eval_smoke.json).
+- **eval signal upgrade path** has been planned - the saturation of `eval_smoke` on the schema signal does not mean the failure of the fast proxy concept: after Phase 5 data recirculation + scenario mathematical expansion (v2-B / v2-D candidate), `eval_smoke` can be switched to "new scenario / unseen tool name combination" and become a differentiating signal again.
 
-## 6. Phase 4 量化等级锁 Q4_K_M + Modelfile 1:1 复刻 qwen2.5:7b template
+## 6. Phase 4 quantization level lock Q4_K_M + Modelfile 1:1 replica qwen2.5:7b template
 
-- **Status**: superseded by §10 (qwen3.5:9b base + RENDERER/PARSER directive；GGUF deploy 路径已知 broken)
+- **Status**: superseded by §10 (qwen3.5:9b base + RENDERER/PARSER directive; GGUF deploy path is known broken)
 - **Date**: 2026-05-11
 
 ### Context
 
-Phase 4 把 [`§5`](#5-phase-3-推荐-adapter-锁-base-配置layersrank-sweep--真效果决断推迟到-phase-5) 选定的 `iters/200` adapter fuse 进 Qwen2.5-7B，转 GGUF，注册成 Ollama tag。两个工程决策（**量化等级** Q4/Q5/Q8、**Modelfile TEMPLATE 来源** 1:1 复刻 vs 自写 vs 推断）锁定后，Phase 5 复测的"模型"维度才算冻结。
+Phase 4 puts the selected `iters/200` adapter fuse into Qwen2.5-7B, converts it to GGUF, and registers it as Ollama tag. The "model" dimension of the Phase 5 retest is frozen only after two engineering decisions (**Quantification Level** Q4/Q5/Q8, **Modelfile TEMPLATE Source** 1:1 Replica vs. Self-Written vs. Inference) are locked.
 
 ### Options considered
 
-|轴|选项|大小|与 Phase 5 baseline 的关系|
+|Axis|Options|Size|Relation to Phase 5 baseline|
 |---|---|---|---|
-|量化|**Q4_K_M**（选）|~4.4 GB（实测 4460 MiB / 4.91 BPW）|与 Ollama 内置 `qwen2.5:7b` 同量化等级 → 公平对比|
-|量化|Q5_K_M|~5.5 GB|质量略好 ~0.5%，但与 baseline 量化差 → 污染 SFT 信号归因|
-|量化|Q8_0|~8 GB|质量近无损但 baseline 不在 Q8 → 不可对比|
-|Modelfile|**1:1 复刻 qwen2.5:7b 的 TEMPLATE + SYSTEM**（选）|—|Ollama 函数调用解析器对 `<tool_call>` block 的识别完全依赖 chat template；template 偏离 1 字 → tool_call event 不触发 → 整条 SFT 信号失效|
-|Modelfile|自写 jinja（参考 Qwen2.5 官方 [chat_templates 仓库](https://raw.githubusercontent.com/chujiezheng/chat_templates/main/chat_templates/qwen2.5-instruct.jinja)）|—|Ollama 的 Go template 子集 ≠ jinja2，迁移成本 + 出错面双高|
-|Modelfile|不写 TEMPLATE，让 Ollama 从 GGUF metadata 推断|—|Ollama 推断的 fallback template 不含 native `<tool_call>` block 渲染逻辑，tool API 直接哑火（已知踩坑见 [ollama/ollama#7560](https://github.com/ollama/ollama/issues/7560)）|
+|Quantization|**Q4_K_M** (selected)|~4.4 GB (measured 4460 MiB / 4.91 BPW) |Same quantization level as Ollama built-in `qwen2.5:7b` → Fair comparison|
+|Quantization|Q5_K_M|~5.5 GB|Slightly better quality ~0.5%, but worse than baseline quantization → contaminating SFT signal attribution|
+|Quantization|Q8_0|~8 GB|Quality is nearly lossless but baseline is not Q8 → Not comparable|
+|Modelfile|**1:1 copy qwen2.5:7b's TEMPLATE + SYSTEM** (optional)|—|Ollama function call parser's recognition of `<tool_call>` block completely relies on chat template; template deviates by 1 word → tool_call event is not triggered → the entire SFT signal is invalid|
+|Modelfile|Self-written jinja (refer to Qwen2.5 official [chat_templates repository](https://raw.githubusercontent.com/chujiezheng/chat_templates/main/chat_templates/qwen2.5-instruct.jinja))|—|Ollama’s Go template subset ≠ jinja2, migration cost + double error surface|
+|Modelfile|Don’t write TEMPLATE, let Ollama infer from GGUF metadata|—|The fallback template inferred by Ollama does not contain native `<tool_call>` block rendering logic, and the tool API directly misfires (for known pitfalls, see [ollama/ollama#7560](https://github.com/ollama/ollama/issues/7560))|
 
 ### Decision
 
-|项|决策|证据|
+|item|decision|evidence|
 |---|---|---|
-|**量化等级**|**Q4_K_M**|与 baseline 同量化等级，Phase 5 三组对比 (base 7B / SFT 7B / 32B) 量化轴对齐|
-|**Modelfile**|**1:1 复刻** `ollama show --modelfile qwen2.5:7b` 的 TEMPLATE + SYSTEM 块；仅改 `FROM` 行指向本地 q4 gguf；**不加** `PARAMETER stop` 等行（与 baseline 完全一致）|baseline 自己的 modelfile 也未含显式 PARAMETER 行；stop token 由 GGUF metadata 提供 → 复刻 1:1 比"主动写一遍"更安全|
-|**fuse 路径**|`mlx_lm.fuse --dequantize`（4-bit MLX → fp16）→ `convert_hf_to_gguf.py`（fp16 → F16 GGUF）→ `llama-quantize Q4_K_M`|4-bit 底座 fuse 必须 `--dequantize`（LoRA 加不进量化网格，[mlx-lm#1071](https://github.com/ml-explore/mlx-lm/issues/1071)）；`--export-gguf` 直出路径 tokenizer metadata 兼容性不及 llama.cpp 中转（[Awni 2024](https://github.com/ml-explore/mlx-examples/discussions/1057)）|
+|**Quantization level**|**Q4_K_M**|Same quantization level as baseline, Phase 5 three sets of comparisons (base 7B / SFT 7B / 32B) quantization axis alignment|
+|**Modelfile**|**1:1 fork** TEMPLATE + SYSTEM block of `ollama show --modelfile qwen2.5:7b`; only change the `FROM` line to point to the local q4 gguf; **do not add** `PARAMETER stop` and other lines (exactly the same as baseline) |baseline's own modelfile does not contain an explicit PARAMETER line; the stop token is provided by GGUF metadata → Forking 1:1 is safer than "actively writing it again" |
+|**fuse path**|`mlx_lm.fuse --dequantize` (4-bit MLX → fp16) → `convert_hf_to_gguf.py` (fp16 → F16 GGUF) → `llama-quantize Q4_K_M`|4-bit base fuse must `--dequantize` (LoRA The quantization grid cannot be added, [mlx-lm#1071](https://github.com/ml-explore/mlx-lm/issues/1071)); `--export-gguf` direct export path tokenizer metadata is not as compatible as llama.cpp transfer ([Awni 2024](https://github.com/ml-explore/mlx-examples/discussions/1057))|
 
 ### Consequences
 
-- 验证：两级烟测全过。Step 5A `/api/chat` 返回 parsed `tool_calls`（含中文 args）；Step 5B `agent_engine` 跑全 8 step `tool_chain` 抓 **10 个 tool_call event** 覆盖全工具集——Q4_K_M 量化下 SFT schema 信号未坍塌。
-- 部署侧"重生指南"完全脚本化：[`deploy/build.sh`](deploy/build.sh) + [`deploy/deploy.sh`](deploy/deploy.sh) + [`deploy/smoke_test.py`](deploy/smoke_test.py)，新机器从 0 到 `agent-sft-qwen` tag ≤ 10 min。
-- 后续可滑性：Q4_K_M 若 Phase 5 显示压坏 SFT 信号，`bash deploy/build.sh --force QUANT=Q5_K_M` 一行覆盖。llama.cpp 引入在 [`§2`](#2-训练框架选-mlx-lm) Consequences 末段已铺垫（YAGNI 留口），无需更新 §2 Status。
+- Verification: Passed both levels of smoke test. Step 5A `/api/chat` returns parsed `tool_calls` (including Chinese args); Step 5B `agent_engine` runs the full 8 step `tool_chain` and captures **10 tool_call events** covering the entire tool set - the SFT schema signal does not collapse under Q4_K_M quantization.
+- Deployment side "rebirth guide" fully scripted: [`deploy/build.sh`](deploy/build.sh) + [`deploy/deploy.sh`](deploy/deploy.sh) + [`deploy/smoke_test.py`](deploy/smoke_test.py), new machine from 0 to `agent-sft-qwen` tag ≤ 10 min.
+- Subsequent slideability: Q4_K_M If Phase 5 shows a crushed SFT signal, `bash deploy/build.sh --force QUANT=Q5_K_M` will be covered by one line. llama.cpp was introduced in [`§2`](#2-Training Framework Selection-mlx-lm) The end of Consequences has been laid out (YAGNI leaves the mouth), and there is no need to update §2 Status.
 
-## 7. extractor / synthesize / formatter 直连 agent_engine（删 evals 私有 import 反模式）
+## 7. extractor / synthesize / formatter directly connected to agent_engine (remove evals private import anti-pattern)
 
-- **Status**: accepted（修正 §3 Consequences "对 evals.metrics.nudge 私 helper 有耦合"）
+- **Status**: accepted (fixes §3 Consequences "Coupling to evals.metrics.nudge private helper")
 - **Date**: 2026-05-11
 
 ### Context
 
-§3 落地时 `extractor.py` / `synthesize.py` / `formatter.py` 用 `sys.path.insert` 反模式从 `evals.metrics.nudge` 偷 4 个私有 helper（`_attempt_called_required` / `_resolve_who_to_agents` / `_split_attempts` / `_split_frontmatter`，公开的 `classify_failure_mode` + `derive_expected_turns` 不算）。这 4 个私有函数是 evals 反向工程 agent_engine `Discussion._expand_steps + _resolve_who + ToolTracer/ArtifactStore.event` schema 的镜像——schema 真源在 agent_engine，反向工程在 evals，agent_sft 又消费 evals 的反向产物——**双层间接依赖让 schema 改动像踩雷**。
+§3 When implemented, `extractor.py` / `synthesize.py` / `formatter.py` uses the `sys.path.insert` anti-pattern to steal 4 private helpers from `evals.metrics.nudge` (`_attempt_called_required` / `_resolve_who_to_agents` / `_split_attempts` / `_split_frontmatter`, public `classify_failure_mode` + `derive_expected_turns` do not count). These 4 private functions are the mirror of evals reverse engineering agent_engine `Discussion._expand_steps + _resolve_who + ToolTracer/ArtifactStore.event` schema - the true source of schema is in agent_engine, reverse engineering is in evals, agent_sft consumes the reverse product of evals - **Double-level indirect dependency makes schema changes like thunder**.
 
-[`agent_engine §13`](../agent_engine/DECISIONS.md) 同期落地：把 transcript / scenario 解读权收回 agent_engine，新增 typed 视图 `Result.tool_calls() / .turns() / .find_finalize_decision()` + `TurnView.attempts() / .start_offset` + `Scenario.expanded_turns()` + `ExpandedTurn` dataclass。本 ADR 是 agent_sft 对应面。
+[`agent_engine §13`](../agent_engine/DECISIONS.md) Implemented at the same time: the transcript / scenario interpretation rights are returned to agent_engine, and a new typed view `Result.tool_calls() / .turns() / .find_finalize_decision()` + `TurnView.attempts() / .start_offset` + `Scenario.expanded_turns()` + `ExpandedTurn` dataclass. This ADR is the agent_sft counterpart.
 
 ### Options considered
 
-| 项 | 做法 | 权衡 |
+| Items | Practices | Trade-offs |
 |---|---|---|
-| A. 现状 | 继续 sys.path.insert + 4 个私有 import | schema 改动连锁三处；agent_sft 单测对 evals 内部表征敏感 |
-| **B. 直连 agent_engine 公开面**（选择） | `from agent_engine import Result, Scenario, TurnView, ExpandedTurn`；保留 `from evals.metrics.nudge import classify_failure_mode`（evals 合法公开面）| 0 私有面跨项目 import；signal flow agent_engine schema → agent_sft 直接消费一层；evals.metrics.nudge 仅作为"failure mode taxonomy 拥有者"被引用 |
-| C. 把 `classify_failure_mode` 也上提到 agent_engine | 完全无需 import evals | "missed / wrong_tool" 是 evals/sft 视角的语义判断（非 agent_engine 关心的 dispatch 真相），上提会污染 agent_engine 关注边界；deferred 到 PR-3 if needed |
+| A. Current situation | Continue sys.path.insert + 4 private imports | schema changes in three chaining places; agent_sft single test is sensitive to evals internal representation |
+| **B. Direct connection to agent_engine public side** (select) | `from agent_engine import Result, Scenario, TurnView, ExpandedTurn`; reserved `from evals.metrics.nudge import classify_failure_mode` (evals legal public side) | 0 private side cross-project import; signal flow agent_engine schema → agent_sft directly consumes one layer; evals.metrics.nudge only serves as "failure" mode taxonomy owner" was quoted |
+| C. Also mention `classify_failure_mode` to agent_engine | There is no need to import evals | "missed / wrong_tool" is a semantic judgment from the evals/sft perspective (not the dispatch truth that agent_engine cares about). Raising it will pollute the agent_engine concern boundary; deferred to PR-3 if needed |
 
 ### Decision
 
 **B**：
 
-| 模块 | 改动 |
+| Modules | Changes |
 |---|---|
-| [`data/extractor.py`] / [`data/synthesize.py`] | 删 5 个私有 import（`_split_frontmatter` / `_resolve_who_to_agents` / `_split_attempts` / `derive_expected_turns` / `_attempt_called_required`）；改 `from agent_engine import ExpandedTurn, Result, Scenario, TurnView`；`extract_triples` 用 `Scenario.expanded_turns()` + `Result.turns()` + `TurnView.attempts()` + `.start_offset` 直接迭代；`_attempt_called_required` 内化为 5 行 helper（synthesize 共享 import）|
-| [`data/formatter.py`] | 删 `_split_frontmatter` 私有 import；改走 `Scenario.from_yaml(p).meta`（schema 校验跟 agent_engine 同源）；`yaml` import 删除 |
-| 公开面纪律 | 唯一保留的跨项目 import 是 `from evals.metrics.nudge import classify_failure_mode`（evals 合法公开面，`FAILURE_MODES` taxonomy 拥有方）|
-| shim 兼容 | `_index_steps_by_turn` / `_split_turns_indexed` 退化为 1-2 行 shim 让旧测零修改（§8 退役）|
+| [`data/extractor.py`] / [`data/synthesize.py`] | Delete 5 private imports (`_split_frontmatter` / `_resolve_who_to_agents` / `_split_attempts` / `derive_expected_turns` / `_attempt_called_required`); change `from agent_engine import ExpandedTurn, Result, Scenario, TurnView`; `extract_triples` iterates directly with `Scenario.expanded_turns()` + `Result.turns()` + `TurnView.attempts()` + `.start_offset`; `_attempt_called_required` internalized to 5 lines helper (synthesize shared import) |
+| [`data/formatter.py`] | Delete `_split_frontmatter` private import; change to `Scenario.from_yaml(p).meta` (schema verification has the same origin as agent_engine); delete `yaml` import |
+| Public Discipline | The only retained cross-project import is `from evals.metrics.nudge import classify_failure_mode` (evals legal public surface, `FAILURE_MODES` taxonomy owner) |
+| shim compatible | `_index_steps_by_turn` / `_split_turns_indexed` degraded to 1-2 lines shim to make old tests zero-modified (§8 retired) |
 
 ### Consequences
 
-| 影响 | 结果 |
+| Impact | Results |
 |---|---|
-| schema 单源 | agent_engine 改 `Result.transcript` / `Scenario` 字段，agent_sft 改一处即可（视图层）|
-| import 边界 | agent_sft 与 evals 仅 1 个公开函数依赖（`classify_failure_mode`），与 agent_engine 直连；vs PR-2 前 4 私有 + 2 公开 = 6 个跨项目 import |
-| 测试 | 89 全绿，旧测零修改（shim 续命）|
-| §3 修正 | §3 Consequences "对 evals 私 helper 有耦合" 不再成立；流水线四脚本结构与职责分工不变 |
-| 后续可滑性 | `classify_failure_mode` 上提到 agent_engine 是另一 PR 的选项（语义中性度待商），本方案不做 |
+| schema single source | agent_engine changes the `Result.transcript` / `Scenario` field, agent_sft only needs to change one place (view layer) |
+| import boundary | agent_sft and evals have only 1 public function dependency (`classify_failure_mode`), directly connected to agent_engine; vs PR-2 top 4 private + 2 public = 6 cross-project import |
+| Test | 89 all green, no modifications to the old test (shim life extension) |
+| §3 Correction | §3 Consequences "There is coupling to evals private helper" is no longer true; the pipeline four script structure and division of responsibilities remain unchanged |
+| Subsequent slideability | `classify_failure_mode` mentioned that agent_engine is another PR option (semantic neutrality is subject to discussion), this plan does not do it |
 
-## 8. Transcript schema typed 升级 + envelope `usage` 同步消费（agent_engine §14 的 agent_sft 对应面）
+## 8. Transcript schema typed upgrade + envelope `usage` synchronous consumption (the agent_sft counterpart of agent_engine §14)
 
-- **Status**: accepted（紧跟 [`agent_engine §14`](../agent_engine/DECISIONS.md)；扩展 §7 的"直连 agent_engine"边界到 typed entry）
+- **Status**: accepted (follows [`agent_engine §14`](../agent_engine/DECISIONS.md); extends §7's "direct agent_engine" boundary to typed entry)
 - **Date**: 2026-05-11
 
 ### Context
 
-§7 把三脚本直连 agent_engine 公开面，但 transcript 内部仍是 `list[dict]`. agent_engine §14 同期把 transcript 升级到 `list[TranscriptEntry]` typed union（6 个 frozen dataclass，`SpeakerEntry` 强制 `type="speaker"`）+ `Result.usage: list[TokenUsage]` + `Result.from_dict` 严格化。三脚本不切 typed access 即失效：`_attempt_called_required` 的 `.get("tool")` 在 dataclass 上不存在；`extract_triples` / `synthesize` 用 `entry["content"]` + `entry.get("speaker")` 嗅探应走 `isinstance(e, SpeakerEntry)` 派发；`formatter._render_recent_context` 的 `"speaker" in entry` 嗅探在 §14 后歧义；500 个历史 mined envelope JSON 缺 `type:"speaker"` / `usage:[]` 让 `Result.from_dict` `KeyError`。
+§7 Directly connect the three scripts to the public side of agent_engine, but the internal transcript is still `list[dict]`. agent_engine §14 At the same time, upgrade transcript to `list[TranscriptEntry]` typed union (6 frozen dataclasses, `SpeakerEntry` mandatory `type="speaker"`) + `Result.usage: list[TokenUsage]` + `Result.from_dict` Rigorous. The three scripts do not support typed access and are invalid: `.get("tool")` of `_attempt_called_required` does not exist on the dataclass; `extract_triples` / `synthesize` uses `entry["content"]` + `entry.get("speaker")` for sniffing. `isinstance(e, SpeakerEntry)` dispatch; sniff for `"speaker" in entry` of `formatter._render_recent_context` is ambiguous after §14; 500 history mined envelope JSON missing `type:"speaker"` / `usage:[]` let `Result.from_dict` `KeyError`.
 
 ### Options considered
 
-| 项 | 做法 | 权衡 |
+| Items | Practices | Trade-offs |
 |---|---|---|
-| A. agent_sft 内部继续 dict 嗅探 | 跨 agent_engine §14 兼容 | typed union 优势失效；schema 改动两处都要追 |
-| **B. 直接吃 typed entry**（选择） | `extractor / synthesize` 内部 `isinstance(e, SpeakerEntry/...)` 派发；`formatter` 落盘 dict 形态保持不变（`metadata["context"]` 是 JSON 序列化后的 dict），但 speaker 判断走 `entry.get("type") == "speaker"`（§14 已强制写入）| typed dispatch + JSON 形态都靠 `type` 字段单源；dict 嗅探彻底退场 |
-| C. 给 agent_sft 写自己的 typed view | 双 SoT，与 §7 "schema 单源" 决策矛盾 | 否决 |
+| A. Agent_sft continues dict sniffing internally | Cross-agent_engine §14 compatible | The advantages of typed union are invalid; schema changes must be pursued in both places |
+| **B. Directly eat typed entry** (select) | `extractor/synthesize` internal `isinstance(e, SpeakerEntry/...)` is dispatched; `formatter` placed dict shape remains unchanged (`metadata["context"]` is the JSON serialized dict), but the speaker determines `entry.get("type") == "speaker"` (§14 has been forced to be written) | Typed dispatch + JSON forms all rely on the `type` field as a single source; dict sniffing is completely eliminated |
+| C. Write your own typed view for agent_sft | Dual SoT, contradicting the §7 "schema single source" decision | Rejected |
 
 ### Decision
 
-**B**——extractor / synthesize 走 typed dispatch；formatter 走 `type` 字段判断；shim cleanup + 历史 envelope 一次性迁移：
+**B**——extractor/synthesize uses typed dispatch; formatter uses `type` field judgment; shim cleanup + historical envelope one-time migration:
 
-| 动点 | 做法 |
+| Moving point | Practice |
 |---|---|
-| extractor / synthesize | 形参换 typed union；`_attempt_called_required` 用 `e.tool / e.caller`；`extract_triples` 内 `isinstance(e, SpeakerEntry)` + `e.content` 直接访问；`Triple.context: list[TranscriptEntry]` |
-| extractor shim 删除 | §7 留下的 `_split_turns_indexed` / `_index_steps_by_turn` 退役（`Result.turns()[i].start_offset` 已直接给全局 offset）+ 2 条 shim 单测一并删除 |
-| `formatter._render_recent_context` | `entry.get("type") == "speaker"` 派发；落盘 metadata 仍是 dict（typed → dict 由 `engine.py` `dataclasses.asdict` 完成）|
-| 历史 envelope × 500 | 一次性迁移脚本注入 `type:"speaker"` + `usage: []`，与 agent_engine §14 forward-only 一致 |
-| 跨项目 import 加项 | `from agent_engine import TokenUsage, ArtifactEventEntry, SpeakerEntry, ToolCallEntry, TranscriptEntry` |
+| extractor / synthesize | formal parameter replacement typed union; `_attempt_called_required` uses `e.tool / e.caller`; `isinstance(e, SpeakerEntry)` + `e.content` in `extract_triples` for direct access; `Triple.context: list[TranscriptEntry]` |
+| extractor shim deleted | `_split_turns_indexed` / `_index_steps_by_turn` left in §7 are retired (`Result.turns()[i].start_offset` has been directly given to the global offset) + 2 shims are deleted together with single test |
+| `formatter._render_recent_context` | `entry.get("type") == "speaker"` dispatch; the placement metadata is still dict (typed → dict is completed by `engine.py` `dataclasses.asdict`) |
+| History envelope × 500 | One-time migration script injection `type:"speaker"` + `usage: []`, consistent with agent_engine §14 forward-only |
+| Cross-project import addition | `from agent_engine import TokenUsage, ArtifactEventEntry, SpeakerEntry, ToolCallEntry, TranscriptEntry` |
 
 ### Consequences
 
-| 影响 | 结果 |
+| Impact | Results |
 |---|---|
-| schema 单源 | agent_engine §14 改 entry / 加字段 → agent_sft 改一处即可（typed dispatch 自动接到）|
-| 测试 | 87 全绿（§7 时 89 → -2 shim 单测删，等价覆盖移到 agent_engine）|
-| 历史 mined 数据 | 500 envelope 一次性迁移，不留长期 shim；后续重跑自动产 §14 schema |
-| §7 关系 | §7 立"直连公开面"在 dict 边界；§8 把边界向内推到 typed entry，同一原则递进 |
-| 后续可滑性 | `Result.usage` 当前 mining 不消费，后续若需 cost 过滤可直接聚合 |
+| schema single source | agent_engine §14 Change entry / add field → agent_sft Just change one place (typed dispatch will be automatically received) |
+| Test | 87 all green (89 → -2 shim single test deleted in §7, equivalent coverage moved to agent_engine) |
+| Historical mined data | 500 envelope one-time migration, no long-term shim; subsequent re-run automatic production §14 schema |
+| §7 Relationship | §7 Set up the "directly connected public face" at the dict boundary; §8 Push the boundary inward to the typed entry, and the same principle progresses |
+| Subsequent slideability | `Result.usage` is not consumed in current mining, and can be directly aggregated if cost filtering is needed in the future |
 
-## 9. v1 结案：Phase 5 数字三阈值命中 + v2/v3 候选取舍
+## 9. v1 closed: Phase 5 digital three threshold hit + v2/v3 candidate trade-off
 
 - **Status**: accepted (v1 closing)
 - **Date**: 2026-05-13
 
 ### Context
 
-Phase 5.A 跑完 3 model × 10 seed × 4 task = 120 runs（119 successful，1 排除）。聚合 [`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md)。v1 结案两件事同步落：① [`§1`](#1-nudge-grounded-sft-作为项目中心问题) 中心问题按数字给定答；② v2/v3 候选 7 项标启动 / 摘牌 / 暂留。
+Phase 5.A ran 3 model × 10 seed × 4 tasks = 120 runs (119 successful, 1 excluded). Aggregate [`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md). v1 closed the case with two things happening at the same time: ① [`§1`](#1-nudge-grounded-sft-as the central question of the project) The central question is answered numerically; ② v2/v3 candidate 7 items are activated/delisted/sustained.
 
 ### Options considered
 
-预设三种数字 → 决策路径：
+Preset three numbers → decision path:
 
-|选项|数字特征|对应路径|
+|Options|Number Features|Corresponding Path|
 |---|---|---|
-|A. SFT **显著有效**|三阈值全过：nudge gap ≥50%、BFCL `arg_value_match` 回归 ≤5%、MMLU ≤3%|v2-B / v2-C 任一启动；v3-A 暂留；v3-B 可启动|
-|B. SFT **部分有效**|nudge 达标但 BFCL / MMLU 超阈|v2-C 优先；v3-A / v3-B 摘牌|
-|C. SFT **无效**|nudge gap < 50%|v1 终止；记录 negative finding；回数据层|
+|A. SFT **Significantly effective**|All three thresholds passed: nudge gap ≥50%, BFCL `arg_value_match` regression ≤5%, MMLU ≤3%|v2-B / v2-C can be started at any time; v3-A is persistent; v3-B can be started|
+|B. SFT **Partially valid**|nudge meets the standard but BFCL/MMLU exceeds the threshold|v2-C takes priority; v3-A/v3-B is delisted|
+|C. SFT **Invalid**|nudge gap < 50%|v1 terminated; record negative finding; return to data layer|
 
 ### Decision
 
-**A 命中。** 三阈值实测数字（[`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md)，n=10 except 7B nudge n=9）：
+**A hit. **Three threshold measured numbers ([`eval/baselines/phase5-3model-comparison.md`](eval/baselines/phase5-3model-comparison.md), n=10 except 7B nudge n=9):
 
-|维度|base 7B|SFT 7B|32B|判定|
+|Dimension|base 7B|SFT 7B|32B|Judgment|
 |---|---|---|---|---|
-|`nudge_fire_rate`（越低越好）|0.7389 ± 0.1112|**0.6450 ± 0.0369**|0.5750 ± 0.0540|gap 关闭 **57.3%** ≥ 50% ✅|
-|`bfcl_slice.arg_value_match`（越高越好）|0.9683|**0.9567**|0.9783|回归 **1.16%** ≤ 5% ✅|
-|`mmlu_slice.accuracy`（越高越好）|0.7188|**0.6979**|0.8021|回归 **2.09%** ≤ 3% ✅|
+|`nudge_fire_rate` (lower is better)|0.7389 ± 0.1112|**0.6450 ± 0.0369**|0.5750 ± 0.0540|gap close **57.3%** ≥ 50% ✅|
+|`bfcl_slice.arg_value_match` (higher is better)|0.9683|**0.9567**|0.9783|Regression **1.16%** ≤ 5% ✅|
+|`mmlu_slice.accuracy` (higher is better)|0.7188|**0.6979**|0.8021|Regression **2.09%** ≤ 3% ✅|
 
-二阶证据 6 项（task_success SFT 反超 32B、tool_call_set_f1 -27%、trajectory_match -31%、missed→wrong_tool 转化、panel 场景反向回归、retrieve_docs 100% 需 nudge）已写入 [`README.md` §"Phase 5 数字一览"](README.md)；不在阈值判定内，但是 v2-B / v2-C 候选输入。
+Six items of second-order evidence (task_success SFT go-ahead 32B, tool_call_set_f1 -27%, trajectory_match -31%, missed→wrong_tool conversion, panel scenario reverse regression, retrieve_docs 100% nudge required) have been written into [`README.md` §"Phase 5 Number List"](README.md); Not within threshold determination, but v2-B / v2-C candidate input.
 
 ### Consequences
 
-**中心问题答**（[`§1`](#1-nudge-grounded-sft-作为项目中心问题)）：**能。** nudge gap 关闭 57.3%（接近 32B ceiling 60% mark），BFCL 回归 1.16%，MMLU 回归 2.09%。但条件清楚：SFT 学到 schema 信号（[`§4`](#4-sft-target-schema-用-openai-tool_calls--顶层-tools-字段qwen25-native)）+ "知道该调"（missed ↓），未完全学到"调对"（wrong_tool ↑）+ "不调多余"（trajectory 偏离 ↑）——是 v1 仅 `require_tool` 单信号 supervision 的天花板。
+**Center Questions and Answers** ([`§1`](#1-nudge-grounded-sft-as the project center question)): **Yes. ** The nudge gap is closed at 57.3% (close to the 32B ceiling 60% mark), BFCL is back at 1.16%, and MMLU is back at 2.09%. But the conditions are clear: SFT has learned the schema signal ([`§4`](#4-sft-target-schema-use-openai-tool_calls--top-tools-field qwen25-native)) + "know the adjustment" (missed ↓), and has not fully learned the "correct adjustment" (wrong_tool ↑) + "does not adjust the redundant" (trajectory deviation ↑) - this is the ceiling of v1's single signal of supervision `require_tool` only.
 
-**§5 触发条件**：gap 关闭 57.3% **未触发** §5 的"<50% 才回扫 layers/rank"条件 → §5 status 维持 accepted，推荐 adapter 仍是 [`train/runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/)。
+**§5 Trigger condition**: gap closed 57.3% **Not triggered** §5's "<50% will only retrace layers/rank" condition → §5 status remains accepted, and the recommended adapter is still [`train/runs/sweeps/iters/200/adapters.safetensors`](train/runs/sweeps/iters/200/).
 
-**v2/v3 候选清单更新**（mirror 至 [`README.md`](README.md)）：
+**v2/v3 candidate list update** (mirror to [`README.md`](README.md)):
 
-|候选|新 status|依据|
+|candidate|new status|basis|
 |---|---|---|
-|v2-A DPO|⏸ **暂留**|wrong_tool 是分类问题不是偏好问题，DPO 不正面解决|
-|v2-B on-policy 迭代 SFT|✅ **可启动**|"trajectory 偏离" + "wrong_tool ↑" 根因是 training set 缺 SFT 自产 trajectory；on-policy 回灌直接对症|
-|v2-C 失败模式 taxonomy + hard sample mining|✅ **启动**|三轴已暴露 4 个死角（wrong_tool ↑ / panel 反向 / retrieve_docs 100% / tool_call_set_f1 退化），全是 hard sample 入口|
-|v3-A 14B 升级|⏸ **暂留**|7B 在 task_success 反超 32B 未显饱和；先让 v2 榨干|
-|v3-B 公开 HF artifact|✅ **可启动**|三阈值全过 + "硬币背面"叙事 = Model Card 已成型，可先 ship adapter|
-|v3-C 技术报告 / blog|⏸ **v3-B 之前**|依赖 v3-B + v2 进度|
-|v3-D 多 supervision 信号 superset|🚫 **摘牌**|v1 瓶颈是 supervision **质量**（panel 反向 / retrieve_docs 100%）而非数量；v2-C 自然涵盖|
+|v2-A DPO|⏸ **tentative**|wrong_tool is a classification issue not a preference issue, DPO will not solve it head-on|
+|v2-B on-policy iteration SFT|✅ **Startable**|"trajectory deviation" + "wrong_tool ↑" The root cause is that the training set lacks SFT self-produced trajectory; on-policy recirculation directly treats symptoms|
+|v2-C failure mode taxonomy + hard sample mining|✅ **Startup**|The three axes have exposed 4 dead ends (wrong_tool ↑ / panel reverse / retrieve_docs 100% / tool_call_set_f1 degradation), all are hard sample entrances|
+|v3-A 14B upgrade|⏸ **Pursue**|7B exceeds 32B in task_success and is not saturated; let v2 drain out first|
+|v3-B public HF artifact|✅ **Startable**|All three thresholds passed + "Back of the coin" narrative = Model Card has been formed, you can ship adapter first|
+|v3-C technical report/blog|⏸ **v3-B before**|Depends on v3-B + v2 progress|
+|v3-D multi-supervision signal superset|🚫 **Delisting**|The bottleneck of v1 is supervision **quality** (panel reverse / retrieve_docs 100%) rather than quantity; v2-C naturally covers|
 
-**工程补丁状态**：[`eval/run_baseline.py`](eval/run_baseline.py) 2 处（`sys.executable` + `AGENT_ENGINE_MODEL` env 注入）+ [`evals/models/agent_engine_run.py`](../evals/models/agent_engine_run.py) 1 处（`AGENT_ENGINE_RUN_TIMEOUT` env override，零副作用），全部随本 ADR 一起 commit——是 Phase 5 跑成的 prerequisite 而非 QoL。
+**Project patch status**: [`eval/run_baseline.py`](eval/run_baseline.py) 2 (`sys.executable` + `AGENT_ENGINE_MODEL` env injection) + [`evals/models/agent_engine_run.py`](../evals/models/agent_engine_run.py) 1 (`AGENT_ENGINE_RUN_TIMEOUT` env override, zero side effects), all committed together with this ADR - they are prerequisites run by Phase 5, not QoL.
 
-**跨项目 followup**（归对应 backlog）：① evals harness 应隔离异常 LLM 输出（`tool=cast_vote(...)` 非法 kwarg → handler `TypeError` 崩 caller，1/120 损失）；② agent_engine artifact handler 应拒绝 unknown kwarg 返回 `{ok:false}` event。面试一句话锚点参见 [`README.md` §"面试叙事脚本（v1 结案版）"](README.md)。
+**Cross-project followup** (returned to corresponding backlog): ① evals harness should isolate abnormal LLM output (`tool=cast_vote(...)` illegal kwarg → handler `TypeError` collapse caller, 1/120 loss); ② agent_engine artifact handler should reject unknown kwarg and return `{ok:false}` event. See [`README.md` §"Interview narrative script (v1 final version)"](README.md) for interview sentence anchors.
 
-## 10. v1.5: qwen3.5:9b base 重训 + 9-run 极简复测 + GGUF deploy 暂缓
+## 10. v1.5: qwen3.5:9b base retraining + 9-run minimalist retest + GGUF deploy suspension
 
 - **Status**: superseded by §11 (clean-data + bf16 retrain + held-out story eval)
 - **Date**: 2026-05-25
 
 ### Context
 
-仓库默认底座从 qwen2.5 切到 qwen3.x（详见根 `a5ad0f9` commit + Phase 1/2/3 envelope/RAG 升级）；agent_sft v1（Qwen2.5-7B base + 1k 数据 + 120-run baseline）与新栈脱节——CLI 默认指向 v1 已删的 model tag、evals harness 调用 `qwen3.5:9b` 时拿不到 SFT adapter 做对照。**选择重训而非维护两套**。
+The default base of the warehouse is switched from qwen2.5 to qwen3.x (See root `a5ad0f9` commit + Phase 1/2/3 envelope/RAG upgrade); agent_sft v1 (Qwen2.5-7B base + 1k data + 120-run baseline) is out of touch with the new stack - the CLI defaults to the deleted model tag of v1, and the evals harness cannot get the SFT adapter for comparison when calling `qwen3.5:9b`. **Choose to retrain rather than maintain two sets**.
 
-数据策略上一开始按 plan 想 7 run_id × 2 scenario 单跑 `qwen3.5:9b` 出 500+100；实际 `qwen3.5:9b` 比 `qwen2.5:7b` 强很多——14 envelope 只产 49 nudge triples（v1 同等 envelope 产 2000+）。**改为合并历史 v1 7B/32B triples + 新 9B triples，给三来源分配 disjoint run_id offset 保 scenario 分组完整性**，凑到 train 588 / val 155（接近 plan 500/100 目标）。
+According to the data strategy, according to the plan at the beginning, 7 run_id × 2 scenario, a single run of `qwen3.5:9b` produced 500+100; in fact, `qwen3.5:9b` is much stronger than `qwen2.5:7b` - 14 envelopes only produce 49 nudge triples (the same envelope of v1 produces 2000+). **Change to merge historical v1 7B/32B triples + new 9B triples, assign disjoint run_id offset to three sources to ensure scenario grouping integrity**, and get to train 588 / val 155 (close to the plan 500/100 goal).
 
 ### Options considered
 
-|选项|GGUF deploy|训练数据|备注|
+|Options|GGUF deploy|Training data|Notes|
 |---|---|---|---|
-|A. 严格按 plan：纯 9B mine 500+100|按 §6 路径走 Q4_K_M GGUF + 1:1 复刻 modelfile|纯 9B|9B 强 → 49 nudge triples，数据量远不够|
-|B. 9B mine + 历史 7B/32B 拼接|同上|混源 588/155|数据可凑齐；GGUF 路径暴露下面 hybrid 兼容性 bug|
-|**C. (选) 同 B 数据 + RENDERER/PARSER directive Modelfile + GGUF deploy 降级 placeholder**|fp16 fused mlx 归档 + ollama tag `agent-sft-qwen-3` 暂 FROM base `qwen3.5:9b`|混源 588/155|承认 mlx→GGUF Qwen3.5 hybrid 转换缺陷，把"训练效果"与"deploy 形态"解耦|
+|A. Strictly follow the plan: pure 9B mine 500+100|Follow the §6 path Q4_K_M GGUF + 1:1 replica modelfile|Pure 9B|9B strong → 49 nudge triples, the amount of data is far from enough|
+|B. 9B mine + history 7B/32B splicing|Same as above|Hybrid source 588/155|Data can be collected; GGUF path exposes the following hybrid compatibility bug|
+|**C. (Select) Same as B data + RENDERER/PARSER directive Modelfile + GGUF deploy downgrade placeholder**|fp16 fused mlx archive + ollama tag `agent-sft-qwen-3` temporarily FROM base `qwen3.5:9b`|Mixed source 588/155|Acknowledge the mlx→GGUF Qwen3.5 hybrid conversion defect, decouple the "training effect" from the "deploy form"|
 
 ### Decision
 
-**采纳 C。**
+**Adopt C. **
 
-- **Base**: `mlx-community/Qwen3.5-9B-4bit`（HF：`mlx-community/Qwen3.5-9B-Instruct-4bit` 不存在，实际可用的是非-Instruct 4bit 量化）
-- **数据**: 训 588 / 验 155 三元组，混合源 `v1_7b` + `v1_32b` + `v15_9b`，三来源 run_id 分配 disjoint offset 保 scenario 分组（[`data/triples/train_qwen3.jsonl`](data/triples/train_qwen3.jsonl)）
-- **训练超参**：`iters=600` / `batch_size=1` / `num_layers=4` / `lr=1e-4` / `--grad-checkpoint` / `--clear-cache-threshold 1` / `max_seq_length=1500`；OOM-driven 缩参——9B + Qwen3.5 hybrid (attention+SSM) 即便 4bit 也在 M4 Pro 48GB 上比 7B 紧得多，batch=1 + 4 层 LoRA 是唯一稳跑下来的组合（[`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)）。
-- **Modelfile**：从 v1 ~50 行 TEMPLATE 的 Go-template DSL，改为 ollama 0.20+ 的 `TEMPLATE {{ .Prompt }}` + `RENDERER qwen3.5` + `PARSER qwen3.5` 三行 directive；这是 ollama 内部已 1:1 复刻 `qwen3.5:9b` chat & tool_call 解析的 short-hand。
-- **GGUF deploy 暂缓**：mlx_lm.fuse --dequantize 输出的 fp16 safetensors → `convert_hf_to_gguf.py` → `llama-quantize` Q4_K_M 路径，对 Qwen3.5 hybrid 架构（含 SSM 算子 / `ssm_alpha`/`ssm_beta`/`ssm_conv1d` tensors）weight 重建不正确：F16 GGUF 与 Q4 GGUF 在 ollama 端均输出乱码（"ã加 广_MMjv 滑… \uF!安 Cornas $yn"），但 fp16 mlx fused 目录直接用 `mlx_lm.generate` 推理正常。**结论：训练成功，部署路径 broken**。Modelfile 改为 `FROM qwen3.5:9b` placeholder（继承 base 推理能力，PARAMETER 沿用），同时把 broken 版备份为 [`deploy/Modelfile.gguf-broken`](deploy/Modelfile.gguf-broken)、把 fused fp16 模型留在 [`deploy/build/fused-mlx-fp16/`](deploy/build/fused-mlx-fp16/) 作为待修复时的输入 artifact。
-- **评测**：plan §S9 9 runs 极简复测（3 model × 3 seed × 1 task `nudge_fire_rate`）替代 v1 120 runs baseline；评测落在 [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)（来自 evals/runs/index.jsonl 末 9 行复制），具体数字见末尾"数字快照"。
-- **真正反映 SFT 训练效果的指标**：`train/eval_smoke.py` 在 50 val sample 上跑 4bit base + LoRA adapter 直接推理（绕过 ollama / GGUF），数字见末尾。**这条路径才能客观判断 SFT 训练有没有学到东西**——9 runs eval 因 `agent-sft-qwen-3 ≡ base qwen3.5:9b` 而退化为重复数据，不反映 SFT 信号。
+- **Base**: `mlx-community/Qwen3.5-9B-4bit` (HF: `mlx-community/Qwen3.5-9B-Instruct-4bit` does not exist, the actual available one is non-Instruct 4bit quantization)
+- **Data**: Training 588 / Testing 155 triples, mixed sources `v1_7b` + `v1_32b` + `v15_9b`, three sources run_id allocation disjoint offset guaranteed scenario grouping ([`data/triples/train_qwen3.jsonl`](data/triples/train_qwen3.jsonl))
+- **Training hyperparameters**: `iters=600` / `batch_size=1` / `num_layers=4` / `lr=1e-4` / `--grad-checkpoint` / `--clear-cache-threshold 1` / `max_seq_length=1500`; OOM-driven shortened parameters - 9B + Qwen3.5 hybrid (attention+SSM) Even 4bit is much tighter than 7B on M4 Pro 48GB, batch=1 + 4 layers LoRA It is the only combination that can run steadily ([`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)).
+- **Modelfile**: From the Go-template DSL of v1 ~50 lines of TEMPLATE, to the `TEMPLATE {{ .Prompt }}` + `RENDERER qwen3.5` + `PARSER qwen3.5` three-line directive of ollama 0.20+; this is the short-hand parsed `qwen3.5:9b` chat & tool_call that has been copied 1:1 within ollama.
+- **GGUF deploy pending**: mlx_lm.fuse --dequantize output fp16 safetensors → `convert_hf_to_gguf.py` → `llama-quantize` Q4_K_M path, for Qwen3.5 hybrid architecture (with SSM operator / `ssm_alpha`/`ssm_beta`/`ssm_conv1d` tensors) weight reconstruction is incorrect: F16 GGUF and Q4 GGUF in ollama Both terminals output garbled characters ("ãjiaguang_MMjv slip...\uF!安 Cornas $yn"), but the fp16 mlx fused directory is directly inferred using `mlx_lm.generate`. **Conclusion: Training successful, deployment path broken**. Modelfile was changed to `FROM qwen3.5:9b` placeholder (inherited base inference capability, PARAMETER is used), and the broken version was backed up to [`deploy/Modelfile.gguf-broken`](deploy/Modelfile.gguf-broken), and the fused fp16 model was left in [`deploy/build/fused-mlx-fp16/`](deploy/build/fused-mlx-fp16/) as the input artifact to be repaired.
+- **Evaluation**: plan §S9 9 runs minimalist retest (3 model × 3 seed × 1 task `nudge_fire_rate`) instead of v1 120 runs baseline; the evaluation falls on [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl) (copied from the last 9 lines of evals/runs/index.jsonl). For specific numbers, see the "Digital Snapshot" at the end.
+- **Metrics that truly reflect the effect of SFT training**: `train/eval_smoke.py` runs 4bit base + LoRA adapter direct inference (bypassing ollama / GGUF) on 50 val sample, see the numbers at the end. **This path can objectively judge whether SFT training has learned anything** - 9 runs eval is degraded into repeated data due to `agent-sft-qwen-3 ≡ base qwen3.5:9b` and does not reflect the SFT signal.
 
 ### Consequences
 
-**§6 supersede**：Q4_K_M + Modelfile 1:1 复刻 qwen2.5:7b 整体过时——base 换了 / TEMPLATE 改 directive / GGUF 路径 broken。§6 Status 已改 `superseded by §10`。
+**§6 supersede**: Q4_K_M + Modelfile 1:1 fork qwen2.5:7b overall obsolete - base changed / TEMPLATE changed directive / GGUF path broken. §6 Status has been changed to `superseded by §10`.
 
-**§9 v1 三阈值（57.3% gap closure 等）作为历史快照保留**，不再对齐——新底座 + 数据混源 + 训练超参全变。
+**§9 v1 three thresholds (57.3% gap closure, etc.) are retained as historical snapshots** and are no longer aligned - new base + data mixing source + training hyperparameters fully changed.
 
-**Eval_smoke parser 兼容修正**：[`train/eval_smoke.py`](train/eval_smoke.py) 增加 Qwen3.5 native tool-call 渲染形态识别（XML 嵌套 `<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`）。v1 (Qwen2.5) 用 JSON 内嵌 `<tool_call>{...}</tool_call>`；不加补丁 emit_rate=0% 误判训练失败。
+**Eval_smoke parser compatibility correction**: [`train/eval_smoke.py`](train/eval_smoke.py) Add Qwen3.5 native tool-call rendering shape recognition (XML nested `<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`). v1 (Qwen2.5) uses JSON to embed `<tool_call>{...}</tool_call>`; without patch emit_rate=0% misjudges training failure.
 
-**Formatter `arguments` 类型修正**：[`data/formatter.py`](data/formatter.py) 把 OpenAI tool_calls 的 `arguments` 从 JSON 字符串改成 Python dict——Qwen3.5 chat template 的 `.arguments | items()` jinja 滤镜要求 mapping，传字符串会报 `TypeError: Can only get item pairs from a mapping`。v1 (Qwen2.5) 模板里 `.arguments | tojson` 不要求类型，所以 v1 没暴露这个 bug。
+**Formatter `arguments` type correction**: [`data/formatter.py`](data/formatter.py) Change the `arguments` of OpenAI tool_calls from JSON string to Python dict - the `.arguments | items()` jinja filter of Qwen3.5 chat template requires mapping, and passing the string will report `TypeError: Can only get item pairs from a mapping`. v1 (Qwen2.5) `.arguments | tojson` in the template does not require a type, so v1 does not expose this bug.
 
-**GGUF deploy 修复 backlog**（不在 v1.5 范围）：
+**GGUF deploy fix backlog** (not in v1.5 scope):
 
-|选项|路径|难度|
+|Options|Path|Difficulty|
 |---|---|---|
-|A. 等 mlx_lm.fuse 修 hybrid dequantize|上游补丁|低工作量但等|
-|B. 改走 transformers + PEFT 路径|HF bf16 base + 手动 LoRA 命名映射|中工作量，可控|
-|C. 等 ollama 0.21+ 原生支持 mlx adapter|上游路线|未知 ETA|
-|D. 自写 mlx_lm /api/generate wrapper 替代 ollama|本地实现|工作量大，但 deploy 独立性最强|
+|A. Wait for mlx_lm.fuse to fix hybrid dequantize|Upstream patch|Low workload but wait|
+|B. Change to transformers + PEFT path|HF bf16 base + manual LoRA named mapping|Medium workload, controllable|
+|C. etc. ollama 0.21+ natively supports mlx adapter|upstream route|unknown ETA|
+|D. Self-written mlx_lm /api/generate wrapper instead of ollama|Local implementation|Long workload, but deploy has the strongest independence|
 
-短期 placeholder（FROM base）让 evals harness / agent_engine 可以无感知地走 `ollama:agent-sft-qwen-3` tag，等修复落地后 deploy.sh 一行换 Modelfile 重 create 即生效。
+The short-term placeholder (FROM base) allows the evals harness / agent_engine to use the `ollama:agent-sft-qwen-3` tag without any awareness. After the repair is implemented, change the deploy.sh line to Modelfile and create again to take effect.
 
-**面试叙事可用性**：v1 数字（57% gap closure / 0.739→0.645）仍是 portfolio 主线（§9 + README §Lessons learned）；v1.5 是"新栈适配 + 训练验证"，不为 portfolio 出新数字，是工程基础设施保养。
+**Interview Narrative Availability**: The v1 number (57% gap closure / 0.739→0.645) is still the main line of the portfolio (§9 + README §Lessons learned); v1.5 is "new stack adaptation + training verification", which does not produce new numbers for the portfolio, but is engineering infrastructure maintenance.
 
-### 数字快照
+### Digital Snapshot
 
-**训练**（[`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)）：
+**Training** ([`train/runs/main_qwen3/train_metrics.json`](train/runs/main_qwen3/train_metrics.json)):
 
 |item|value|
 |---|---|
@@ -391,11 +391,11 @@ Phase 5.A 跑完 3 model × 10 seed × 4 task = 120 runs（119 successful，1 �
 |peak GPU mem|8.15 GB|
 |nan_seen / diverged / returncode|false / false / 0|
 
-train loss 在 iter 40 跌到 0.010、iter 60 跌到 0.001、iter 80+ 长期 0.000（log 摘录），符合 [`§5`](#5-lora-超参与-iters)（v1 sweep 选定 lr=1e-4 + num-layers）下"足量 iter 即收敛"的预期；val_loss=0 不是 perfect 而是 4bit 量化 + 短答案 token + `mask_prompt=true` 共同制造的伪 0（实际 eval_smoke 显示 64% arg_value 准确率）。
+train loss dropped to 0.010 at iter 40, 0.001 at iter 60, and 0.000 at iter 80+ in the long term (log excerpt), consistent with the expectation of "sufficient iter to converge" under [`§5`](#5-phase-3-recommended-adapter-lock-base-config-layersrank-sweep-deferred-to-phase-5) (v1 sweep selected lr=1e-4 + num-layers); val_loss=0 is not perfect but 4bit quantization + short answer token + `mask_prompt=true` co-produce pseudo-0 (actual eval_smoke shows 64% arg_value accuracy).
 
 **eval_smoke**（n=50, mlx_lm 4bit + LoRA adapter, [`train/runs/main_qwen3/eval_smoke.json`](train/runs/main_qwen3/eval_smoke.json)）：
 
-|指标|值|
+|Indicator|Value|
 |---|---|
 |`tool_call_emit_rate`|0.86|
 |`tool_name_match_rate`|0.64|
@@ -403,7 +403,7 @@ train loss 在 iter 40 跌到 0.010、iter 60 跌到 0.001、iter 80+ 长期 0.0
 |`arg_value_match_rate`|0.64|
 |by_tool n|append_section 25 / retrieve_docs 19 / cast_vote 6|
 
-**9-run nudge_fire_rate**（3 model × 3 seed × 1 task, [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)）。实际 6 successful + 3 failed（27B `subprocess.TimeoutExpired` after 600s × 3 seeds——M4 Pro 48GB 上 qwen3.6:27b 单 multi-turn scenario LM wall 已超 default `AGENT_ENGINE_RUN_TIMEOUT=600s`；plan §S9 容错路径"单 run 失败不影响其它"覆盖，不重跑——拉长 timeout 到 1800s 跑齐需额外 ~5h，不在 v1.5 预算）：
+**9-run nudge_fire_rate** (3 model × 3 seed × 1 task, [`eval/baselines/qwen3_phase3/index.jsonl`](eval/baselines/qwen3_phase3/index.jsonl)). Actual 6 successful + 3 failed (27B `subprocess.TimeoutExpired` after 600s × 3 seeds - qwen3.6:27b single multi-turn scenario LM wall on M4 Pro 48GB has exceeded default `AGENT_ENGINE_RUN_TIMEOUT=600s`; plan §S9 fault-tolerant path "single run failure does not affect other" coverage, skip re-run - extending the timeout to 1800s requires additional ~5h to run, not in v1.5 budget):
 
 |model|seed 0|seed 1|seed 2|mean|
 |---|---|---|---|---|
@@ -411,65 +411,65 @@ train loss 在 iter 40 跌到 0.010、iter 60 跌到 0.001、iter 80+ 长期 0.0
 |`agent-sft-qwen-3` (≡ base placeholder)|0.35|0.60|0.55|**0.500**|
 |`qwen3.6:27b`|failed|failed|failed|n/a|
 
-`agent-sft-qwen-3` vs `qwen3.5:9b` 数字差异（0.500 vs 0.400）**不是 SFT 信号**——两者都 FROM 同 base GGUF 同 PARAMETER；差异来自 ollama nondeterminism（temperature=1, top_k=20, top_p=0.95 默认 sampling）+ 不同 spec hash 导致 seed-derived state 分歧。把它当 "同模型双跑的方差下限" 读：1-task × 7 scenario × ~20 require_tool case = 20 sample size 下，nudge_fire_rate 真实方差 ±0.1 以上。**SFT 真实信号见 eval_smoke 的 64% arg_value_match**（绕过 ollama / GGUF 直接 mlx 推理 LoRA），那条才是这次重训的可信指标。
+`agent-sft-qwen-3` vs `qwen3.5:9b` The numerical difference (0.500 vs 0.400) is not an SFT signal - both FROM the same base GGUF and the same PARAMETER; the difference comes from ollama nondeterminism (temperature=1, top_k=20, top_p=0.95 default sampling) + different spec hash leading to seed-derived state divergence. Think of it as "the lower limit of the variance of two runs of the same model", which reads: 1-task × 7 scenario × ~20 require_tool case = 20 sample size, the true variance of nudge_fire_rate is more than ±0.1. **The real signal of SFT is 64% arg_value_match** of eval_smoke (bypassing ollama / GGUF and direct mlx inference LoRA), that is the credible indicator of this retraining.
 
-**本批次评测落地价值**：
-1. 管线跑通——`run_baseline.py` + `evals` framework + `agent-sft-qwen-3` ollama tag 三件套在 v1.5 栈端到端工作（v1 后整库切换没把链路弄坏）。
-2. 7 scenarios × require_tool ≈ 20 个 case/run，4 个有数（example/panel/tool_chain/code_review），3 个 nan（brainstorm/debate/roundtable 没有 require_tool step）——与 v1 `eval/baselines/phase5-*` 数据形态一致，未来重做 full baseline 时直接 drop-in。
-3. 27B timeout 暴露 evals harness 的 timeout 配置应该按 model 区分——记到根 [`AGENTS.md`](../../AGENTS.md) 提到的 evals followup（v2 起处理；本 v1.5 不修）。
+**Value of this batch of evaluation**:
+1. Pipeline running - `run_baseline.py` + `evals` framework + `agent-sft-qwen-3` ollama tag three-piece set works end-to-end in the v1.5 stack (the whole library switch after v1 did not break the link).
+2. 7 scenarios × require_tool ≈ 20 case/runs, 4 counting (example/panel/tool_chain/code_review), 3 nan (brainstorm/debate/roundtable does not require_tool step) - consistent with the data form of v1 `eval/baselines/phase5-*`, and will be dropped-in directly when redoing the full baseline in the future.
+3. 27B timeout exposure The timeout configuration of the evals harness should be distinguished by model - remember to the evals followup mentioned in the root [`AGENTS.md`](../../AGENTS.md) (processed from v2; this v1.5 will not be repaired).
 
-## 11. v1.6: clean-data + bf16 重训 + held-out story eval（GGUF 仍阻塞）
+## 11. v1.6: clean-data + bf16 retraining + held-out story eval (GGUF is still blocked)
 
 - **Status**: accepted
 - **Date**: 2026-05-26
 
 ### Context
 
-v1.5 虽然跑通了“训练 + 评测 + placeholder deploy”，但有两个硬缺口：
+Although v1.5 has passed "training + evaluation + placeholder deploy", there are two hard gaps:
 
-|问题|v1.5 状态|影响|
+|Issue|v1.5 Status|Impact|
 |---|---|---|
-|数据集质量|`train_qwen3/val_qwen3` 来自混源直拼，重复较多，且有小量 train/val overlap|故事不够“最终版干净”|
-|GGUF deploy|4bit base + `mlx_lm.fuse --dequantize` 路径输出乱码|`agent-sft-qwen-3` 只能是 base placeholder|
+|Dataset quality|`train_qwen3/val_qwen3` comes from mixed sources, with many repetitions and a small amount of train/val overlap|The story is not "clean enough for the final version"|
+|GGUF deploy|4bit base + `mlx_lm.fuse --dequantize` path output is garbled|`agent-sft-qwen-3` can only be base placeholder|
 
-因此 v1.6 目标拆成三件：①先把数据边界做干净；②用 bf16 base 重训验证“不是 4bit dequantize 的锅”；③用 in-distribution vs held-out 评测口径讲清泛化故事。
+Therefore, the goals of v1.6 are divided into three parts: ① Clean the data boundaries first; ② Use bf16 base retraining to verify that "it is not the fault of 4bit dequantize"; ③ Use in-distribution vs held-out evaluation caliber to tell the generalization story.
 
 ### Options considered
 
-|选项|数据处理|训练底座|评测口径|预期|
+|Options|Data processing|Training base|Evaluation caliber|Expectation|
 |---|---|---|---|---|
-|A. 直接沿用 v1.5 数据继续训|不清洗|4bit|单一 nudge_fire_rate|快，但“最终版”说服力弱|
-|B. clean 数据 + 4bit 重训|去重/去泄漏|4bit|in-dist vs held-out|数据故事变好，但 deploy 风险仍在|
-|**C.（选）clean 数据 + bf16 重训**|去重/去泄漏 + 场景边界|bf16|in-dist vs held-out|同时验证数据与 deploy 两条主线|
+|A. Directly use v1.5 data to continue training|No cleaning|4bit|Single nudge_fire_rate|Fast, but the "final version" is not convincing|
+|B. clean data + 4bit retraining|remove duplication/remove leakage|4bit|in-dist vs held-out|data story gets better, but deploy risk remains|
+|**C. (optional) clean data + bf16 retraining**|remove duplication/removal of leaks + scene boundary|bf16|in-dist vs held-out|simultaneously verify the two main lines of data and deploy|
 
 ### Decision
 
-采纳 C，具体落地如下：
+Adopt C, the specific implementation is as follows:
 
-|模块|决策|结果|
+|Module|Decision|Results|
 |---|---|---|
-|数据清洗|从 [`data/triples/triples_qwen3_merged.jsonl`](data/triples/triples_qwen3_merged.jsonl) 重建 clean 集；仅保留 `tool_chain`/`code_review` 进训练；按 supervision key 去重；按 scenario+run_id split；输出 [`triples_qwen3_clean.jsonl`](data/triples/triples_qwen3_clean.jsonl)、[`train_qwen3_clean.jsonl`](data/triples/train_qwen3_clean.jsonl)、[`val_qwen3_clean.jsonl`](data/triples/val_qwen3_clean.jsonl)、[`qwen3_clean_report.json`](data/triples/qwen3_clean_report.json)|clean=1547，train raw=1276，val raw=271，train/val overlap=0|
-|模板补全|clean raw 中 `retrieve_docs` 有 175/44 条 instruction 缺字面调用模板，按“最小可解析”补 `retrieve_docs(query=\"...\")` 后再 formatter|formatted train=1276，val=271，drop=0，`arguments` 100% dict|
-|训练底座|base 切 [`mlx-community/Qwen3.5-9B-bf16`](https://huggingface.co/mlx-community/Qwen3.5-9B-bf16)|绕开 4bit→fp16 dequantize 路径|
-|smoke/probe|smoke 首轮 `max_seq=1000` 出现 train tokens=0 + NaN；改 `max_seq=1500` 后稳定。40-iter probe 在 `num_layers=4` 稳定|确定主训可用 `batch=1,num_layers=4,max_seq=1500,grad_checkpoint,clear_cache=1`|
-|主训|[`train/runs/main_qwen3_bf16_clean`](train/runs/main_qwen3_bf16_clean)|600 iters，rc=0，nan=false，train 0.247→0.000，val_last=0.000，wall=4115s，peak mem≈21.36GB|
-|mlx 评估|[`train/runs/main_qwen3_bf16_clean/eval_smoke.json`](train/runs/main_qwen3_bf16_clean/eval_smoke.json)|n=50：emit=0.56，arg_value=0.36（显著低于 v1.5 的 0.64）|
-|GGUF deploy|[`deploy/build.sh`](deploy/build.sh) 新增 bf16 分支：base 名含 `bf16` 时不加 `--dequantize`|构建成功但 **F16/Q4 仍乱码**（`testf16` 与 `testq4` 均复现）|
-|评测故事|输出 [`eval/baselines/qwen3_bf16_clean/index.jsonl`](eval/baselines/qwen3_bf16_clean/index.jsonl) 与 [`story_report.md`](eval/baselines/qwen3_bf16_clean/story_report.md)|in-dist/held-out 分层完成；当前 `agent-sft-qwen-3` 仍 placeholder|
+|Data cleaning|Rebuild the clean set from [`data/triples/triples_qwen3_merged.jsonl`](data/triples/triples_qwen3_merged.jsonl); keep only `tool_chain`/`code_review` for training; remove duplication according to supervision key; split according to scenario+run_id; output [`triples_qwen3_clean.jsonl`](data/triples/triples_qwen3_clean.jsonl), [`train_qwen3_clean.jsonl`](data/triples/train_qwen3_clean.jsonl), [`val_qwen3_clean.jsonl`](data/triples/val_qwen3_clean.jsonl), [`qwen3_clean_report.json`](data/triples/qwen3_clean_report.json)|clean=1547, train raw=1276, val raw=271, train/val overlap=0|
+|Template completion|There are 175/44 instructions in `retrieve_docs` in clean raw. There are missing literals to call the template. Press "Minimum resolvable" to fill in `retrieve_docs(query=\"...\")` and then formatter|formatted train=1276, val=271, drop=0, `arguments` 100% dict|
+|Training base|base cut [`mlx-community/Qwen3.5-9B-bf16`](https://huggingface.co/mlx-community/Qwen3.5-9B-bf16)|bypass 4bit→fp16 dequantize path|
+|smoke/probe|smoke In the first round of `max_seq=1000`, train tokens=0 + NaN appeared; after changing to `max_seq=1500`, it became stable. 40-iter probe is stable in `num_layers=4`|Confirm that the main trainer is available `batch=1,num_layers=4,max_seq=1500,grad_checkpoint,clear_cache=1`|
+|Main training|[`train/runs/main_qwen3_bf16_clean`](train/runs/main_qwen3_bf16_clean)|600 iters, rc=0, nan=false, train 0.247→0.000, val_last=0.000, wall=4115s, peak mem≈21.36GB|
+|mlx evaluation|[`train/runs/main_qwen3_bf16_clean/eval_smoke.json`](train/runs/main_qwen3_bf16_clean/eval_smoke.json)|n=50: emit=0.56, arg_value=0.36 (significantly lower than v1.5's 0.64)|
+|GGUF deploy|[`deploy/build.sh`](deploy/build.sh) adds bf16 branch: do not add `--dequantize` when the base name contains `bf16`|The build is successful but **F16/Q4 is still garbled** (both `testf16` and `testq4` are reproduced)|
+|Review Story|Output [`eval/baselines/qwen3_bf16_clean/index.jsonl`](eval/baselines/qwen3_bf16_clean/index.jsonl) and [`story_report.md`](eval/baselines/qwen3_bf16_clean/story_report.md)|in-dist/held-out layering completed; currently `agent-sft-qwen-3` is still placeholder|
 
 ### Consequences
 
-|结论|含义|
+|Conclusion|Implication|
 |---|---|
-|GGUF 乱码在 bf16 路径仍复现|问题不只在 4bit dequantize，更可能在 `convert_hf_to_gguf.py` / ollama 对 Qwen3.5 hybrid 架构的 runtime 兼容层|
-|`agent-sft-qwen-3` 继续保留 placeholder（FROM qwen3.5:9b）|评测和工程链路可跑，但不能把其指标解读为新 adapter 效果|
-|clean 数据把“质量债”补上了，但模型效果变差（0.64→0.36）|下一步应优先做 hard-sample mining / `cast_vote` 针对增强，而非盲目增加 iters|
-|in-dist 与 held-out 口径正式成型|后续 ADR 可直接沿这套口径比较“训练分布收益 vs 泛化代价”|
+|GGUF garbled characters still recur in the bf16 path|The problem is not only in 4bit dequantize, but more likely in the runtime compatibility layer of `convert_hf_to_gguf.py`/ollama for Qwen3.5 hybrid architecture|
+|`agent-sft-qwen-3` continues to retain placeholder (FROM qwen3.5:9b) | Evaluation and engineering links can be run, but their indicators cannot be interpreted as new adapter effects |
+|clean data has made up for the "quality debt", but the model effect has become worse (0.64→0.36)|The next step should be to prioritize hard-sample mining / `cast_vote` for enhancement instead of blindly increasing iters|
+|The in-dist and held-out calibers are officially formed|Follow-up ADR can directly compare "training distribution income vs. generalization cost" along this caliber|
 
-后续技术路线（按优先级）：
+Subsequent technical routes (in order of priority):
 
-|优先级|路线|说明|
+|Priority|Route|Description|
 |---|---|---|
-|P0|`mlx_lm.server` 直连部署|绕开 GGUF runtime，先交付“可用且真 SFT”版本|
-|P1|transformers+PEFT merge 后再 GGUF|验证是否是 mlx fuse 路径特有问题|
-|P2|等待 llama.cpp / ollama 上游修 Qwen3.5 hybrid|成本最低但 ETA 不可控|
+|P0|`mlx_lm.server` Direct-connect deployment|Bypass the GGUF runtime and deliver the "available and true SFT" version first|
+|P1|Transformers+PEFT merge and then GGUF|Verify whether it is a problem specific to the mlx fuse path|
+|P2|Waiting for llama.cpp / ollama upstream repair Qwen3.5 hybrid|The lowest cost but uncontrollable by ETA|

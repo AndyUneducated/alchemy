@@ -1,4 +1,4 @@
-"""``render_csv``: parse the agent-generated 测试用例 markdown into a flat CSV.
+"""``render_csv``: parse agent-generated Test Cases markdown into a flat CSV.
 
 Forgiving regex parser: tracks the current ``### <req_id> ...`` heading and
 collects ``- [Px][category] description`` lines beneath it. Lines that don't
@@ -29,8 +29,8 @@ def render_csv(
     requirements: list[dict],
     output_path: str,
 ) -> str:
-    """Parse ``sections['测试用例']`` and write a flat CSV beside the markdown plan."""
-    cases_md = sections.get("测试用例", "")
+    """Parse ``sections['Test Cases']`` and write a flat CSV beside the markdown plan."""
+    cases_md = sections.get("Test Cases", "")
     req_meta = {r["req_id"]: r for r in requirements}
 
     rows: list[dict] = []

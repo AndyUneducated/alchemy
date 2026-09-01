@@ -1,14 +1,13 @@
-"""rag_qa task score 路径 e2e（FakeJudgeLM 零网络）+ 4 份 stub 诊断叙事.
+"""rag_qa task score path e2e (FakeJudgeLM zero network) + 4 copies of the stub diagnostic narrative.
 
-证明 phase 4 RAG QA 的两条核心叙事：
-  - **paraphrase**：lexical (em / rouge_l) 失效，但 grounding (faithfulness /
-    answer_correctness) 仍能保留——judge 救场（核心叙事）
-  - **wrong_fact**：lexical 看起来还行（rouge_l 高，少量字符替换），grounding
-    指标抓事实错（反向叙事）
+Demonstrate the two core narratives of phase 4 RAG QA:
+  - **paraphrase**: lexical (em / rouge_l) fails, but grounding (faithfulness /
+    answer_correctness) can still be retained - judge comes to the rescue (core narrative)
+  - **wrong_fact**: lexical looks okay (rouge_l high, few character replacements), grounding
+    Indicators capture the wrong facts (reverse narrative)
 
-判 LM 用 FakeJudgeLM with rule-based outputs（按 prompt 内容启发式给分）.
-真 LLM e2e 在 test_rag_live.py via vdb-probe gate.
-"""
+Use FakeJudgeLM with rule-based outputs to judge LM (points are given based on the prompt content heuristic).
+True LLM e2e in test_rag_live.py via vdb-probe gate."""
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ def _score(pred_name: str, judge_lm: LM | None = None) -> dict[str, float]:
     return r.aggregated
 
 
-# ---------- 上下界 sanity（lexical only，无 judge_lm）----------------------
+# ---------- Upper and lower bounds sanity (lexical only, no judge_lm) -----------------------
 
 def test_perfect_lexical_high():
     """perfect = gold answer → em=1.0 / rouge_l~1.0."""
@@ -43,23 +42,22 @@ def test_perfect_lexical_high():
 
 
 def test_garbage_lexical_low():
-    """garbage 完全无关 → em=0 / rouge_l 低."""
+    """garbage is completely irrelevant → em=0 / rouge_l is low."""
     agg = _score("garbage")
     assert agg["exact_match"] == 0.0
     assert agg["rouge_l"] <= 0.1
 
 
-# ---------- 核心叙事：paraphrase 上 lexical 跌 / grounding 救场 ------------
+# ---------- Core narrative: paraphrase lexical fall / grounding rescue ----------
 
 def _yes_judge_with_perfect_correctness() -> LM:
-    """rule-based fake judge：
-      - claim extract 类 prompt → 返回 1 个固定 claim（让 faithfulness/recall 走 ratio=1.0 通路）
-      - NLI yes/no 类 prompt → 总是 'yes'（contexts 完美匹配的乐观 judge）
-      - TP/FP/FN 类 prompt → TP=3 FP=0 FN=0（answer_correctness=1.0）
-      - 1-5 评分类 prompt → '5'（answer_relevancy 满分）
+    """rule-based fake judge:
+      - claim extract class prompt → returns 1 fixed claim (let faithfulness/recall go the ratio=1.0 path)
+      - NLI yes/no class prompt → always 'yes' (contexts perfectly matched optimistic judge)
+      - TP/FP/FN type prompt → TP=3 FP=0 FN=0（answer_correctness=1.0）
+      - 1-5 rating category prompt → '5' (answer_relevancy full score)
 
-    模拟"乐观 judge 无视字面变化"：paraphrase 上 grounding 应≈1.0.
-    """
+    Simulates "optimistic judge ignoring literal changes": paraphrase on grounding should ≈ 1.0."""
 
     def rule(prompt: str) -> str:
         p_low = prompt.lower()
@@ -69,37 +67,36 @@ def _yes_judge_with_perfect_correctness() -> LM:
             return "- claim X"
         if "1-5" in p_low or "score (1-5)" in p_low:
             return "5"
-        # 默认 yes/no NLI / context relevance / faithfulness
+        # Default yes/no NLI / context relevance / faithfulness
         return "yes"
 
     return FakeJudgeLM(outputs=rule)
 
 
 def _strict_judge() -> LM:
-    """rule-based fake judge：用"prediction == 1 个 statement, NLI 失败 → 0 分"模拟严格 judge."""
+    """rule-based fake judge: Use "prediction == 1 statement, NLI failure → 0 points" to simulate a strict judge."""
 
     def rule(prompt: str) -> str:
         p_low = prompt.lower()
         if "tp" in p_low and "fp" in p_low and "fn" in p_low:
-            return "TP=0 FP=3 FN=2"  # 完全不对 → F1=0
+            return "TP=0 FP=3 FN=2"  # Totally wrong → F1=0
         if "decompose" in p_low or "atomic" in p_low or "statement" in p_low and "context" not in p_low:
             return "- claim X\n- claim Y"
         if "1-5" in p_low or "score (1-5)" in p_low:
             return "1"
-        return "no"  # 严格 NLI
+        return "no"  # Strict NLI
 
     return FakeJudgeLM(outputs=rule)
 
 
 def test_paraphrase_lexical_drops_grounding_holds():
-    """**核心叙事**：paraphrase 上 em=0、rouge_l 中等，但 lenient judge 给 grounding 满分.
+    """**Core narrative**: paraphrase em=0, rouge_l is medium, but the lenient judge gives full marks to grounding.
 
-    lenient judge 看到"语义对的 NLI"会答 yes——证明 grounding metric 在 lexical 失效时仍区分得开.
-    """
-    agg_lex = _score("paraphrase")  # 仅 lexical
+    The lenient judge will answer yes when seeing "Semantically Paired NLI" - proving that the grounding metric can still distinguish when lexical fails."""
+    agg_lex = _score("paraphrase")  # Lexical only
     assert agg_lex["exact_match"] == 0.0
-    assert agg_lex["rouge_l"] < 0.7  # 词全换光，char-level rouge 偏低
-    # 加 lenient judge 后 grounding 维度满分
+    assert agg_lex["rouge_l"] < 0.7  # All words are replaced with light, and the char-level rouge is low.
+    # After adding lenient judge, the grounding dimension is full score
     agg_judge = _score("paraphrase", _yes_judge_with_perfect_correctness())
     assert agg_judge["faithfulness"] == 1.0
     assert agg_judge["answer_correctness"] == 1.0
@@ -108,36 +105,35 @@ def test_paraphrase_lexical_drops_grounding_holds():
     assert agg_judge["answer_relevancy"] == 5.0
 
 
-# ---------- 反向叙事：wrong_fact 上 lexical 误判 / grounding 抓住 -----------
+# ---------- Reverse narrative: lexical misjudgment / grounding on wrong_fact -----------
 
 def test_wrong_fact_lexical_high_grounding_low():
-    """**反向叙事**：wrong_fact 上 rouge_l 偏高（少量字符替换），但 strict judge 给低 grounding.
+    """**Reverse narrative**: rouge_l is high on wrong_fact (a small amount of character replacement), but low grounding is given by strict judge.
 
-    关键对照：strict judge 模拟"识别出事实错"——这是 lexical 抓不到的盲区，
-    real LLM judge 在 e2e live 测试里直面.
-    """
-    agg_lex = _score("wrong_fact")  # 仅 lexical
+    Key comparison: strict judge simulates "identifying factual errors" - this is a blind spot that lexical cannot catch.
+    Face to face with the real LLM judge in the e2e live test."""
+    agg_lex = _score("wrong_fact")  # Lexical only
     assert agg_lex["exact_match"] == 0.0
-    assert agg_lex["rouge_l"] >= 0.7  # 仅替换数字 → rouge 还高
+    assert agg_lex["rouge_l"] >= 0.7  # Only replace numbers → rouge is still high
 
     agg_judge = _score("wrong_fact", _strict_judge())
-    assert agg_judge["faithfulness"] == 0.0  # NLI 全 'no'
+    assert agg_judge["faithfulness"] == 0.0  # NLI all 'no'
     assert agg_judge["answer_correctness"] == 0.0  # F1 = 0
-    # grounding 大幅低于 lexical，说明 judge 抓到了 lexical 漏判的事实错
+    # Grounding is significantly lower than lexical, indicating that the judge caught the fact that lexical missed the judgment.
     assert agg_judge["faithfulness"] < agg_lex["rouge_l"] - 0.5
 
 
-# ---------- 框架不变量（每 task 重锁）-------------------------------------
+# ----------Framework invariants (relocking per task)-------------------------------------
 
 def test_n_matches_gold():
-    """n == 数据集行数."""
+    """n == number of rows in the data set."""
     task = RagQA()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     assert r.n == 8
 
 
 def test_score_missing_pred_raises(tmp_path):
-    """缺 doc_id 严格 KeyError（与 sentiment / mt / qa_open 同 contract）."""
+    """Missing doc_id strict KeyError (same contract as sentiment/mt/qa_open)."""
     task = RagQA()
     partial = tmp_path / "partial.jsonl"
     partial.write_text(
@@ -149,7 +145,7 @@ def test_score_missing_pred_raises(tmp_path):
 
 
 def test_artifacts_carry_pred_and_gold_ids():
-    """artifacts.pred_ids / gold_ids 必填（rag_qa 也支持 retrieval-side 指标聚合）."""
+    """artifacts.pred_ids / gold_ids required (rag_qa also supports retrieval-side metric aggregation)."""
     task = RagQA()
     r = evaluate_score(task, PRED_DIR / "perfect.jsonl")
     for s in r.per_sample:
@@ -158,7 +154,7 @@ def test_artifacts_carry_pred_and_gold_ids():
 
 
 def test_load_prediction_injects_contexts_into_doc_metadata():
-    """单元测试：rag_qa.load_prediction 把 row['contexts']/['retrieved_ids'] 进 doc.metadata."""
+    """Unit test: rag_qa.load_prediction puts row['contexts']/['retrieved_ids'] into doc.metadata."""
     task = RagQA()
     doc = Doc(id="x", input="q", target="t", metadata={"gold_doc_ids": ("a.txt",)})
     row = {

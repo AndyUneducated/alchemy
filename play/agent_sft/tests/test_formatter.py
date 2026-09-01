@@ -1,15 +1,14 @@
-"""formatter.py — Triple → MLX-LM `tools` schema (DECISIONS §4) 单测.
+"""formatter.py — Triple → MLX-LM `tools` schema (DECISIONS §4) single test.
 
-覆盖：
-  - 顶层 `messages` + `tools` 字段；3-message (system/user/assistant) 结构
-  - assistant.content == "" + tool_calls 含 OpenAI 形态
-  - arguments 是 dict（v1.5+ 切 dict 因 Qwen3.5 chat_template strict items）
-  - tools 数组复用 agent_engine `_resolve_tool_defs` + `ArtifactStore.build_tool_defs`
-    （per-agent role filter）
-  - drop 规则：no_template (retrieve_docs fallback wrapper) + unparseable args
-  - tolerant fallback 救回 cast_vote 中文 `或` 分隔的 option（覆盖 Phase 2 真数据）
-  - max_recent / 空 context / 空 instruction 边界
-"""
+Coverage:
+  - Top-level `messages` + `tools` fields; 3-message (system/user/assistant) structure
+  - assistant.content == "" + tool_calls including OpenAI form
+  - arguments are dict (v1.5+ cuts dict due to Qwen3.5 chat_template strict items)
+  - tools array reuse agent_engine `_resolve_tool_defs` + `ArtifactStore.build_tool_defs`
+    (per-agent role filter)
+  - drop rule: no_template (retrieve_docs fallback wrapper) + unparseable args
+  - tolerant fallback rescues cast_vote Chinese ` or ` separated option (covers Phase 2 true data)
+  - max_recent / empty context / empty instruction boundary"""
 
 from __future__ import annotations
 
@@ -77,7 +76,7 @@ def write_scenario(tmp_path, yaml_text=SCENARIO_YAML):
 def make_triple(**overrides):
     base = {
         "run_id": 0,
-        "scenario": "scen",
+        "scenario": "scenario",
         "turn_idx": 1,
         "step_id": "s1",
         "agent": "A",
@@ -87,10 +86,10 @@ def make_triple(**overrides):
             {"type": "topic", "content": "demo"},
             {"type": "turn", "content": "turn 1 of 1"},
         ],
-        "instruction": "调用 retrieve_docs(query=\"foo\") 拿背景。",
-        "failed_response": "我先想想",
-        "nudge": "你刚才没有调用 `retrieve_docs` 工具。",
-        "corrected_response": "OK 我调 retrieve_docs(query=\"foo\")",
+        "instruction": "Call retrieve_docs(query=\"foo\") to get the background.",
+        "failed_response": "Let me think about it first",
+        "nudge": "You did not call the `retrieve_docs` tool just now.",
+        "corrected_response": "OK I will retrieve_docs(query=\"foo\")",
     }
     base.update(overrides)
     return base
@@ -99,26 +98,26 @@ def make_triple(**overrides):
 # --- format_triple top-level shape ----------------------------------------
 
 def test_format_returns_messages_and_tools_top_level(tmp_path):
-    scen = write_scenario(tmp_path)
+    scenario = write_scenario(tmp_path)
     sample = format_triple(make_triple(), scen)
     assert sample is not None
     assert set(sample.keys()) == {"messages", "tools"}
 
 
 def test_messages_have_three_roles_in_order(tmp_path):
-    scen = write_scenario(tmp_path)
+    scenario = write_scenario(tmp_path)
     msgs = format_triple(make_triple(), scen)["messages"]
-    assert len(msgs) == 3
+    assertlen(msgs) == 3
     assert [m["role"] for m in msgs] == ["system", "user", "assistant"]
 
 
-def test_system_is_agent_prompt_only(tmp_path):
-    """Qwen2.5 chat template 在 tools 存在时会自动渲染 # Tools 块到 system；
+def test_system_is_agent_prompt_only(tmp_path):"""
     我们的 system content 只放 agent.prompt（不预渲染 tools 文本）."""
     scen = write_scenario(tmp_path)
     sys_msg = format_triple(make_triple(), scen)["messages"][0]["content"]
     assert "你是 A" in sys_msg
-    # 不应预渲染工具列表
+# Tool lists should not be pre-rendered
+# Tool lists should not be pre-rendered
     assert "可用工具" not in sys_msg
     assert "# Tools" not in sys_msg
 
@@ -151,9 +150,8 @@ def test_tool_call_uses_openai_function_envelope(tmp_path):
 
 
 def test_tool_call_arguments_is_dict_with_correct_keys(tmp_path):
-    """v1.5+ arguments 必须是 dict —— Qwen3.5 chat_template 用
-    `tool_call.arguments|items` 严格要求 mapping。
-    """
+    """v1.5+ arguments must be dict - used by Qwen3.5 chat_template
+    `tool_call.arguments|items` strictly requires mapping."""
     scen = write_scenario(tmp_path)
     tc = format_triple(make_triple(), scen)["messages"][2]["tool_calls"][0]
     args = tc["function"]["arguments"]
@@ -175,17 +173,20 @@ def test_tools_field_is_list_of_function_envelopes(tmp_path):
 
 
 def test_tools_includes_scenario_tools_and_member_artifact_subset(tmp_path):
-    """member agent 只看到 scenario.tools + 非 moderator-only artifact 工具."""
+    """The member agent only sees scenario.tools + non-moderator-only artifact tools."""
     scen = write_scenario(tmp_path)
     tools = format_triple(make_triple(agent="A"), scen)["tools"]
     names = {t["function"]["name"] for t in tools}
-    # scenario 工具
+# scenario tool
+# scenario tool
     assert "retrieve_docs" in names
-    # 共享 artifact 工具
+# Share artifact tools
+# Share artifact tools
     assert "append_section" in names
     assert "write_section" in names
     assert "cast_vote" in names
-    # moderator-only 工具被过滤
+# moderator-only tools are filtered
+# moderator-only tools are filtered
     assert "propose_vote" not in names
     assert "finalize_artifact" not in names
 
@@ -258,8 +259,8 @@ def test_strict_parse_keyword_args():
 
 
 def test_tolerant_parse_recovers_invalid_chinese_or_separator():
-    """Phase 2 真数据：cast_vote(vote_id="v1", option="合入" 或 "退回", ...)
-    含中文 `或`，ast 解析失败；fallback 应抽到第一个字符串字面量."""
+    """Phase 2 true data: cast_vote(vote_id="v1", option="Merge" or "Return", ...)
+    Contains Chinese ` or `, ast parsing fails; fallback should extract the first string literal."""
     args = _call_template_to_args_dict(
         'cast_vote(vote_id="v1", option="合入" 或 "退回", rationale="一句话理由")',
         "cast_vote",
@@ -271,7 +272,7 @@ def test_tolerant_parse_recovers_invalid_chinese_or_separator():
 
 
 def test_args_dict_filters_unknown_keys():
-    """instruction 偶有 schema 之外的 key — 防御性丢弃."""
+    """Instruction occasionally has a key outside the schema — defensively discarded."""
     args = _call_template_to_args_dict(
         'append_section(name="x", entry="y", extra="ignored")',
         "append_section",
@@ -326,7 +327,7 @@ def test_tolerant_parse_returns_dict_on_invalid_python():
 # --- drop rules -----------------------------------------------------------
 
 def test_format_returns_none_when_no_call_template(tmp_path):
-    """retrieve_docs 类 instruction 没有字面 retrieve_docs(...) — drop."""
+    """retrieve_docs-style instruction without literal retrieve_docs(...) — drop."""
     scen = write_scenario(tmp_path)
     triple = make_triple(
         instruction="调用 retrieve_docs 查询「项目代号」并总结要点。",
@@ -335,7 +336,7 @@ def test_format_returns_none_when_no_call_template(tmp_path):
 
 
 def test_format_returns_none_for_unknown_required_tool(tmp_path):
-    """required_tool 不在 agent 工具清单 — 防御性 drop."""
+    """required_tool not in agent tool list — defensive drop."""
     scen = write_scenario(tmp_path)
     triple = make_triple(
         required_tool="bogus_tool",
@@ -345,7 +346,7 @@ def test_format_returns_none_for_unknown_required_tool(tmp_path):
 
 
 def test_cli_summary_counts_drops_correctly(tmp_path, capsys):
-    """CLI main() 末尾 print 三类计数：keep / drop_no_template / drop_unparseable."""
+    """At the end of CLI main() print three types of counts: keep / drop_no_template / drop_unparseable."""
     from formatter import main  # type: ignore[import-not-found]
 
     scen = write_scenario(tmp_path)
@@ -366,7 +367,7 @@ def test_cli_summary_counts_drops_correctly(tmp_path, capsys):
     rc = main([
         "--in", str(triples_path),
         "--out", str(out_path),
-        "--scenarios-root", str(tmp_path),  # scen.md 与 triples.scenario="scen" 对齐
+        "--scenarios-root", str(tmp_path),  # scene.md aligned with triples.scenario="scen"
     ])
     assert rc == 0
     captured = capsys.readouterr().out
@@ -417,12 +418,11 @@ def test_find_tool_schema_returns_none_for_missing():
 
 def test_agent_prompt_lookup(tmp_path):
     meta = _read_scenario_meta(write_scenario(tmp_path))
-    assert "你是 A" in _agent_prompt(meta, "A")
+    assert "You are A" in _agent_prompt(meta, "A")
     assert _agent_prompt(meta, "no_such_agent") == ""
 
 
-def test_render_recent_context_handles_all_entry_types():
-    """§16 起 entry dict 必含显式 `type` 字段（含 speaker entry）；formatter 在 JSONL
+def test_render_recent_context_handles_all_entry_types():"""
     层面消费 list[dict]（dataclasses.asdict 已展平），按 type 分支渲染."""
     ctx = [
         {"type": "topic", "content": "T"},
@@ -472,5 +472,5 @@ def test_empty_context_omits_recent_section(tmp_path):
 
 
 def test_default_max_recent_constant_matches_plan():
-    """Plan §context 截取策略 says max_recent=6 (与 code_review.md 一致)."""
+    """Plan §context truncation uses max_recent=6 (same as code_review.md)."""
     assert DEFAULT_MAX_RECENT == 6

@@ -1,10 +1,10 @@
-"""schema.validate fail-fast 边界单测.
+"""schema.validate fail-fast boundary tests.
 
-ADR §3 立的契约："必填缺失 → `sys.exit('Error: ...')`，不给猜词提示，
-不做 schema migration"。本测试集**只锁形状**——`SystemExit` + `"Error: workflow.yaml: "`
-前缀，**不锁具体文案**，给未来文案演化留空间。
+ADR §3 contract: missing required → `sys.exit('Error: ...')`, no guess hints,
+no schema migration. This suite **locks shape only** — `SystemExit` + prefix
+`"Error: workflow.yaml: "`, **not exact message text**, leaving room for copy evolution.
 
-每条 sys.exit 分支一个用例，缺一个就允许某种错误形态被 silently 引入。
+One test per sys.exit branch; missing one silently allows a new error shape.
 """
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ import pytest
 from workflow import schema
 
 
-# ---------- 工具 ---------------------------------------------------------
+# ---------- helpers ---------------------------------------------------------
 
 _PREFIX = "Error: workflow.yaml:"
 
 
 def _assert_exits(meta: object) -> SystemExit:
-    """统一捕获 + 前缀断言；返回 exc 让 caller 可做更细的 match。"""
+    """Unified capture + prefix assertion; returns exc for finer matching."""
     with pytest.raises(SystemExit) as exc:
         schema.validate(meta)  # type: ignore[arg-type]
     msg = str(exc.value)
@@ -35,7 +35,7 @@ def _agent_stage(name: str = "a", scenario: str = "s.md") -> dict:
     return {"name": name, "type": "agent", "scenario": scenario}
 
 
-# ---------- 正路径：最小合法形态 -------------------------------------------
+# ---------- happy path: minimal valid form ---------------------------------
 
 def test_minimum_valid_deterministic_workflow():
     schema.validate({"name": "w", "stages": [_det_stage()]})
@@ -57,7 +57,7 @@ def test_valid_vars_required_and_default():
     })
 
 
-# ---------- 顶层 --------------------------------------------------------
+# ---------- top level ----------------------------------------------------
 
 def test_top_level_not_mapping_exits():
     _assert_exits([])  # type: ignore[arg-type]
@@ -75,7 +75,7 @@ def test_name_not_string_exits():
     _assert_exits({"name": 123, "stages": [_det_stage()]})
 
 
-# ---------- stages 顶层形态 --------------------------------------------
+# ---------- stages top-level shape ---------------------------------------
 
 def test_stages_not_list_exits():
     _assert_exits({"name": "w", "stages": "not-a-list"})
@@ -89,7 +89,7 @@ def test_stage_not_mapping_exits():
     _assert_exits({"name": "w", "stages": ["not-a-mapping"]})
 
 
-# ---------- 单 stage 必填 / 类型 ---------------------------------------
+# ---------- per-stage required / type ------------------------------------
 
 def test_stage_missing_name_exits():
     _assert_exits({"name": "w", "stages": [{"type": "deterministic", "fn": "m:f"}]})
@@ -141,7 +141,7 @@ def test_agent_empty_scenario_exits():
     })
 
 
-# ---------- vars 块 -----------------------------------------------------
+# ---------- vars block ---------------------------------------------------
 
 def test_vars_not_mapping_exits():
     _assert_exits({"name": "w", "vars": [], "stages": [_det_stage()]})

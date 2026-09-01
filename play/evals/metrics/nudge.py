@@ -1,33 +1,32 @@
-"""族 5 续集：agent_engine require_tool 服从性度量 — nudge_fire_rate.
+"""Family 5 sequel: agent_engine require_tool compliance metric — nudge_fire_rate.
 
-设计与 [trajectory.py](trajectory.py) 同档（半通用、绑 agent_engine envelope schema、
-纯函数 + 闭包工厂）。给 SFT baseline / Phase 5 复测提供"模型在 require_tool step
-上的第一次服从率"信号——越低越好（少触发 nudge = 模型一次到位）。
+The design is the same as [trajectory.py](trajectory.py) (semi-universal, tied to agent_engine envelope schema,
+Pure function + closure factory). Provide "model for SFT baseline / Phase 5 retest in require_tool step
+First time compliance rate on the "signal" - the lower the better (less trigger nudge = model gets it right in one go).
 
-核心定义：
-  - **require_tool turn** = scenario.steps 里 `require_tool: <tool>` 字段被声明的
-    一个展开后的 (agent, step) tuple
-  - **nudge fire** = 该 turn 的第一次 attempt 没有产出 `(caller=agent, tool=required_tool)`
-    的 artifact 事件，引擎打印 `🔁` 并发起重试
-  - **nudge_fire_rate** = nudge_fire 数 / require_tool turn 总数 ∈ [0,1] ↓
+Core definition:
+  - **require_tool turn** = `require_tool: <tool>` field is declared in scenario.steps
+    an expanded (agent, step) tuple
+  - **nudge fire** = The first attempt of this turn has no output `(caller=agent, tool=required_tool)`
+    artifact event, the engine prints `🔁` and initiates a retry
+  - **nudge_fire_rate** = nudge_fire number / require_tool turn total number ∈ [0,1] ↓
 
-数据契约（doc.metadata 标准 key，由 NudgeFireRate task 注入）：
-  - `trajectory`                       dict          envelope 形态 `{transcript, artifact,
-                                                     warnings, success, usage}`（agent_engine
-                                                     §16 typed entry / TokenUsage 规约）
-  - `expected_require_tool_turns`      list[dict]   `[{turn_idx, agent, step_id, tool}, ...]`
-                                                     由 process_docs / load_prediction 从
-                                                     scenario YAML 自动派生
-  - `scenario_path`                    str          仅用于报告 by_scenario breakdown 时取 id
+Data contract (doc.metadata standard key, injected by NudgeFireRate task):
+  - `trajectory` dict envelope form `{transcript, artifact,
+                                                     warnings, success, usage}`(agent_engine
+                                                     §16 typed entry / TokenUsage specification)
+  - `expected_require_tool_turns` list[dict] `[{turn_idx, agent, step_id, tool}, ...]`
+                                                     By process_docs/load_prediction from
+                                                     scenario YAML automatically derived
+  - `scenario_path` str is only used to get the id when reporting by_scenario breakdown
 
-Phase 1 失败模式 taxonomy（1.C 引入；3 类）：
-  - `missed`     第一次 attempt 该 caller 完全没有调任何工具
-  - `wrong_tool` 第一次 attempt 该 caller 调了别的工具（非 required_tool）
-  - `wrong_args` （**deferred to Phase 5**）调了正确工具但被 schema 拒——artifact
-                  handler 目前在 error 路径不发 event，无法仅凭 transcript 判断；需
-                  agent_engine 后续给 dispatch error 路径补 `{ok: false}` event 再启用。
-                  当前实现下该桶恒为 0，文档诚实标注。
-"""
+Phase 1 failure mode taxonomy (introduced in 1.C; Category 3):
+  - `missed` The first attempt of this caller did not call any tools at all
+  - In the first attempt of `wrong_tool`, the caller called another tool (non-required_tool)
+  - `wrong_args` (**deferred to Phase 5**) adjusted the correct tool but was rejected by the schema - artifact
+                  The handler currently does not send events in the error path, so it cannot be judged based on transcript alone; it is required
+                  Agent_engine then adds `{ok: false}` event to the dispatch error path and then enables it.
+                  Under the current implementation, this bucket is always 0, and the document is marked honestly."""
 
 from __future__ import annotations
 
@@ -46,11 +45,10 @@ from ..api import Doc, Response
 
 
 def derive_expected_turns(scenario_path: str | Path) -> list[dict[str, Any]]:
-    """解析 scenario → `[{turn_idx, agent, step_id, tool}, ...]`（仅含 require_tool 的 turn）.
+    """Parse scenario → `[{turn_idx, agent, step_id, tool}, ...]` (only turn of require_tool).
 
-    DECISIONS §13：内部委托 `agent_engine.Scenario.expanded_turns()`；turn_idx 1-based，
-    与 `discussion.run` 写入的 `turn N of total` marker 对齐.
-    """
+    DECISIONS §13: Internal delegate `agent_engine.Scenario.expanded_turns()`; turn_idx 1-based,
+    Aligned with the `turn N of total` marker written by `discussion.run`."""
     expanded = Scenario.from_yaml(str(scenario_path)).expanded_turns()
     return [
         {
@@ -64,22 +62,21 @@ def derive_expected_turns(scenario_path: str | Path) -> list[dict[str, Any]]:
     ]
 
 
-# ---------- failure mode 分类（attempt → mode）---------------------------
+# ---------- failure mode classification (attempt → mode) ---------------------------
 
 def classify_failure_mode(
     first_attempt_events: list[TranscriptEntry],
     agent: str,
     required_tool: str,
 ) -> str:
-    """First attempt 没满足 require_tool 时的失败分类（Phase 1：missed / wrong_tool）.
+    """Failure classification when First attempt does not meet require_tool (Phase 1: missed / wrong_tool).
 
-    `wrong_args` 桶（要求工具但 schema 拒）当前不可检测——artifact dispatch 在 error
-    路径不发 event，纯靠 transcript 看不出来；deferred 到 Phase 5（agent_engine 在
-    error 路径补 `{ok: false}` event 后启用）.
+    The `wrong_args` bucket (tool required but schema rejected) is currently undetectable - artifact dispatch in error
+    The path does not send events and cannot be seen purely by transcript; deferred to Phase 5 (agent_engine is in
+    The error path is enabled after adding `{ok: false}` event).
 
-    `required_tool` 当前未被使用——保留参数以便 wrong_args 桶启用后区分"调对工具但
-    args 不符"vs"调错工具"两种 wrong_tool 子类.
-    """
+    `required_tool` is not currently used - the argument is reserved to distinguish between "required_tool" and "wrong_args" when the wrong_args bucket is enabled
+    args does not match "vs" wrong_tool subclasses."""
     _ = required_tool  # reserved for wrong_args extension
     called_any_tool = any(
         isinstance(e, (ArtifactEventEntry, ToolCallEntry)) and e.caller == agent
@@ -88,10 +85,10 @@ def classify_failure_mode(
     return "wrong_tool" if called_any_tool else "missed"
 
 
-# ---------- 主入口：compute_nudge_fire_rate ----------------------------
+# ---------- Main entrance: compute_nudge_fire_rate ----------------------------
 
-# Phase 1 supported failure modes（taxonomy 起手 2 类 + 1 deferred 占位 = 3 总桶；
-# 见模块文档 wrong_args 注脚）.
+# Phase 1 supported failure modes (taxonomy starting category 2 + 1 deferred placeholder = 3 total buckets;
+# See the wrong_args footnote in the module documentation).
 FAILURE_MODES: tuple[str, ...] = ("missed", "wrong_tool", "wrong_args")
 
 
@@ -99,29 +96,28 @@ def compute_nudge_fire_rate(
     envelope: dict,
     expected_turns: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """envelope dict + 期望表 → 度量字典.
+    """envelope dict + expectation table → metric dictionary.
 
-    envelope 走 `Result.from_dict` typed 反序列化（§16）；`turns()` / `attempts()` 全
+    envelope takes `Result.from_dict` typed deserialization (§16); `turns()` / `attempts()` all
     typed dispatch.
 
-    返回结构（doc 级；多 doc 聚合在 task.aggregation 里做）：
+    Return structure (doc level; multi-doc aggregation is done in task.aggregation):
         {
-            "nudge_fire_rate": float | None,    # fires / total（total=0 → None）
+            "nudge_fire_rate": float | None, # fires / total (total=0 → None)
             "nudge_fire_count": int,
             "require_tool_total": int,
             "by_tool": {tool: {"fired": int, "total": int}, ...},
-            "by_failure_mode": {mode: int, ...},   # 累计每种 mode 出现次数
+            "by_failure_mode": {mode: int, ...}, # Accumulate the number of occurrences of each mode
             "per_turn": [
                 {turn_idx, agent, step_id, tool, fired, mode | None, n_attempts}, ...
             ],
         }
 
-    边界：
-      - expected_turns 为空（如 brainstorm/debate/roundtable）→ rate=None, total=0,
-        其它桶皆空——表示"该 doc 不参与 nudge 度量"（聚合时按 total 加权自然忽略）.
-      - segments 数 < expected_turn.turn_idx（subprocess 中途崩 / scenario 截断）→
-        该 turn 标 fired=True (mode='missed', n_attempts=0)，记入分母——保守计失败.
-    """
+    Boundary:
+      - expected_turns is empty (such as brainstorm/debate/roundtable) → rate=None, total=0,
+        All other buckets are empty - it means "this doc does not participate in the nudge measurement" (it is naturally ignored by total weighting during aggregation).
+      - Number of segments < expected_turn.turn_idx (subprocess crashes/scenario truncation)→
+        The turn is marked as fired=True (mode='missed', n_attempts=0) and is included in the denominator - a conservative failure."""
     result = Result.from_dict(envelope)
     turns = result.turns()
     per_turn: list[dict[str, Any]] = []
@@ -139,7 +135,7 @@ def compute_nudge_fire_rate(
         bucket["total"] += 1
 
         if idx >= len(turns):
-            # turn 没跑到（subprocess 中途崩 / scenario 比 expected 短），算 missed
+            # The turn did not run (the subprocess crashed midway / the scenario was shorter than expected), so it is considered missed.
             fire_count += 1
             bucket["fired"] += 1
             mode_counter["missed"] += 1
@@ -151,7 +147,7 @@ def compute_nudge_fire_rate(
 
         attempts = turns[idx].attempts(agent)
         if not attempts:
-            # 该 agent 在该 segment 完全没说话——算 missed
+            # The agent did not speak at all in this segment - considered missed.
             fire_count += 1
             bucket["fired"] += 1
             mode_counter["missed"] += 1
@@ -173,7 +169,7 @@ def compute_nudge_fire_rate(
             })
             continue
 
-        # nudge 触发了
+        # nudge triggered
         fire_count += 1
         bucket["fired"] += 1
         mode = classify_failure_mode(attempts[0], agent, tool)
@@ -186,7 +182,7 @@ def compute_nudge_fire_rate(
     total = len(expected_turns)
     rate: float | None = (fire_count / total) if total > 0 else None
 
-    # 把 FAILURE_MODES 三桶都显式列出，让 0 计数也可见——下游 breakdown 表格不缺列
+    # Explicitly list all three buckets of FAILURE_MODES so that the 0 count is also visible - there is no shortage of columns in the downstream breakdown table
     by_failure_mode = {m: int(mode_counter.get(m, 0)) for m in FAILURE_MODES}
 
     return {
@@ -199,14 +195,13 @@ def compute_nudge_fire_rate(
     }
 
 
-# ---------- closure factories（与 trajectory.py 协议同形）---------------
+# ---------- closure factories (same shape as trajectory.py protocol) ---------------
 
 def nudge_fire_rate_metric() -> Callable[[Doc, Response], float | None]:
-    """工厂：(Doc, Response) → 该 doc 的 nudge_fire_rate.
+    """Factory: (Doc, Response) → nudge_fire_rate for this doc.
 
-    依赖 doc.metadata['trajectory']（envelope dict）+ doc.metadata['expected_require_tool_turns']
-    都已被 process_docs / load_prediction 注入. 缺失字段时返 None（"未测得"）.
-    """
+    Depends on doc.metadata['trajectory'] (envelope dict) + doc.metadata['expected_require_tool_turns']
+    Have been injected by process_docs / load_prediction. Returns None ("not measured") if the field is missing."""
 
     def _score(doc: Doc, _response: Response) -> float | None:
         envelope = doc.metadata.get("trajectory", {}) or {}

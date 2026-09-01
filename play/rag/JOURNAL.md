@@ -1,99 +1,98 @@
 # Journal
 
-> 日期以实际 commit 历史为准。每个里程碑围绕 1 段 100-300 字的“为什么这么做、对未来意味着什么”叙事展开，配框架变更表、必要时的 mermaid 图、以及当期新增/改动的模块与 CLI 接口。
+> Dates follow actual commit history. Each milestone is a 100–300 word narrative on why it mattered and what it implies, plus framework change table, mermaid when needed, and new/changed modules, CLI, and data/demo scenarios.
 
-## 2026-04-15 — 首个 RAG PoC：ChromaDB + Ollama + 段落感知 chunker
+## 2026-04-15 — First RAG PoC: ChromaDB + Ollama + paragraph-aware chunker
 
-这个阶段的里程碑是把一个最小可用的 RAG 在本机跑通，并在“技术栈拍板”这一步留下长期收益。`ingest.py` / `query.py` 两个独立 CLI；`upsert` 而非 `add` 让重 ingest 幂等；collection 名直接等于 `basename(--output)`，作者不需要同时想两个名字。最值得讲的两条决定：选 **embedded ChromaDB（`PersistentClient(path=...)`）** 而不是 Qdrant / Weaviate / pgvector——VDB 就是一个目录，可 `cp -r` 迁移、可 git ignore，与 workshop 节奏天然契合；选 **Ollama embedding** 而不是 OpenAI API / sentence-transformers 直跑——和 multiagent 主推理共用 runtime，避免一个项目维护两个 LLM 后端的密钥 / 计费 / 限流。
+This milestone made a minimal RAG runnable locally, with long-term payoff at the tech-stack decision. Two CLIs `ingest.py` / `query.py`; `upsert` not `add` for idempotent re-ingest; collection name = `basename(--output)` so authors need not think two names. Two decisions stand out: **embedded ChromaDB (`PersistentClient(path=...)`)** over Qdrant / Weaviate / pgvector — VDB is one directory, `cp -r` migratable, git-ignorable, workshop-friendly; **Ollama embedding** over OpenAI API / sentence-transformers direct — shares runtime with multiagent main inference, avoiding dual LLM backend key/billing/rate-limit maintenance.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|两个独立 CLI（`ingest.py` / `query.py`）|入仓即可用，零额外服务依赖|
-|embedded ChromaDB（`PersistentClient`）|VDB 即目录，可 `cp -r` / 单文件迁移|
-|Ollama embedding（默认 `qwen3-embedding:8b`）|与主推理共用 runtime，避免双后端|
-|`upsert` 替代 `add`|重 ingest 幂等，避免开发节奏被脏数据卡住|
-|collection 名 = `basename(--output)`|目录名即 collection 名，避免“两个名字”心智负担|
+|Two CLIs (`ingest.py` / `query.py`)|drop-in usable; zero extra services|
+|embedded ChromaDB (`PersistentClient`)|VDB is directory; `cp -r` / single-file migration|
+|Ollama embedding (default `qwen3-embedding:8b`)|shared runtime with main inference; no dual backend|
+|`upsert` replaces `add`|idempotent re-ingest; dev not blocked by dirty data|
+|collection name = `basename(--output)`|directory name is collection name; no "two names" burden|
 
 ```mermaid
 flowchart LR
-    DOC[txt / md / pdf 输入] --> ING[ingest.py<br/>chunker + embedding]
+    DOC[txt / md / pdf input] --> ING[ingest.py<br/>chunker + embedding]
     ING --> VDB[(vdb/&lt;name&gt;<br/>= ChromaDB persistent dir)]
     Q[query] --> QY[query.py<br/>dense search]
     VDB --> QY
     QY --> R[hits]
 ```
 
-### 新增 / 改动模块
+### New / changed modules
 
-|模块|说明|
+|Module|Description|
 |---|---|
-|`ingest.py`|混合输入（文件 / 目录 `nargs="+"`）；`.txt / .md / .pdf` 三种格式|
-|`query.py`|首版纯 dense 检索，CLI pretty-print|
-|`chunker.py`|段落感知切分：按 `\n\n` 切段落、贪心打包、超长字符硬切、overlap 用尾部完整段落回带|
-|`ollama_embedding.py`|包装 ChromaDB `EmbeddingFunction` 接 Ollama `/api/embed`|
+|`ingest.py`|mixed input (file / dir `nargs="+"`); `.txt / .md / .pdf`|
+|`query.py`|first version pure dense retrieval; CLI pretty-print|
+|`chunker.py`|paragraph-aware: `\n\n` split, greedy pack, char hard-cut, overlap via full trailing paragraphs|
+|`ollama_embedding.py`|wraps ChromaDB `EmbeddingFunction` to Ollama `/api/embed`|
 
-### 新增数据 / 演示场景
+### New data / demo scenarios
 
-|目的|内容|
+|Purpose|Content|
 |---|---|
-|首批知识库|6 篇 panel 场景的角色档案，作为 `play/agent_engine`（彼时 `play/multiagent`）的私有背景知识|
+|First knowledge base|6 panel character profiles as private background for `play/agent_engine` (then `play/multiagent`)|
 
-## 2026-04-16 — 结构化 search API + `--json` subprocess 契约
+## 2026-04-16 — Structured search API + `--json` subprocess contract
 
-这个里程碑把 RAG 从“给人看的 CLI”升级为“可被其他子项目程序化调用的能力”。`query.py` 加 `--json` 模式：stdout 仅 JSON envelope，warnings / 进度走 stderr，subprocess 消费者 `json.loads(stdout)` 即可。同期把 API 分层做了三层：`search()` 纯函数 → `query()` 薄 pretty-print 包装 → CLI 更薄一层。最值得讲的设计是数据契约 `SearchResult` TypedDict **字段去 chroma 化**——不叫 `document` / `distance`，避免绑 provider；`score = 1.0/(1.0+distance)` 把底层距离折算为“越大越相似”，调用方不必知道是 L2 还是 cosine。这一步立下的 subprocess + JSON envelope 契约，后来被 `play/agent_engine` 的 `retrieve_docs` 工具直接复用，再后来 `play/evals` phase 4 / phase 5 也照搬。
+This milestone upgraded RAG from "CLI for humans" to "programmatic capability for other subprojects". `query.py` `--json`: stdout JSON envelope only, warnings/progress on stderr; subprocess consumers `json.loads(stdout)`. API layered: `search()` pure function → `query()` thin pretty-print → CLI thinnest. Key design: `SearchResult` TypedDict **de-chromatized** — not `document` / `distance`; `score = 1.0/(1.0+distance)` so callers see "higher = more similar" without knowing L2 vs cosine. Subprocess + JSON envelope later reused by `play/agent_engine` `retrieve_docs` and `play/evals` phases 4/5.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`query.py --json` 模式|stdout 专供机器消费，warnings / 进度走 stderr|
-|API 分层：`search()` 纯函数 + `query()` 薄包装 + CLI|每层职责清晰，单测可拆开做|
-|`SearchResult` TypedDict（去 chroma 化字段）|不绑 ChromaDB 词汇，未来换 Qdrant / pgvector 不破契约|
-|`score = 1.0/(1.0+distance)`|调用方看“相似度”，不必关心 L2/cosine|
-|`OLLAMA_BASE_URL` 跨子项目统一|多子项目共享同一本地 LLM|
+|`query.py --json` mode|stdout machine-only; warnings/progress on stderr|
+|API layers: `search()` + `query()` + CLI|clear responsibilities; unit tests separable|
+|`SearchResult` TypedDict (de-chromatized)|not bound to ChromaDB vocabulary; future Qdrant/pgvector safe|
+|`score = 1.0/(1.0+distance)`|similarity convention for callers|
+|`OLLAMA_BASE_URL` unified cross-subproject|shared local LLM across subprojects|
 
 ```mermaid
 flowchart LR
-    HOST[(consumer 进程<br/>play/agent_engine 等)]
+    HOST[(consumer process<br/>play/agent_engine etc.)]
     HOST -->|subprocess.run<br/>[python, query.py, --json]| CLI[query.py --json]
-    CLI --> S[search 纯函数]
+    CLI --> S[search pure function]
     S --> VDB[(vdb)]
     S --> ENV[JSON envelope<br/>list[SearchResult]]
     ENV -->|stdout| HOST
-    CLI -. stderr 走 warning .- HOST
+    CLI -. stderr warnings .- HOST
 ```
 
-### 新增 / 改动模块
+### New / changed modules
 
-|模块|说明|
+|Module|Description|
 |---|---|
-|`query.py`|拆 `search()` 纯函数 + `query()` 薄包装；新增 `--json` envelope 输出|
-|`SearchResult` TypedDict|`content / score / source / metadata` 四字段，跨 provider 稳定契约|
+|`query.py`|split `search()` + `query()`; `--json` envelope output|
+|`SearchResult` TypedDict|`content / score / source / metadata` four fields; cross-provider stable contract|
 
-### 新增数据 / 演示场景
+### New data / demo scenarios
 
-|目的|内容|
+|Purpose|Content|
 |---|---|
-|文档目录按场景分组|`docs/panel/` / `docs/test_vdb/` 等子目录组织|
+|Docs grouped by scenario|`docs/panel/` / `docs/test_vdb/` subdirectories|
 
-## 2026-04-25 — Hybrid retrieval：dense + BM25 + RRF 默认开启
+## 2026-04-25 — Hybrid retrieval: dense + BM25 + RRF default on
 
-稀有专名 / 编号场景（`ZX-7492` / `SRV-8831`）单纯 dense 召回率拉胯，这是 RAG 进入“可生产可用”的硬门槛。这个里程碑引入 BM25 + RRF，把 hybrid 改成默认 mode（`dense` / `bm25` 留作诊断）。最值得讲的是“**关键工程对偶**”：BM25 tokenizer 复用 embedding 模型同款 BPE（Qwen3-Embedding-8B），与 dense 端 tokenization 同源；跨语言（CJK / 拉丁 / 代码 / emoji）一致。融合策略选 **RRF（Reciprocal Rank Fusion，k=60，Cormack et al. 2009）**——只用排名不用 score，免 normalize；与 Elasticsearch 8.8+ 官方 hybrid 一致。同时 CLI envelope 从裸数组 `[hit, ...]` 破坏性升级到 `{query, data, meta}`，对齐 OpenAI Vector Store / Pinecone / Cohere 共同子集；`search()` Python API 不变。
+Rare proper nouns / IDs (`ZX-7492` / `SRV-8831`) hurt pure dense recall — a hard gate for "production-usable" RAG. This milestone adds BM25 + RRF; hybrid becomes default (`dense` / `bm25` diagnostic). Key engineering pairing: BM25 tokenizer reuses embedding model BPE (Qwen3-Embedding-8B), aligned with dense tokenization; cross-language (CJK / Latin / code / emoji) consistent. Fusion: **RRF (Reciprocal Rank Fusion, k=60, Cormack et al. 2009)** — rank-only, no normalize; matches Elasticsearch 8.8+ official hybrid. CLI envelope breaking upgrade bare array → `{query, data, meta}` aligned with OpenAI Vector Store / Pinecone / Cohere; `search()` Python API unchanged.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`mode={dense, bm25, hybrid}`，hybrid 默认|生产场景即默认值，dense / bm25 仅作诊断|
-|BM25 tokenizer 与 dense embedding 同款 BPE|跨语言 tokenization 同源，避免 hybrid 内部口径漂移|
-|RRF（k=60）融合|只用排名不 normalize，工业界主流默认|
-|`top_k * HYBRID_OVERSAMPLE`（=4）召回 oversample|融合前给两路足够候选|
-|`bm25.pkl` 与 chroma 同目录|VDB 仍是单目录可 `cp -r` 迁移|
-|`metadata.json` 加 `tokenizer` 哨兵|VDB 自描述：query 端读回，避免 ingest/query tokenizer 不一致|
-|envelope 升级 `{query, data, meta}` (BREAKING)|对齐 OpenAI / Pinecone / Cohere 共同子集；solo 项目不付兼容税一次到位|
-|per-hit `metadata.retrieval` / `metadata.reranked`|provenance 标注，下游可不依赖 envelope `meta`|
+|`mode={dense, bm25, hybrid}`, hybrid default|production default; dense/bm25 diagnostic only|
+|BM25 tokenizer same BPE as dense embedding|cross-language tokenization aligned; no hybrid internal drift|
+|RRF (k=60) fusion|rank-only fusion; industry default|
+|`top_k * HYBRID_OVERSAMPLE` (=4) recall oversample|enough candidates before fusion|
+|`bm25.pkl` alongside chroma|VDB still single directory `cp -r` migratable|
+|`metadata.json` adds `tokenizer` sentinel|self-describing VDB; ingest/query tokenizer consistency|
+|envelope upgrade `{query, data, meta}` (BREAKING)|OpenAI/Pinecone/Cohere subset; solo project no compat tax once|
 
 ```mermaid
 flowchart LR
@@ -105,39 +104,39 @@ flowchart LR
     TOP --> ENV[envelope<br/>{query, data, meta}]
 ```
 
-### 新增 / 改动模块
+### New / changed modules
 
-|模块|说明|
+|Module|Description|
 |---|---|
-|`bm25.py`|`dense_search` / `bm25_search` / `rrf_fuse` 三个纯函数|
-|`tokenizer.py`|HF tokenizer 包装 + `lru_cache`|
-|`prefetch.py`|一次性拉 HF 资产到 cache，避免运行时下载|
-|`ingest.py` / `query.py`|读写 `bm25.pkl`；`metadata.json` 写入 / 校验 `tokenizer` 哨兵|
-|envelope schema|裸数组 → `{query, data, meta}`（破坏性）|
+|`bm25.py`|`dense_search` / `bm25_search` / `rrf_fuse` three pure functions|
+|`tokenizer.py`|HF tokenizer wrapper + `lru_cache`|
+|`prefetch.py`|one-time HF asset cache fetch; avoids runtime download in tests|
+|`ingest.py` / `query.py`|read/write `bm25.pkl`; `metadata.json` tokenizer sentinel read/validate|
+|envelope schema|bare array → `{query, data, meta}` (breaking)|
 
-### 新增数据 / 演示场景
+### New data / demo scenarios
 
-|目的|内容|
+|Purpose|Content|
 |---|---|
-|稀有专名 / 编号场景|为 hybrid 提供单纯 dense 拉胯的反向叙事样本|
+|Rare proper noun / ID scenarios|counter-narrative samples where pure dense fails|
 
-## 2026-04-25 — Cross-encoder reranker（两阶段 retrieval）
+## 2026-04-25 — Cross-encoder reranker (two-stage retrieval)
 
-这个里程碑把检索从单阶段升级为两阶段：召回（hybrid，K=20 候选）→ 精排（cross-encoder 重排到 top_k）。重排默认 off（`--rerank` 显式开启），是为了避免每次启动加载 ~1.2GB 模型；`lru_cache(1)` 让首次 ~5s 加载之后零启动开销。模型选 `BAAI/bge-reranker-v2-m3`（多语言 + 中英 / 代码 / emoji 友好）。召回池 `K=20` 是 BEIR / MS MARCO 的经验值，在 M-series Mac 上 cross-encoder 耗时可忽略。最重要的 caveat 是 “**重排不能挽回召回的漏**”：若 hybrid 第一阶段把正确文档排在 K=20 之外，reranker 也救不回来——它只能 reorder，不能 retrieve。这是两阶段架构的持续 trade-off。同期 `agent_engine` 侧把 `mode` + `rerank` 通过 OpenAI tool schema 暴露给 LLM，让歧义 query 可由 LLM 自适应触发 rerank。
+Retrieval upgraded from single-stage to two-stage: recall (hybrid, K=20 candidates) → rerank (cross-encoder to top_k). Rerank default off (`--rerank` explicit) to avoid loading ~1.2GB every start; `lru_cache(1)` zero cost after first ~5s load. Model `BAAI/bge-reranker-v2-m3` (multilingual + CJK/EN/code/emoji friendly). Pool K=20 from BEIR / MS MARCO experience; cross-encoder cost negligible on M-series Mac. Core caveat: **rerank cannot recover recall misses** — if hybrid ranks correct doc outside K=20, reranker cannot help; it reorders, not retrieves. Same commit: agent_engine exposes `mode` + `rerank` via OpenAI tool schema for LLM-adaptive rerank on ambiguous queries.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`--rerank` flag（默认 off）|避免每次启动付 ~1.2GB 模型加载代价|
-|`lru_cache(1)` 单例 lazy load|首次 ~5s 之后零启动开销|
-|`K=20` 候选池|BEIR / MS MARCO 经验值，重排耗时可忽略|
-|每 hit `metadata.reranked = True` + envelope `meta.reranked = True`|双路径标注，下游对账无歧义|
-|`agent_engine` 端 slim envelope 解包|HTTP envelope ↔ SDK 解列表两层分工，对齐 OpenAI SDK 风格|
+|`--rerank` flag (default off)|avoid ~1.2GB model load every startup|
+|`lru_cache(1)` singleton lazy load|~5s first time, then zero startup cost|
+|K=20 candidate pool|BEIR/MS MARCO experience; rerank time negligible|
+|per-hit `metadata.reranked = True` + envelope `meta.reranked = True`|dual-path provenance labeling|
+|agent_engine slim envelope unwrap|HTTP envelope ↔ SDK list two-layer split; OpenAI SDK style|
 
 ```mermaid
 flowchart LR
-    Q[query] --> H[hybrid 召回<br/>K=20]
+    Q[query] --> H[hybrid recall<br/>K=20]
     H --> R{--rerank?}
     R -- yes --> CE[CrossEncoder<br/>BAAI/bge-reranker-v2-m3]
     R -- no --> TOP[top_k]
@@ -145,36 +144,36 @@ flowchart LR
     TOP & RTOP --> ENV[envelope<br/>meta.reranked = bool]
 ```
 
-### 新增 / 改动模块
+### New / changed modules
 
-|模块|说明|
+|Module|Description|
 |---|---|
-|`reranker.py`|`sentence-transformers.CrossEncoder` + `lru_cache(1)` 单例 lazy load|
-|`query.py`|加 `--rerank` flag；返回 envelope 标注 `meta.reranked`|
-|`agent_engine/tools/retrieve_docs.py`（同 commit）|把 rag CLI envelope 解包为 slim `{data, meta:{mode, reranked, top_k}}` 给 LLM；ToolTracer preview 升级|
+|`reranker.py`|`sentence-transformers.CrossEncoder` + `lru_cache(1)` singleton lazy load|
+|`query.py`|add `--rerank`; envelope annotates `meta.reranked`|
+|`agent_engine/tools/retrieve_docs.py` (same commit)|unwrap rag CLI envelope to slim `{data, meta:{mode, reranked, top_k}}` for LLM; ToolTracer preview upgrade|
 
-### 新增数据 / 演示场景
+### New data / demo scenarios
 
-|目的|内容|
+|Purpose|Content|
 |---|---|
-|歧义 query 自适应 rerank|`agent_engine` 侧 `scenarios/test_vdb.md` prompt nudge LLM 在歧义 query 上 `rerank=true`|
+|Ambiguous query adaptive rerank|`agent_engine` `scenarios/test_vdb.md` nudges LLM `rerank=true` on ambiguous query|
 
-## 2026-06-13 — CI VDB fixture ingest 稳定化
+## 2026-06-13 — CI VDB fixture ingest stabilization
 
-### 功能
+### Functional
 
-GitHub CI 构建 `vdb/test_vdb` / `vdb/panel` fixture 时不再在 Chroma `upsert` 阶段重复触发 Ollama embedding，避免小语料也可能因一次大批量请求超时而整轮 CI 失败。
+GitHub CI building `vdb/test_vdb` / `vdb/panel` fixtures no longer re-triggers Ollama embedding during Chroma `upsert`, avoiding CI failure from bulk request timeout even on small corpora.
 
-### 技术
+### Technical
 
-`ingest.py` 将 Ollama embedding 改为显式分批计算，再把 `embeddings` 与 `documents` / `metadatas` 一起传入 Chroma `upsert`；新增静态契约测试钉住“预计算向量写入”的路径，防止回退成 Chroma 内部隐式 embedding。
+`ingest.py` computes Ollama embeddings in explicit batches, then passes `embeddings` with `documents` / `metadatas` to Chroma `upsert`; new static contract test pins "precomputed vectors written" path against regression to Chroma implicit embedding.
 
-## 2026-06-13 — Ollama embedding timeout 收敛
+## 2026-06-13 — Ollama embedding timeout convergence
 
-### 功能
+### Functional
 
-CI 构建 `docs/panel` VDB 时，即使 GitHub runner 上 embedding 模型冷启动或单次请求较慢，也能通过更小批次、长 timeout 和自动重试完成 fixture 生成。
+CI building `docs/panel` VDB completes fixture generation even when embedding model cold-starts or single requests are slow on GitHub runners, via smaller batches, long timeout, and automatic retry.
 
-### 技术
+### Technical
 
-`ingest.py` 从 Chroma 的 `OllamaEmbeddingFunction` 改为直接使用 `ollama.Client(timeout=...)` 计算向量，默认 `RAG_EMBED_BATCH_SIZE=1`、`RAG_OLLAMA_TIMEOUT=300`、`RAG_EMBED_RETRIES=3`；Chroma collection 不再持有 embedding function，只接收预计算向量。
+`ingest.py` switches from Chroma `OllamaEmbeddingFunction` to direct `ollama.Client(timeout=...)` vector computation; defaults `RAG_EMBED_BATCH_SIZE=1`, `RAG_OLLAMA_TIMEOUT=300`, `RAG_EMBED_RETRIES=3`; Chroma collection no longer holds embedding function, only receives precomputed vectors.

@@ -1,18 +1,16 @@
-"""Scenario.from_yaml fail-fast 校验路径（DECISIONS §9）.
+"""Scenario.from_yaml fail-fast validation paths (DECISIONS §9).
 
-`scenario._err` 走 `sys.exit("Error: ...")`——任何校验路径变更（删 / 加 / 改字段
-要求）都会让本测试失败. 这是"作者写错 scenario 就在启动时挂"的最后一道保险，
-也是 evals / agent_sft 等消费者依赖的"上游不可能漏字段"前提.
+`scenario._err` uses `sys.exit("Error: ...")` — any validation path change fails this test.
+Last guard for "author typo fails at startup"; upstream cannot miss fields for evals/agent_sft.
 
-锁住的校验维度：
-  - agents：missing / 非 list / 缺 name / 缺 prompt / 缺 role / role 取值池 / 重名
-  - steps：missing / 缺 who / 缺 instruction / require_tool 类型 / max_retries
-  - who：未知 scalar / 空 list / 引用未声明 agent / role 不可达
-  - memory：未知 type / window/summary 缺 max_recent / max_recent 非正
-  - artifact：tool_owners 未知 tool / mode 非法 / sections 非 list
+Locked validation dimensions:
+  - agents: missing / not list / missing name / prompt / role / role pool / duplicate names
+  - steps: missing / missing who / instruction / require_tool type / max_retries
+  - who: unknown scalar / empty list / unknown agent / unreachable role
+  - memory: unknown type / window|summary missing max_recent / non-positive max_recent
+  - artifact: unknown tool_owners tool / invalid mode / sections not list
 
-"无校验"的合法情形（artifact.enabled=false / 不写 memory / step 没 require_tool 等）
-不在此处再次锁——已由 `test_scenario_static.py` 的现网 scenario 覆盖.
+Valid "no validation" cases covered by live scenarios in test_scenario_static.py.
 """
 from __future__ import annotations
 
@@ -34,7 +32,7 @@ def _expect_exit(tmp_path: Path, body: str, expected: str) -> None:
     p = _write(tmp_path, body)
     with pytest.raises(SystemExit) as exc:
         Scenario.from_yaml(str(p))
-    # SystemExit.code 是 sys.exit 的字符串参数（带 "Error: " 前缀）
+    # SystemExit.code is sys.exit string arg (with "Error: " prefix)
     msg = str(exc.value)
     assert expected in msg, f"expected {expected!r} in {msg!r}"
 
@@ -42,7 +40,7 @@ def _expect_exit(tmp_path: Path, body: str, expected: str) -> None:
 # ---------- frontmatter ------------------------------------------------
 
 def test_no_frontmatter_fails(tmp_path: Path):
-    """无 `---` 分隔符 → fail-fast，不是默默把整文件当 body."""
+    """No `---` delimiter → fail-fast, not silently treat whole file as body."""
     _expect_exit(
         tmp_path,
         "no frontmatter here\njust body\n",
@@ -306,8 +304,7 @@ def test_who_references_unknown_name_fails(tmp_path: Path):
 
 
 def test_who_role_unreachable_fails(tmp_path: Path):
-    """`who: moderator` 但全员是 member → fail-fast，间接拦住"声明了 moderator
-    寻址却没 moderator"的 bug 类（DECISIONS §9 关键设计讨论）."""
+    """`who: moderator` but all members → fail-fast; catches "moderator addressing without moderator" (DECISIONS §9)."""
     _expect_exit(
         tmp_path,
         textwrap.dedent("""\
@@ -360,7 +357,7 @@ def test_memory_window_requires_positive_max_recent(tmp_path: Path):
 
 
 def test_agent_level_memory_validated(tmp_path: Path):
-    """agent 自身的 memory 配置错也要 fail-fast，不只是 scenario 级."""
+    """Agent-level memory misconfig must fail-fast, not only scenario-level."""
     _expect_exit(
         tmp_path,
         textwrap.dedent("""\
@@ -369,7 +366,7 @@ def test_agent_level_memory_validated(tmp_path: Path):
               - name: A
                 role: member
                 prompt: p
-                memory: {type: full, max_recent: -1}  # max_recent 对 full 无影响，但 type=window/summary 类似分支
+                memory: {type: full, max_recent: -1}  # max_recent irrelevant for full; similar branch for window/summary
               - name: B
                 role: member
                 prompt: p

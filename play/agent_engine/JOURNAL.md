@@ -1,574 +1,564 @@
 # Journal
 
-> Note: 2026-04-26 之前项目名为 `play/multiagent`；保留旧名是为了让 git 历史与本 journal 时间线吻合，DECISIONS §10 / 2026-04-26 的里程碑解释了改名缘起。日期以实际 commit 历史为准。
+> Note: Before 2026-04-26 the project was named `play/multiagent`; old name kept so git history aligns with this journal timeline; DECISIONS §10 / 2026-04-26 milestone explains the rename. Dates follow actual commit history.
 
-## 2026-04-14 — Multiagent PoC：能让两个 agent 围绕一个 topic 对话
+## 2026-04-14 — Multiagent PoC: two agents conversing on a topic
 
-这个阶段的里程碑是把“多 agent 在一个话题上你来我往”这件事在终端跑通。固定 agents、round-robin 发言、写死 topic，是一个最小但完整的闭环。最值得讲的不是 multi-agent 本身，而是 4 个 backend client（ollama / openai / anthropic / gemini）的 drop-in pattern + `config.py` 一行 `BACKEND` 切换——让“以后会接 OpenAI 还是本地 ollama”从一开始就成为可换件，而不是需要重构才能解决的耦合。
+The milestone at this stage is to run the issue of "multiple agents coming and going on a topic" through the terminal.Fixed agents, round-robin speakers, and hard-coded topics are a minimal but complete closed loop.The most noteworthy thing is not the multi-agent itself, but the drop-in pattern of the 4 backend clients (ollama / openai / anthropic / gemini) + the one-line `BACKEND` switch in `config.py` - making "will you connect to OpenAI or local ollama in the future" become a replaceable part from the beginning, rather than a coupling that requires reconstruction to solve.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|单文件 `run.py` + 4 个 backend client drop-in|让 LLM provider 从一开始就是一个可换件|
-|`config.py` 单一 `BACKEND` 开关|切后端不改业务代码|
-|共享 history `list[{role, content}]`|首版最简形态，为后面暴露问题留空间|
+|Single file `run.py` + 4 backend client drop-in|Make the LLM provider a drop-in from the start|
+|`config.py` Single `BACKEND` switch |Switch backend without changing business code|
+|Share history `list[{role, content}]`|The simplest form of the first version, leaving room for problems to be exposed later|
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|（硬编码）|首版没有 scenario 抽象|两个 agent 围绕硬编码 topic 轮流发言|
+| (hard-coded) | There is no scenario abstraction in the first version | Two agents take turns speaking around the hard-coded topic |
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期无工具，仅 LLM 对话|
+|—|No tools in this issue, only LLM dialogue|
 
-## 2026-04-14 — Phase-driven scenario：把“参与者 + 流程”抽出来做配置
+## 2026-04-14 — Phase-driven scenario: extract participants + flow to config
 
-这个阶段把流程从代码里抽出来：YAML frontmatter + markdown body 的单文件即一个场景。换话题不再改 `run.py`，只改 `.md`。4 个示例覆盖 (moderator / no moderator) × (open / goal-oriented) 2×2 矩阵，强调流程抽象在四种典型形态下都成立。这一里程碑是 agent_engine 真正变成“可声明的会议引擎”的起点：流程、角色、主题、提示语全部进入数据，运行时只是“按声明顺序展开”。
+This stage extracts the process from the code: a single file of YAML frontmatter + markdown body is a scene.When changing the topic, `run.py` is no longer changed, only `.md` is changed.The 4 examples cover the (moderator / no moderator) × (open / goal-oriented) 2×2 matrix, emphasizing that the process abstraction holds true in four typical forms.This milestone is the starting point for agent_engine to truly become a "declarable conference engine": processes, roles, topics, and prompts all enter the data, and the at runtime is just "expansion in the order of declaration."
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|YAML frontmatter + MD body 单文件 scenario|每个会议是一份可读、可改的文档|
-|`phases:` 列表声明 opening / main / closing|流程结构数据化|
-|`members:` + 可选 `moderator:` 顶层块|角色显式建模|
-|启动期 schema 校验 + `who` 字段对参与者名校验|错配 fail-fast，不到运行时才出错|
+|YAML frontmatter + MD body single file scenario|Each meeting is a readable and changeable document|
+|`phases:` List declaration opening / main / closing|Process structure dataization|
+|`members:` + optional `moderator:` top-level block |explicit modeling of roles|
+|at startup schema verification + `who` field verification of participant name|mismatch fail-fast, error will not occur until at runtime|
 
 ```mermaid
 flowchart LR
-    SC[scenario.md<br/>YAML + MD body] --> P[parser + validator]
-    P --> SCN[Scenario obj<br/>members / phases / topic]
-    SCN --> ENG[Engine round-robin]
-    ENG --> A1[agent A] & A2[agent B] & MOD[moderator?]
+SC[scenario.md<br/>YAML + MD body] --> P[parser + validator]
+P --> SCN[Scenario obj<br/>members / phases / topic]
+SCN --> ENG[Engine round-robin]
+ENG --> A1[agent A] & A2[agent B] & MOD[moderator?]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|4 份示例|覆盖 (moderator / no moderator) × (open / goal-oriented) 2×2|流程抽象在四种典型形态下都跑得通|
+|4 examples|Covering (moderator / no moderator) × (open / goal-oriented) 2×2|Process abstraction works in four typical forms|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期无工具|
+|—|No tools in this issue|
 
-## 2026-04-15 — Per-agent 消息投影：共享 transcript + 每 agent 视角
+## 2026-04-15 — Per-agent message projection: shared transcript + per-agent view
 
-这个里程碑把单 history 多 agent 的根本张力一次性解决：① agent 分不清“我说的”和“别人说的”；② system prompt 优先级失真；③ Anthropic / Gemini API 不接受连续同 role 消息。范式确立——**Discussion 维护一条共享 transcript（唯一权威），每个 agent 在 `respond()` 时把它投影成自己的视角**：speaker == owner 时投成 `assistant`，他人 wrap 进 `<message from="X">...</message>` 包进 user，元数据走 `<tag>...</tag>`。这条范式是后面 memory / artifact / tracer 全部站在其上的地基。
+This milestone solves the fundamental tensions of single history and multiple agents at once: ① the agent cannot distinguish between "what I said" and "what others said"; ② the system prompt priority is distorted; ③ Anthropic / Gemini API does not accept consecutive messages with the same role.The paradigm is established - **Discussion maintains a shared transcript (the only authority), and each agent projects it into its own perspective** when `respond()`: cast as `assistant` when speaker == owner, others wrap it into `<message from="X">...</message>` and wrap it into user, and the metadata goes into `<tag>...</tag>`.This paradigm is the foundation on which all subsequent memory/artifact/tracer systems stand.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|Discussion 持单条共享 transcript（SoT）|消除多 agent 视角下的真相不一致|
-|每 agent `respond()` 投影自身视角|解决“我说的 vs 别人说的”混淆|
-|history entry 从 `role/content` 改为 `speaker/type`|把“说话人”和“消息形态”作为一等公民|
-|system prompt 走 client 独立参数|不再混进 messages 与 user 内容争优先级|
-|Anthropic / Gemini client 自动合并连续同 role|对齐多 provider API 兼容|
+|Discussion holds a single shared transcript (SoT)|Eliminates truth inconsistencies from multiple agent perspectives|
+|Each agent `respond()` projects its own perspective|solve the confusion of "what I said vs what others said"|
+|history entry changed from `role/content` to `speaker/type`|Make "speaker" and "message form" first-class citizens|
+|system prompt uses client independent parameters|No longer mixes messages and user content to compete for priority|
+|Anthropic/Gemini client automatically merges consecutive same role|aligned multi-provider API compatible|
 
 ```mermaid
 flowchart LR
-    T[(shared transcript<br/>speaker / type)]
-    A[Agent A respond] -->|投影：自己=assistant<br/>他人=&lt;message from&gt;| T
-    B[Agent B respond] -->|投影：自己=assistant<br/>他人=&lt;message from&gt;| T
-    SP[system prompt] -. client param .-> A
-    SP -. client param .-> B
+T[(shared transcript<br/>speaker / type)]
+A[Agent A respond] -->|Projection: self=assistant<br/>Others=&lt;message from&gt;| T
+B[Agent B respond] -->|Projection: self=assistant<br/>Others=&lt;message from&gt;| T
+SP[system prompt] -. client param .-> A
+SP -. client param .-> B
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`debate.md` / `panel.md` 等 4 份|替换旧脚手架场景|新范式下的多 agent 对话形态|
+|`debate.md` / `panel.md` and other 4 copies|Replace the old scaffolding scene|Multi-agent dialogue form under the new paradigm|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期无工具|
+|—|No tools in this issue|
 
-## 2026-04-16 — Per-round phases + instruction-as-arg：修两个 bug 顺手解锁能力
+## 2026-04-16 — Per-round phases + instruction-as-arg: fix two bugs, unlock capability
 
-这个里程碑是修两个 bug 顺手解锁了一种能力：① **instruction 泄露**——给 moderator 的“点名追问 X”被 members 当成自己的指令；② **轮次无差异**——`main` 阶段静态定义，每轮完全相同。修法：instruction 不进 history，作为 `Agent.respond(instruction=...)` 参数传入；`main` 每个 phase 加 `round: <int> | "default"`，引擎按当前轮次匹配 + fallback。这一刻确立了 **instruction-as-arg 这条 invariant**——history 不再承担“控制流 + 对话内容”双重职责，后来扁平 steps 重构（§9）也保留这条线。
+This milestone is the fixing of two bugs and the unlocking of an ability: ① **instruction leaked** - the "name and questionCorrection: instruction is not entered into history and passed in as `Agent.respond(instruction=...)` parameter; `main` adds `round: <int> | "default"` to each phase, and the engine matches according to the current round + fallback.This moment established the invariant of **instruction-as-arg** - history no longer assumes the dual responsibility of "control flow + dialogue content". Later, the flat steps reconstruction (§9) also retained this line.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`phases` 拆为 `opening / main / closing` 三段|流程语义更清晰，main 可单独按轮次扩展|
-|`main.<phase>.round` 字段（int 或 `"default"`）|让“第 1 轮自由讨论 → 第 N 轮逼迫表态”可表达|
-|引擎匹配顺序：`round == N` → `round == "default"` → 全员发言|稳健的回退路径|
-|instruction-as-arg invariant|history 只承载对话，不再承载控制流|
+|`phases` is split into three sections: `opening/main/closing`|The process semantics are clearer, and main can be expanded individually by round|
+|`main.<phase>.round` field (int or `"default"`)|Let "the 1st round of free discussion → the Nth round of forced expression" be expressed|
+|Engine matching order: `round == N` → `round == "default"` → Everyone speaks | Robust fallback path |
+|instruction-as-arg invariant|history only carries dialogue, no longer control flow|
 
 ```mermaid
 flowchart LR
-    R{当前轮次 N} -->|有 round==N| A[执行该 phase]
-    R -->|否则有 round=='default'| B[执行 default phase]
-    R -->|都没有| C[全员发言 fallback]
+R{Current round N} -->|There is round==N| A[Execute this phase]
+R -->|Otherwise there is round=='default'| B[Execute default phase]
+R -->|None| C[All members speak fallback]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|沿用既有 scenario|轮次差异化指令的典型用法|
+|—|Inherit the existing scenario|Typical usage of round differentiation instructions|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期无工具|
+|—|No tools in this issue|
 
-## 2026-04-16 — Subprocess 隔离的 RAG 工具
+## 2026-04-16 — Subprocess-isolated RAG toolThis milestone connects to the first tool `retrieve_docs`, but it does not connect `play/rag` through Python import, but `subprocess.run(["python", "rag/query.py", "--json", ...])`**.The reason is that each of the two sub-projects has its own `config.py`, and `sys.path.insert` directly imports the second one to get the module cache of the first one - relying on the OS-level process boundary to ensure isolation.This step also establishes the form of all subsequent cross-subproject docking: subprocess + JSON envelope.Later, `play/evals` phase 4 (rag)/phase 5 (agent_engine) were reused as they were.
 
-这个里程碑接入第一个工具 `retrieve_docs`，但**不通过 Python import 接 `play/rag`，而是 `subprocess.run(["python", "rag/query.py", "--json", ...])`**。原因是两个子项目各有自己的 `config.py`，`sys.path.insert` 直接 import 第二个会拿到第一个的模块缓存——靠 OS 级进程边界保证隔离。这一步同时立下后续所有跨子项目对接的形态：subprocess + JSON envelope。后来 `play/evals` phase 4（rag）/ phase 5（agent_engine）原样复用。
+### Framework changes
 
-### 框架变更
-
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|工具走 subprocess + JSON envelope|跨子项目零 Python import 耦合|
-|`rag/query.py` 加 `--json` 输出模式|为机器消费保留专用 channel|
-|LLM tool schema 剥掉 scenario-pinned 参数（`_path_params`）|LLM 只看自己要填的字段，不被默认值干扰|
-|`OLLAMA_BASE_URL` 跨 multiagent + rag 统一|多子项目共享同一本地 LLM|
+|Tools go subprocess + JSON envelope|Zero Python import coupling across sub-projects|
+|`rag/query.py` Add `--json` output mode|Special channel for machine consumptionretained|
+|LLM tool schema strips off scenario-pinned parameters (`_path_params`) |LLM only looks at the fields it wants to fill in and is not interfered with by default values|
+|`OLLAMA_BASE_URL` unified across multiagent + rag|Multiple sub-projects sharing the same local LLM|
 
 ```mermaid
 flowchart LR
-    LM[LLM 调用<br/>retrieve_docs 工具]
-    LM -->|tool_call args| EV[_envelope]
-    EV -->|subprocess| RAG[(play/rag<br/>独立进程)]
-    RAG -->|JSON envelope| EV
-    EV --> LM
+LM[LLM calls<br/>retrieve_docs tool]
+LM -->|tool_call args| EV[_envelope]
+EV -->|subprocess| RAG[(play/rag<br/>Independent process)]
+RAG -->|JSON envelope| EV
+EV --> LM
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`brainstorm.md`|RAG-backed tool use 的主场|agent 在讨论中调用检索工具|
-|`vdb_test.md`|最小回归 probe（~5 行 facts，秒级）|subprocess wrapper 的 smoke 验证|
+|`brainstorm.md`|Home of RAG-backed tool use|agent calls the search tool in the discussion|
+|`vdb_test.md`|Minimum regression probe (~5 lines of facts, seconds)|Smoke verification of subprocess wrapper|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|`retrieve_docs`|首个工具，subprocess 调 `play/rag` 检索；scenario-pinned 默认参数对 LLM 隐藏|
+|`retrieve_docs`|The first tool, subprocess calls `play/rag` to retrieve; scenario-pinned default parameters are hidden from LLM|
 
-## 2026-04-20 — Per-agent conversation memory：full / window / summary 三策略
+## 2026-04-20 — Per-agent conversation memory: full / window / summary
 
-`panel` 实测撞性能墙：4 成员 + 1 主持 × 3 轮，末段单次发言 111s（开场 24s 的 4.5 倍），整场 1398s。根因是所有 agent 共享全量 history，每轮末尾输入 token 线性增长。这个里程碑引入 `ConversationMemory` ABC + 三实现：`FullHistory`（默认 backward compat）、`WindowMemory`（最近 N + pinned）、`SummaryMemory`（stale 折叠成 `<summary>`）。**pinned types 永不被剪**（`topic / round / phase / artifact_event`）是会议纪要级信息，丢了对话就破。同日还把 opening / closing phase 注入 `<phase>` marker，让 agent 自感所处阶段。
+The actual test of `panel` hit the performance wall: 4 members + 1 host × 3 rounds, a single speech at the end was 111s (4.5 times the opening 24s), and the entire session was 1398s.The root cause is that all agents share the entire history, and the input token grows linearly at the end of each round.This milestone introduces `ConversationMemory` ABC + three implementations: `FullHistory` (default backward compat), `WindowMemory` (latest N + pinned), `SummaryMemory` (stale collapsed into `<summary>`).**pinned types will never be cut** (`topic / round / phase / artifact_event`) are meeting minutes level information, which will be broken if the conversation is lost.On the same day, the opening / closing phase was also injected into the `<phase>` marker, allowing the agent to sense its own phase.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`ConversationMemory` ABC + 3 实现|memory 策略可插拔，scenario / agent 双层覆盖|
-|共享 transcript 不变，每 agent 持自己 memory 实例|延续 §3 的“共享 + 投影”地基，不破坏 SoT|
-|pinned types 不可剪（`topic / round / phase / artifact_event`）|保留会议纪要级信息|
-|summary 触发：stale 达阈值才折叠|未到阈值时“不动就无信息损失”|
-|opening / closing phase 注入 `<phase>` marker|agent 自感阶段，不靠 prompt 工程隐式表达|
+|`ConversationMemory` ABC + 3 implementation |memory strategy is pluggable, scenario/agent double-layer coverage|
+|The shared transcript remains unchanged, each agent maintains its own memory instance|Continues the "sharing + projection" foundation of §3 without destroying the SoT|
+|pinned types cannot be cut (`topic / round / phase / artifact_event`) |retained meeting minutes level information|
+|summary trigger: stale will be folded when it reaches the threshold|When it does not reach the threshold, "no information will be lost if it does not move"|
+|opening / closing phase injects `<phase>` marker|agent self-sensing phase, without relying on prompt engineering implicit expression|
 
 ```mermaid
 flowchart LR
-    T[(shared transcript)]
-    T --> M1[FullHistory]
-    T --> M2[WindowMemory<br/>recent N + pinned]
-    T --> M3[SummaryMemory<br/>stale → &lt;summary&gt;]
-    M1 & M2 & M3 --> A[agent.respond]
+T[(shared transcript)]
+T --> M1[FullHistory]
+T --> M2[WindowMemory<br/>recent N + pinned]
+T --> M3[SummaryMemory<br/>stale → &lt;summary&gt;]
+M1 & M2 & M3 --> A[agent.respond]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`phase_test.md`|`<phase>` marker 存在性的最小回归 probe|opening / closing 阶段被 agent 真正“看到”|
+|`phase_test.md`|`<phase>` The minimum regression of marker existence probe|opening / closing phase is really "seen" by the agent|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期无工具|
+|—|No tools in this issue|
 
-## 2026-04-21 — Shared artifact + 结构化投票：让“讨论 → 决策”可机器验证
+## 2026-04-21 — Shared artifact + structured voting: discussion → decision machine-verifiable
 
-`panel` 类场景要求“一方胜出”但只产一串发言，最终决策靠隐式推断。这个里程碑引入 `ArtifactStore` 把决策结构化：6 个工具（`read_artifact / write_section / append_section / propose_vote / cast_vote / finalize_artifact`）。section 在 scenario 的 `initial_sections` 里显式声明、每节标 `mode: replace | append`、store 强制；mode 不匹配返回 `{"error": ...}`，LLM 在同一 tool loop 内 self-correct。两个关键设计：**out-of-band artifact view**——每次 agent 发言前把 `artifact.render()` 作为 `<artifact>` user 消息**带外**注入（不进 history，memory 裁剪永远不会把它藏掉）；**artifact_event 进 history**（pinned，不被剪）——“事件可回放，状态无历史”是 event sourcing 的基本区分。`finalize_artifact` 是 sealing step，幂等返回 error 防重入。
+The `panel` type scenario requires "one side to win" but only produces a series of statements, and the final decision relies on implicit inference.This milestone introduces `ArtifactStore` to structure decisions: 6 tools (`read_artifact / write_section / append_section / propose_vote / cast_vote / finalize_artifact`).The section is explicitly declared in the `initial_sections` of the scenario, each section is marked with `mode: replace | append`, and the store is mandatory; if the mode does not match, it returns `{"error": ...}`, and LLM self-corrects in the same tool loop.Two key designs: **out-of-band artifact view** - Inject `artifact.render()` as `<artifact>` user message **out-of-band** before each agent speaks (without going into history, memory clipping will never hide it); **artifact_event into history** (pinned, not cut) - "Events can be played back, status has no history" is the basic distinction of event sourcing.`finalize_artifact` is a sealing step and returns an idempotent error to prevent reentrancy.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`ArtifactStore` 内部状态 + 6 个 artifact tools|让决策成为可机器验证的对象|
-|section.mode 强制 + error → tool loop self-correct|约束写入语义，但不让出错炸全场|
-|out-of-band `<artifact>` 渲染（不进 history）|memory 裁剪不会藏掉 artifact 状态|
-|artifact_event 进 history（pinned）|事件可回放，状态由 store 持有，避免双 SoT|
-|`finalize_artifact` sealing 幂等|对齐 workflow terminal state 模型|
-|tool handler 中 scenario 默认值覆盖 LLM 提供的参数|防止幻觉的 `vdb_dir` 偷换 scenario 解析路径|
+|`ArtifactStore` internal state + 6 artifact tools|Make decisions machine-verifiable objects|
+|section.mode force + error → tool loop self-correct|Constrain writing semantics, but don’t let errors blow up the whole scene|
+|out-of-band `<artifact>` rendering (without entering history) |memory cropping will not hide the artifact status|
+|artifact_event enters history (pinned) |Events can be played back, and the status is held by the store to avoid double SoT|
+|`finalize_artifact` sealing idempotent|align workflow terminal state model|
+|The scenario default value in the tool handler overrides the parameters provided by LLM|Prevent the hallucination of `vdb_dir` from stealing the scenario parsing path|
 
 ```mermaid
 flowchart LR
-    H[(history<br/>含 artifact_event<br/>pinned)]
-    S[(ArtifactStore<br/>状态)]
-    A[agent] -->|tool call| S
-    S -->|event| H
-    S -->|render| OOB[&lt;artifact&gt; out-of-band]
-    H & OOB --> A
+H[(history<br/>including artifact_event<br/>pinned)]
+S[(ArtifactStore<br/>status)]
+A[agent] -->|tool call| S
+S -->|event| H
+S -->|render| OOB[&lt;artifact&gt; out-of-band]
+H & OOB --> A
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`panel.md`|端到端启用 artifact + 投票|结构化决策链路完整跑通|
-|`test_artifact.md`|六工具覆盖 + mode 冲突 self-correction|工具协议在错路径上的鲁棒性|
+|`panel.md`|End-to-end enabled artifact + voting|Complete run-through of structured decision-making links|
+|`test_artifact.md`|Six tool coverage + mode conflict self-correction|Tool protocol robustness on wrong paths|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|`read_artifact`|读取当前 artifact 状态|
-|`write_section`|按 mode=replace 写入 section|
-|`append_section`|按 mode=append 追加 section|
-|`propose_vote`|提出投票 vote_id|
-|`cast_vote`|对 vote_id 投票|
-|`finalize_artifact`|sealing 步骤，幂等防重入|
+|`read_artifact`|Read current artifact status|
+|`write_section`|Press mode=replace to write section|
+|`append_section`|Press mode=append to append section|
+|`propose_vote`|Propose a vote vote_id|
+|`cast_vote`|Vote for vote_id|
+|`finalize_artifact`|sealing step, idempotent to prevent reentrancy|
 
-## 2026-04-21 — Phase-assert (`require_tool`)：让“沉默违规”变可见
+## 2026-04-21 — Phase-assert (`require_tool`): make silent violations visiblePanel closing actual test bug: The instruction requires "call `cast_vote(...)` after everyone speaks", but two members only spoke but did not vote, the engine fire-and-forget.This milestone adds `phase.require_tool: <tool_name> + max_retries: N` (default 1): miss → append nudge instruction (per-call parameter, **do not enter history**, other agents cannot see this tutorial) → retry exhaustion → stderr `WARNING` + terminal `🔁` emoji.**The core goal is not to "force the agent to adjust the tool" (LLM essentially cannot force it), but to make silent violations visible** - detect-and-nudge-and-audit mode.At the same time, add `propose_vote` to `MODERATOR_ONLY_TOOLS` to eliminate the bug class where member randomly proposes and misplaces vote_id.
 
-panel closing 实测 bug：指令要求“每人发言后调用 `cast_vote(...)`”，但两名 member 只说话没投票，引擎 fire-and-forget。这个里程碑加 `phase.require_tool: <tool_name> + max_retries: N`（默认 1）：未命中 → 追加 nudge instruction（per-call 参数，**不进 history**，其他 agent 看不见这次辅导）→ 重试用尽 → stderr `WARNING` + 终端 `🔁` emoji。**核心目标不是“强制 agent 调工具”（LLM 本质上做不到强制），而是让沉默违规变可见**——detect-and-nudge-and-audit 模式。同时把 `propose_vote` 加进 `MODERATOR_ONLY_TOOLS`，消除 member 乱 propose 把 vote_id 错位的 bug 类。
+### Framework changes
 
-### 框架变更
-
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`phase.require_tool` + `max_retries`|对工具调用合规性做断言|
-|nudge instruction 走 per-call 参数，不进 history|不污染其他 agent 视角，保留 instruction-as-arg invariant|
-|失败：stderr `WARNING` + 终端 `🔁` emoji|让违规可见，方便 workshop 观众和后续 audit|
-|`artifact_event` 加 `tool` / `caller` 结构化字段|程序化检查 compliance，不再解析 free-form 文本|
-|`run.py` line-buffer stdout/stderr，`2>&1 \| tee` 保 chronological|日志顺序与时间线一致|
+|`phase.require_tool` + `max_retries`|Make assertions about tool call compliance|
+|nudge instruction takes per-call parameters, does not enter history|does not pollute other agent perspectives, retain instruction-as-arg invariant|
+|Failure: stderr `WARNING` + terminal `🔁` emoji|Make the violation visible for workshop viewers and subsequent audits|
+|`artifact_event` adds `tool` / `caller` structured fields | programmatically checks compliance and no longer parses free-form text |
+|`run.py` line-buffer stdout/stderr, `2>&1 \| tee` ensures chronological|Log order is consistent with the timeline|
 
 ```mermaid
 flowchart LR
-    P[phase 结束] -->|require_tool 检测| C{命中?}
-    C -- yes --> OK[continue]
-    C -- no, retries left --> N[nudge instruction<br/>per-call arg]
-    N --> P
-    C -- retries 用尽 --> W[stderr WARNING<br/>+ &#x1F501; emoji]
+P[phase end] -->|require_tool detection| C{hit?}
+C -- yes --> OK[continue]
+C -- no, retries left --> N[nudge instruction<br/>per-call arg]
+N --> P
+C -- retries exhausted --> W[stderr WARNING<br/>+ &#x1F501; emoji]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`test_phase_assert.md`|smoke 端到端|retry + warning 路径完整跑通|
+|`test_phase_assert.md`|smoke end-to-end|retry + warning path complete runthrough|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|`propose_vote`|加入 `MODERATOR_ONLY_TOOLS`，消除 member 乱 propose 的 bug 类|
+|`propose_vote`|Add `MODERATOR_ONLY_TOOLS` to eliminate the bug class of members randomly proposing|
 
-## 2026-04-22 — Tool observability：ToolTracer 让 non-artifact 工具调用可见
+## 2026-04-22 — Tool observability: ToolTracer makes non-artifact tool calls visible
 
-可观测性盲点暴露：artifact tools 已经有完整可观测（events + 终端 emoji），但 non-artifact tools（当时只有 `retrieve_docs`）完全静默——终端看不见、transcript 回放不出来、workshop 演示时观众根本不知道 agent 到底有没有查、查了什么。这个里程碑引入 `ToolTracer`，**双 sink** 对应 OpenTelemetry 的 live exporter + batch exporter：stderr 一行 `🔧`（现场可见）+ transcript event 带 `visible=False`（不进 memory，离线可回放）。同 commit 修了 moderator-first bug：`who: all` 在某些 phase 上让主持人每轮抢先发言，改成 `who: members`。**显式不做**：让 tool_call 进 memory（成本：4 个 backend client + memory 渲染分支 + summary 策略 + 每轮额外 token），artifact 已经承载“状态性跨 agent 共享”这个最强用例。
+Observability blind spots are exposed: artifact tools already have complete observability (events + terminal emoji), but non-artifact tools (only `retrieve_docs` at the time) are completely silent - the terminal cannot be seen, the transcript cannot be played back, and during the workshop demonstration, the audience has no idea whether the agent has checked or what it has checked.This milestone introduces `ToolTracer`, **dual sink** corresponding to OpenTelemetry's live exporter + batch exporter: stderr line `🔧` (visible on site) + transcript event with `visible=False` (not entered into memory, can be played back offline).Fixed the moderator-first bug with the same commit: `who: all` allows the moderator to speak first in each round on certain phases, changed to `who: members`.**Explicitly not done**: Let tool_call go into memory (cost: 4 backend clients + memory rendering branch + summary strategy + extra tokens per round). The artifact already carries the strongest use case of "stateful cross-agent sharing".
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`ToolTracer` 类（`drain() -> list[event]`）|集中收集 non-artifact 工具调用|
-|双 sink：stderr `🔧`（live）+ transcript `visible=False`（batch）|对齐 OTel 双 exporter 语义|
-|`tools.is_error` 抽公共函数|stderr tripwire 与 tracer `ok` 字段对“失败”定义一致|
-|所有 entry 加 `ts`（ISO timestamp）|时序完整，回放可精确对齐|
-|`--save-transcript` 落盘结构化 history|离线回放成为一等公民|
+|`ToolTracer` class (`drain() -> list[event]`)|Centralized collection of non-artifact tool calls|
+|Double sink: stderr `🔧` (live) + transcript `visible=False` (batch) | align OTel double exporter semantics |
+|`tools.is_error` public function|stderr tripwire has the same definition of "failure" as tracer `ok` field|
+|All entries plus `ts` (ISO timestamp) |The timing is complete and the playback can be accurately aligned|
+|`--save-transcript` persist to disk structured history|Offline playback becomes a first-class citizen|
 
 ```mermaid
 flowchart LR
-    T[tool call] --> TT[ToolTracer]
-    TT -->|live| ER[stderr<br/>&#x1F527; one-liner]
-    TT -->|batch| TR[transcript event<br/>visible=False]
+T[tool call] --> TT[ToolTracer]
+TT -->|live| ER[stderr<br/>&#x1F527; one-liner]
+TT -->|batch| TR[transcript event<br/>visible=False]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|沿用既有 scenario|tracer 的现场可见性 / 离线回放双视角|
+|—|Inherit the existing scenario|tracer’s live visibility/offline playback dual perspective|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|`ToolTracer`|基础设施，不暴露给 LLM；同时为 stderr live 与 transcript batch 服务|
+|`ToolTracer`|Infrastructure, not exposed to LLM; serves both stderr live and transcript batch|
 
-## 2026-04-25 — 扁平 step 列表：取代 phase × round 二维结构
+## 2026-04-25 — Flat step list replaces phase × round 2D structure
 
-这个里程碑是 schema 的一次大改写。**心智模型从“phase × round 二维”压缩到“steps 一维顺序展开成 turns”**。删了：`opening / main / closing` 三段、`rounds` / `phase.round`、顶层 `moderator:` 块、`members:` 别名、`MODERATOR_ONLY_TOOLS` 硬编码、CLI `--rounds`。新增：扁平 `steps:` 列表；`agents:` 统一列表 + 强制 `role: moderator | member`；`artifact.tool_owners` 显式 ACL；运行时 `<turn>turn X of N</turn>` pinned marker。`tool_owners` 默认全员可调（含 `finalize` / `propose_vote`）；想保留主持人专属必须**显式声明**——与“显式优于隐式”对齐。破坏性变更，所有旧 scenario 必须迁移；workshop 项目无外部消费者，可控。
+This milestone is a major rewrite of the schema.**The mental model is compressed from "phase × round two-dimensional" to "steps one-dimensional sequence expansion into turns"**.Removed: `opening / main / closing` three sections, `rounds` / `phase.round`, top-level `moderator:` block, `members:` alias, `MODERATOR_ONLY_TOOLS` hardcoded, CLI `--rounds`.New: flat `steps:` list; `agents:` unified list + mandatory `role: moderator | member`; `artifact.tool_owners` explicit ACL; at runtime `<turn>turn X of N</turn>` pinned marker.`tool_owners` is adjustable by all members by default (including `finalize` / `propose_vote`); if you want to retain it exclusively for the host, you must **explicitly declare** - align with "explicit over implicit".For breaking changes, all old scenarios must be migrated; the workshop project has no external consumers and is controllable.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|扁平 `steps:` 列表（取代 phase × round 二维）|心智模型从“两维矩阵”压成“顺序 turn 串”|
-|`agents:` 统一列表 + 强制 `role`|参与者建模一致化，删冗余顶层块|
-|`artifact.tool_owners` 显式 ACL|权限数据驱动，删 `MODERATOR_ONLY_TOOLS` 硬编码|
-|`<turn>turn X of N</turn>` pinned marker|agent 自感位置，但不强制行为；token 成本约 9|
-|`who` 简化为 `moderator` / `member` / `all` + `[name1, name2]`|寻址形态收敛，删 `role:` 前缀和动态 `by:` stub|
+|flat `steps:` list (replaced by phase × round two-dimensional)|The mental model is compressed from "two-dimensional matrix" to "sequential turn string"|
+|`agents:` Unified list + mandatory `role`|Conformate actor modeling, delete redundant top-level blocks|
+|`artifact.tool_owners` Explicit ACL|Permissions data driven, delete `MODERATOR_ONLY_TOOLS` hardcoded|
+|`<turn>turn
+|`who` is simplified to `moderator` / `member` / `all` + `[name1, name2]`|Addressing form converges, deletes `role:` prefix and dynamic `by:` stub|
 
 ```mermaid
 flowchart LR
-    subgraph Before[Before：phase × round 二维]
-      OP[opening] --> MN[main<br/>round 1..N] --> CL[closing]
-    end
-    subgraph After[After：扁平 steps 一维]
-      S1[step 1] --> S2[step 2] --> S3[...] --> SN[step K]
-      SN -. &lt;turn X of N&gt; pinned .- TOK
-    end
+subgraph Before[Before: phase × round 2D]
+OP[opening] --> MN[main<br/>round 1..N] --> CL[closing]
+end
+subgraph After[After: flat steps one-dimensional]
+S1[step 1] --> S2[step 2] --> S3[...] --> SN[step K]
+SN -. &lt;turn X of N&gt; pinned .- TOK
+end
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|旧 scenario 全量迁移到新 schema|心智模型一维化在所有现有场景上都成立|
+|—|Old scenarios are fully migrated to the new schema|The one-dimensional mental model is established in all existing scenarios|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|无新工具，但 artifact 工具权限改为数据驱动 ACL|
+|—|No new tools, but artifact tool permissions changed to data-driven ACL|
 
-## 2026-04-25 — Hybrid retrieval 集成到 retrieve_docs 工具
+## 2026-04-25 — Hybrid retrieval integrated into retrieve_docs toolThis milestone upgrades `retrieve_docs` from "black box retrieval" to "LLM tunable retrieval".Expose `mode` + `rerank` to LLM through OpenAI tool schema; scenario `tools:` default value can still be pinned.`_retrieve_docs` unpacks the rag CLI envelope into slim `{data, meta:{mode, reranked, top_k}}` for LLM - HTTP envelope ↔ SDK two-layer division of labor in unpacking tables, aligned with OpenAI SDK style.ToolTracer preview has also been upgraded: from "three-key dict" to `[N items, mode=..., reranked]`, with higher information density.Merged with commit and rag side hybrid + reranker implementation.
 
-这个里程碑把 `retrieve_docs` 从“黑盒检索”升级到“LLM 可调参的检索”。通过 OpenAI tool schema 把 `mode` + `rerank` 暴露给 LLM；scenario `tools:` 默认值仍可 pin。`_retrieve_docs` 把 rag CLI envelope 解包为 slim `{data, meta:{mode, reranked, top_k}}` 给 LLM——HTTP envelope ↔ SDK 解列表的两层分工，对齐 OpenAI SDK 风格。ToolTracer preview 也升级了：从“三键 dict”改成 `[N items, mode=..., reranked]`，信息密度更高。同 commit 与 rag 侧 hybrid + reranker 落地一并合并。
+### Framework changes
 
-### 框架变更
-
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`retrieve_docs` schema 暴露 `mode` + `rerank`|LLM 可基于 query 歧义自适应选择|
-|slim envelope 解包：rag CLI envelope → `{data, meta}`|LLM 只看自己需要的形态，meta 用于观测|
-|ToolTracer preview 升级为 `[N items, mode=..., reranked]`|观测可读性提升|
+|`retrieve_docs` schema exposes `mode` + `rerank`|LLM can adaptively select based on query ambiguity|
+|Slim envelope unpacking: rag CLI envelope → `{data, meta}`|LLM only looks at the form it needs, meta is used for observation|
+|ToolTracer preview upgraded to `[N items, mode=..., reranked]`|Observation readability improvement|
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`test_vdb.md`|prompt nudge LLM 在歧义 query 上 `rerank=true`|工具自适应能力|
+|`test_vdb.md`|prompt nudge LLM on ambiguous query `rerank=true`|Tool adaptive capability|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|`retrieve_docs`（升级）|增加 `mode` + `rerank` 参数；返回 slim envelope|
+|`retrieve_docs`(upgrade)|Add `mode` + `rerank` parameters; return slim envelope|
 
-## 2026-04-26 — 改名 + tools/ 包拆分（Engine.invoke 库化前奏）
+## 2026-04-26 — Rename + tools/ package split (prelude to Engine.invoke library)
 
-这个里程碑做的是机械改名 + 文件拆分，零行为变更，但在叙事上很关键。`play/multiagent/` → `play/agent_engine/`：项目名从“实现手段”（multi-agent）改为“能力描述”（agent engine），与未来作为可被 workflow 嵌入的库 surface 对齐。`tools.py` 单文件 → `tools/` 包：`retrieve_docs.py` + `_envelope.py` + `_subprocess.py` 三文件，公共 surface（`TOOL_DEFINITIONS / dispatch / is_error / warn_if_error`）保持不变，所有 import 一行不改。这一步是为下一个 commit 的 Engine.invoke 库化做准备——tools 在能干净 import 之前不能拆得过细。
+This milestone does a mechanical rename + file splitting with zero behavioral changes, but is narratively critical.`play/multiagent/` → `play/agent_engine/`: The project name is changed from "implementation means" (multi-agent) to "capability description" (agent engine), aligning with the future as a library surface that can be embedded in workflow.`tools.py` single file → `tools/` package: `retrieve_docs.py` + `_envelope.py` + `_subprocess.py` three files, the public surface (`TOOL_DEFINITIONS / dispatch / is_error / warn_if_error`) remains unchanged, and all import lines do not change.This step is to prepare for the Engine.invoke library-ization of the next commit - tools cannot be disassembled too finely before they can be imported cleanly.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`play/multiagent/` → `play/agent_engine/`|项目名贴合“能力描述”，为库化做命名先验|
-|`tools.py` 单文件 → `tools/` 包（3 文件）|为 Engine.invoke 库化时干净 import 做准备|
-|公共 surface 全部保持兼容|零行为变更，下游 zero migration|
-|`DESIGN_DECISIONS.md` 加“historical name”|名称迁移可追溯|
+|`play/multiagent/` → `play/agent_engine/`|The project name fits the "capability description" and is a priori naming for library-ization|
+|`tools.py` single file → `tools/` package (3 files) |Prepare for clean import during Engine.invoke library-ization|
+|Public surfaces all remain compatible |Zero behavioral changes, zero migration downstream|
+|`DESIGN_DECISIONS.md` Add "historical name" |Name migration can be traced|
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|本期为重命名 + 拆分|—|
+|—|This issue is renamed + split|—|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|工具行为零变更，仅文件位置调整|
+|—|Zero changes to tool behavior, only file location adjustments|
 
-## 2026-04-26 — 库化拆分：Scenario / Engine / CLI 取代一体式 run.py
+## 2026-04-26 — Library split: Scenario / Engine / CLI replace monolithic run.py
 
-这个里程碑是把 agent_engine 从“CLI 程序”升级成“可嵌入库”。`Engine`（库 SoT） + `cli.py`（thin adapter，`python -m agent_engine`）双重 surface，共享同一装配路径。`Engine.invoke(*, initial_artifact, transcript_path, artifact_path, callbacks, print_stream) -> Result`：LangChain Runnable 风格 API；`ainvoke` / `stream` / `astream` 显式 `NotImplementedError` 留口，对“抽象引入滞后于第二个具体案例”这条原则保持纪律。`Result` dataclass 持 `artifact / transcript / success / warnings`；require_tool 用尽时除既有 stderr WARNING 外也写 `.warnings`，调用方可程序化判断。`print_stream` 默认 False（库边界）/ True（CLI 边界），让同一引擎在脚本与终端两种语境下安静度不同。同 commit 后续 `d2c4598` 还把 4 个 standalone smoke scenario（`test_artifact / test_memory / test_phase_assert / test_vdb`）合并成 `example.md` 单一 kitchen-sink；ADR 归档由 `DESIGN_DECISIONS.md` 迁到与 `play/rag` / `play/workflow` 体例对齐的项目级 `CHANGELOG.md`（后改名 `DECISIONS.md`）。
+This milestone is to upgrade agent_engine from a "CLI program" to an "embeddable library".`Engine` (library SoT) + `cli.py` (thin adapter, `python -m agent_engine`) dual surface, sharing the same assembly path.`Engine.invoke(*, initial_artifact, transcript_path, artifact_path, callbacks, print_stream) -> Result`: LangChain Runnable style API; `ainvoke` / `stream` / `astream` Explicit `NotImplementedError` Leave a message and maintain discipline on the principle of "abstraction lags are introduced in the second concrete case".`Result` dataclass holds `artifact / transcript / success / warnings`; when require_tool is exhausted, in addition to stderr WARNING, `.warnings` is also written, so that the caller can make programmatic judgment.`print_stream` defaults to False (library boundary) / True (CLI boundary), allowing the same engine to have different quietness in script and terminal contexts.Following the same commit, `d2c4598` also merged 4 standalone smoke scenarios (`test_artifact / test_memory / test_phase_assert / test_vdb`) into `example.md` single kitchen-sink; the ADR archive was moved from `DESIGN_DECISIONS.md` to the project level aligned with the `play/rag` / `play/workflow` system`CHANGELOG.md` (later renamed `DECISIONS.md`).
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`scenario.Scenario.from_yaml() + assemble()`|把解析 / 校验 / 装配从 `run.py` composition root 抽出来|
-|`engine.Engine.invoke()`|库 SoT，单一装配路径同时服务库与 CLI|
-|`Result` frozen dataclass|`artifact / transcript / success / warnings` 是单点 SoT|
-|`events.py` + `callbacks.py` 5 子类预接线|今天只 `RunFinished` 落地，其余留口|
-|`tracer.ToolTracer` 单独成模块|Discussion 不再 `TYPE_CHECKING` 引用 CLI 模块|
-|`print_stream` 默认 False（库）/ True（CLI）|同一引擎在脚本与终端两种语境下不同安静度|
-|`ainvoke` / `stream` / `astream` `NotImplementedError`|抽象引入滞后于第二个具体案例|
+|`scenario.Scenario.from_yaml() + assemble()`|Extract parsing/verification/assembly from `run.py` composition root|
+|`engine.Engine.invoke()`|Library SoT, a single assembly path serves both the library and CLI|
+|`Result` frozen dataclass|`artifact / transcript / success / warnings` is a single point SoT|
+|`events.py` + `callbacks.py` 5 subcategories pre-wired|Only `RunFinished` is implemented today, the rest are left open|
+|`tracer.ToolTracer` becomes a separate module|Discussion no longer references the CLI module in `TYPE_CHECKING`|
+|`print_stream` Default False (library)/True (CLI)|The same engine has different quietness in both script and terminal contexts|
+|`ainvoke` / `stream` / `astream` `NotImplementedError`|abstraction lags introduced in second concrete case|
 
 ```mermaid
 flowchart LR
-    SC[Scenario.from_yaml<br/>+ assemble] --> ENG[Engine]
-    CLI[cli.py thin adapter] --> ENG
-    LIB[script / pipeline] --> ENG
-    ENG -->|invoke| DSC[Discussion.run]
-    DSC --> RES[Result<br/>frozen dataclass]
-    RES --> CB[Callback.on_run_finished]
+SC[Scenario.from_yaml<br/>+ assemble] --> ENG[Engine]
+CLI[cli.py thin adapter] --> ENG
+LIB[script/pipeline] --> ENG
+ENG -->|invoke| DSC[Discussion.run]
+DSC --> RES[Result<br/>frozen dataclass]
+RES --> CB[Callback.on_run_finished]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`example.md` kitchen-sink|合并 4 个 smoke scenario|memory + artifact + phase_assert + retrieve_docs 一起跑|
+|`example.md` kitchen-sink|Merge 4 smoke scenarios|memory + artifact + phase_assert + retrieve_docs and run them together|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|工具集合不变，主要是装配路径重组|
+|—|The tool set remains unchanged, mainly assembly path reorganization|
 
-## 2026-05-04 — Phase 5 evals 接口落地：`--save-result-json` envelope + artifact_event 加 `arguments`
+## 2026-05-04 — Phase 5 evals interface: `--save-result-json` envelope + artifact_event `arguments`This milestone provides the machine consumption interface for `play/evals` phase 5 (agent_traj task).Added CLI flag `--save-result-json PATH`: Use `dataclasses.asdict` to serialize `Result` into a JSON envelope (`{transcript, artifact, warnings, success}`) persist to disk, parallel to `--save-transcript` (human JSON list) / `--save-artifact` (human markdown), and is a dedicated channel for machine consumption format.**envelope uses file instead of stdout**: The entire discussion of agent_engine will brush stdout (streaming + tool feedback). Envelope cannot parasitize stdout - this is the fundamental reason for the divergence from `play/rag/query.py --json` (short query output) form.At the same time, the 5 artifact_event handlers now retain the original `arguments`, allowing the transcript to permanently hold a complete snapshot of "what the agent called at that time" - pre-phase 5 only leaves the human-readable `content` string and the information loss caused by it is compensated.The `evals` side of the `argument_correctness` metric relies on this field having true data in the run path.
 
-这个里程碑给 `play/evals` phase 5（agent_traj task）提供机器消费接口。新增 CLI flag `--save-result-json PATH`：用 `dataclasses.asdict` 把 `Result` 序列化成 JSON envelope（`{transcript, artifact, warnings, success}`）落盘，与 `--save-transcript`（人类 JSON list）/ `--save-artifact`（人类 markdown）并列，是机器消费格式的专用 channel。**envelope 走 file 而非 stdout**：agent_engine 整段讨论会刷 stdout（streaming + 工具反馈），envelope 不能寄生 stdout——这是与 `play/rag/query.py --json`（短查询输出）形态分叉的根本原因。同时 5 个 artifact_event handler 现在保留原始 `arguments`，让 transcript 永久持有“agent 当时调了什么”的完整快照——pre-phase 5 仅留人类可读 `content` 字符串造成的信息丢失被补回。`evals` 端 `argument_correctness` metric 依赖此字段在 run 路径有真数据。
+### Framework changes
 
-### 框架变更
-
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`--save-result-json PATH` file flag|机器消费独占 channel，不污染 stdout|
-|envelope = `dataclasses.asdict(Result) → json.dump(...)`|`Result` 自身就是单点 SoT，无需再加 `to_dict()`|
-|envelope 走 file 而非 stdout|agent_engine stdout 已被 streaming 占用|
-|5 个 artifact_event handler 保留 `arguments`|transcript 永久持有 agent 当时调了什么的完整快照|
-|envelope schema 由 `dataclasses.fields(Result)` 自描述|跨项目契约监控成本接近零|
+|`--save-result-json PATH` file flag|machine consumption exclusive channel, does not pollute stdout|
+|envelope = `dataclasses.asdict(Result) → json.dump(...)`|`Result` itself is a single point SoT, no need to add `to_dict()`|
+|envelope goes to file instead of stdout|agent_engine stdout has been occupied by streaming|
+|5 artifact_event handler retained `arguments`|transcript permanently holds a complete snapshot of what the agent called at that time|
+|envelope schema self-describing by `dataclasses.fields(Result)` |cross-project contract monitoring cost is close to zero|
 
 ```mermaid
 flowchart LR
-    ENG[agent_engine.Engine] --> RES[Result]
-    RES -->|--save-result-json PATH| ENV[(envelope.json<br/>transcript / artifact /<br/>success / warnings)]
-    ENV -->|subprocess + JSON| EV[(play/evals<br/>agent_traj task)]
+ENG[agent_engine.Engine] --> RES[Result]
+RES -->|--save-result-json PATH| ENV[(envelope.json<br/>transcript / artifact /<br/>success / warnings)]
+ENV -->|subprocess + JSON| EV[(play/evals<br/>agent_traj task)]
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|沿用既有 scenario|envelope 在 example/panel/brainstorm 上都能产稳定 schema|
+|—|Using the existing scenario|envelope can produce stable schema on example/panel/brainstorm|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|artifact_event handler（5 个）|事件 dict 增加 `arguments` 字段；老消费者忽略未知键，evals 端 `argument_correctness` 拿到真数据|
+|artifact_event handler (5)|Event dict adds `arguments` field; old consumers ignore unknown keys, evals side `argument_correctness` gets real data|
 
-## 2026-05-09 — `require_tool` 观测面扩展 + 2 个 require_tool 密集 scenario
+## 2026-05-09 — require_tool observation extended + 2 require_tool-dense scenarios
 
-这个里程碑给 `play/agent_sft` Phase 1 baseline 铺路。`require_tool` 历史上只观测 artifact 事件（`artifact.drain_events()`），导致非 artifact 工具如 `retrieve_docs` 永远判定为"沉默"——nudge 必触发 + warning 必落，让度量信号常数化。本期把 `_run_turn` 的检查面合并 tracer + artifact 两路事件，3 行改动让 `require_tool: retrieve_docs` 终于能正常工作（DECISIONS §12，supersede §7 末段范围限制）。同时新增 `code_review.md` 与 `tool_chain.md` 两个 require_tool 密集 scenario：前者多 agent / 上下文复杂（4 agent 8 个 require_tool turn — retrieve ×2 + append ×3 + cast_vote ×3），后者单 agent 强工具链（5 个 require_tool turn — retrieve ×2 + append ×2 + cast_vote ×1），把 nudge-eligible turn 从 7（panel + example）提到 20，给 `play/agent_sft` Phase 1 的 N=10 seed × 2 model 实跑提供足够统计功效。
+This milestone paves the way for the `play/agent_sft` Phase 1 baseline.`require_tool` historically only observes artifact events (`artifact.drain_events()`), causing non-artifact tools such as `retrieve_docs` to always be judged as "silent" - nudge must trigger + warning must fall, allowing the measurement signal to be constant.In this issue, the check surface of `_run_turn` is merged into tracer + artifact two-way events, and 3 lines of changes are made so that `require_tool: retrieve_docs` can finally work normally (DECISIONS §12, supersede §7 scope limitation at the end).At the same time, two require_tool-intensive scenarios of `code_review.md` and `tool_chain.md` are added: the former has multiple agents/complex contexts (4 agents 8 require_tool turns — retrieve ×2 + append ×3 + cast_vote ×3), the latter has a single-agent strong tool chain (5 require_tool turns — retrieve ×2 + append ×2 + cast_vote ×1), and the nudge-eligible turn is mentioned from 7 (panel + example)20, providing sufficient statistical power for the actual running of the N=10 seed × 2 model of `play/agent_sft` Phase 1.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|`_run_turn` require_tool 检查面 = tracer_events ∪ artifact_events|让非 artifact 工具的 require_tool 行为可被度量；纯 additive，老 scenario 字节相同|
-|`tracer_events` 与 `artifact_events` 仍各自分批 extend 到 history|事件源语义边界不变——artifact 是共享文档真实变更，tracer 是工具调用观察记录|
+|`_run_turn` require_tool inspection surface = tracer_events ∪ artifact_events|Enables require_tool behavior of non-artifact tools to be measured; purely additive, old scenario byte-identical|
+|`tracer_events` and `artifact_events` still extend to history in batches|Event source semantic boundary Unchanged — artifact is the real change of the shared document, and tracer is the tool call observation record|
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|`code_review.md`|多 agent / 上下文复杂的 require_tool 密集场景|3 senior + 1 主审审 PR；2 retrieve_docs + 3 append_section + 3 cast_vote = 8 require_tool turn / run|
-|`tool_chain.md`|单 agent 强工具链 require_tool 服从性测试|执行者按 5 步 checklist 严格调工具：retrieve → append → vote → retrieve → append|
+|`code_review.md`|Multi-agent/complex context require_tool intensive scenario|3 senior + 1 main reviewer PR; 2 retrieve_docs + 3 append_section + 3 cast_vote = 8 require_tool turn / run|
+|`tool_chain.md`|Single agent strong tool chain require_tool compliance test|The executor strictly adjusts the tool according to the 5-step checklist: retrieve → append → vote → retrieve → append|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|工具集合不变；`require_tool` 现在覆盖所有工具（含非 artifact）是 wiring 修复，不是新工具|
+|—|The tool collection remains unchanged; `require_tool` now covers all tools (including non-artifacts) and is a wiring fix, not a new tool|
 
-## 2026-05-11 — Result/Scenario 暴露 typed 视图：把 transcript 解读权收回 agent_engine
+## 2026-05-11 — Result/Scenario typed views: reclaim transcript interpretation
 
-这个里程碑做的是 §11 的纵向延伸。§11 立 `Result` 是跨项目机器消费 SoT，但只覆盖 envelope **字段** schema；**字段解读**（transcript 怎么切 turn / 怎么抽 tool 调用 / scenario 怎么静态展开）一直由各消费者反向工程：`play/evals` 重写了一遍 `_resolve_who + _expand_steps`，`play/agent_sft` 干脆 `sys.path.insert + from evals.metrics.nudge import _私有_4_个`. DECISIONS §13 把这块解读权收回 agent_engine：`Result.tool_calls() / .turns() / .speakers() / .find_finalize_decision()` + `Scenario.expanded_turns()` 暴露 typed 视图（`ToolCall / TurnView / ExpandedTurn` 三个 frozen dataclass），与 OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool` 同精神。同时本期落地 `play/agent_engine/tests/` 首测试目录（36 测试），含一条关键 invariant：在 7 个现网 scenario 上 `Scenario.expanded_turns()` 长度 / (agent, step_id) 序列与 `Discussion._expand_steps()` 字节相同——锁住"静态展开 == runtime 展开"，让未来重构 `_resolve_who_names` 共用纯函数时不会偷偷偏离。**PR-1 公开签名零破坏**：evals/agent_sft 现有 pytest 全绿（465 + 89），shim 层让 `nudge.py / agent_traj.py` 内部改调新 API 但调用方零修改；PR-2 删 shim + agent_sft 直连 agent_engine 收尾。
+What this milestone does is a vertical extension of §11.§11 Establish `Result` is a cross-projectmachine consumption SoT, but only covers the envelope **field** schema; **Field interpretation** (how to turn the transcript / how to draw the tool call / how to staticexpansion the scenario) has been rewritten by each consumerreverse-engineer: `play/evals` `_resolve_who + _expand_steps`, `play/agent_sft` simply`sys.path.insert + from evals.metrics.nudge import _private_4_pieces`. DECISIONS §13 Take back this interpretation authority agent_engine: `Result.tool_calls() / .turns() / .speakers() / .find_finalize_decision()` + `Scenario.expanded_turns()` exposed typedview (`ToolCall / TurnView / ExpandedTurn` three frozen dataclasses), the same spirit as OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool`.At the same time, this issue has launched the first test directory (36 tests) of `play/agent_engine/tests/`, which contains a key invariant: `Scenario.expanded_turns()` length / (agent, step_id) sequence and `Discussion._expand_steps()` byte-identical on 7 live network scenarios - lock "staticexpansion == runtime expansion" to allow future reconstruction`_resolve_who_names` does not deviate secretly when sharing pure functions.**PR-1 public signature with zero damage**: evals/agent_sft existing pytest is all green (465 + 89), the shim layer allows `nudge.py / agent_traj.py` to internally modify the new API but the caller has zero modification; PR-2 deletes shim + agent_sft and directly connects to agent_engine to finish.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
-|---|---|
-|`Result.from_dict / load_json` + 4 视图方法（`tool_calls / turns / speakers / find_finalize_decision`）|envelope ↔ Result 双向 IO + transcript 解读 SoT；缺字段降级兼容老 envelope|
-|`ToolCall(frozen)` + `TurnView(frozen, start_offset)`|typed 视图，与 OpenAI Agents SDK / inspect_ai 风格对齐；`start_offset` 给 agent_sft turn-indexed 切 context 用|
-|`Scenario.expanded_turns()` + `ExpandedTurn(frozen)`|静态展开 `steps:` 为线性 turn 序列，不实例化 Agent；评测 / 训练数据挖掘消费者不再复刻展开逻辑|
-|抽 `_resolve_who_names(who, declared_order, role_by_name)` 纯函数|`Discussion._resolve_who` runtime 路径 + `Scenario.expanded_turns()` 静态路径**共用**——保证两条路径展开顺序字节相同|
-|`play/agent_engine/tests/` 首测试目录（36 测试）|项目此前无 tests，本期建底；含 7 现网 scenario 上 expanded_turns ≡ Discussion._expanded 的 invariant 锁|
-|公开 surface 通过 `__init__.py` re-export `ExpandedTurn / Result / Scenario / ToolCall / TurnView`|消费者 `from agent_engine import ToolCall, TurnView, ExpandedTurn` 即可|
+|Change|Purpose|
+|---|---||`Result.from_dict / load_json` + 4 view method (`tool_calls / turns / speakers / find_finalize_decision`)|envelope ↔ Result bidirectional IO + transcript interpretation SoT; missing fields are downgraded and compatible with old envelope|
+|`ToolCall(frozen)` + `TurnView(frozen, start_offset)`|typed view, aligned with the OpenAI Agents SDK / inspect_ai style; `start_offset` is used by agent_sft turn-indexed to cut context |
+|`Scenario.expanded_turns()` + `ExpandedTurn(frozen)`|staticexpansion `steps:` is a linear turn sequence and does not instantiate Agent; eval / training data miningconsumers no longer reproduce expansion logic|
+|Pump `_resolve_who_names(who, declared_order, role_by_name)` pure function |`Discussion._resolve_who` runtime path + `Scenario.expanded_turns()` static path **shared** - guarantee the expansion order of the two paths byte-identical|
+|`play/agent_engine/tests/` First test directory (36 tests)|The project has no tests before, this issue is the bottom; it contains 7 expanded_turns on the live network scenario ≡ Discussion._expanded invariant lock|
+|Public surface through `__init__.py` re-export `ExpandedTurn / Result / Scenario / ToolCall / TurnView`|consumers `from agent_engine import ToolCall, TurnView, ExpandedTurn` just|
 
 ```mermaid
 flowchart LR
-    subgraph AE[agent_engine（schema + schema 解读 SoT）]
-      RES[Result]
-      RES -->|.tool_calls| TC[list[ToolCall]]
-      RES -->|.turns| TV[list[TurnView]]
-      RES -->|.find_finalize_decision| DEC[str?]
-      SCN[Scenario] -->|.expanded_turns| ET[list[ExpandedTurn]]
-    end
-    EV[play/evals] -. import .-> RES & SCN
-    SFT[play/agent_sft<br/>PR-2 起] -. import .-> RES & SCN
+subgraph AE[agent_engine (schema + schema interpretation SoT)]
+RES[Result]
+RES -->|.tool_calls| TC[list[ToolCall]]
+RES -->|.turns| TV[list[TurnView]]
+RES -->|.find_finalize_decision| DEC[str?]
+SCN[Scenario] -->|.expanded_turns| ET[list[ExpandedTurn]]
+end
+EV[play/evals] -. import .-> RES & SCN
+SFT[play/agent_sft<br/>PR-2 onwards] -. import .-> RES & SCN
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
+|Scenario|Purpose|Demonstrates|
 |---|---|---|
-|—|沿用既有 7 scenario（brainstorm/debate/roundtable/panel/code_review/tool_chain/example）|invariant 测试在所有现网 scenario 上锁 expanded_turns ≡ Discussion._expanded|
+|—|Use the existing 7 scenarios (brainstorm/debate/roundtable/panel/code_review/tool_chain/example) |invariant test is locked on all live network scenarios expanded_turns ≡ Discussion._expanded|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期为视图 API + 测试落地，工具集不变|
+|—|This issue is the implementation of view API + testing, and the toolset remains unchanged|
 
-## 2026-05-11 — Transcript schema typed 化 + token usage 落地
+## 2026-05-11 — Transcript schema typed + token usage landed
 
-§13 把 transcript 解读权收回 agent_engine，但 transcript entry 仍是 `list[dict]`——5 个写入点散落、`SpeakerEntry` 没 `type` tag、`Result` 没 `usage` 字段，cost / efficiency 度量得从 stderr 反推. 本期是 §13 的字段层延伸：`TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry / ArtifactEventEntry / SummaryEntry` 6 个 frozen dataclass 组成 `TranscriptEntry` typed union（`SpeakerEntry` 强制带 `type="speaker"`），`Result` 加 `usage: list[TokenUsage]`，4 LLM client（`openai/anthropic/gemini/ollama`）`chat()` 改返 `(text, TokenUsage)` 二元组，`Agent.respond / Discussion / Engine` 串到 `Result.usage`. **forward-only 升级**——`Result.from_dict` 缺字段直接 `KeyError`，老 envelope 不可读；本仓库无外部消费者，迁移脚本一次性把 evals predictions JSONL × 46 + agent_sft mined envelope JSON × 500 注入 `type:"speaker"` + `usage: []`. `agent_sft` 删 `_split_turns_indexed / _index_steps_by_turn` 共 2 个 shim 函数（typed `Result.turns()` 已能直接给 `start_offset`，shim 失去存在意义）. 三项目 pytest 全绿（agent_engine 42 / evals 456 / agent_sft 87 = 585）+ evals smoke `agent_traj` / `nudge_fire_rate` 通过.
+§13 Returns the transcript interpretation authority to agent_engine, but the transcript entry is still `list[dict]` - 5 writing points are scattered, `SpeakerEntry` has no `type` tag, `Result` has no `usage` field, and the cost/efficiency measurement must be inferred from stderr. This issue is the field layer extension of §13: `TopicEntry / TurnEntry / SpeakerEntry / ToolCallEntry /ArtifactEventEntry / SummaryEntry` 6 frozen dataclasses form `TranscriptEntry` typed union (`SpeakerEntry` is mandatory with `type="speaker"`), `Result` adds `usage: list[TokenUsage]`, 4 LLM client (`openai/anthropic/gemini/ollama`) `chat()` changes back to `(text,TokenUsage)` tuple, `Agent.respond / Discussion / Engine` is strung to `Result.usage`. **forward-only upgrade**——`Result.from_dict` missing fields directly `KeyError`, old envelope unreadable; this warehouse has no external consumers, the migration script injects evals predictions JSONL × 46 + agent_sft mined envelope JSON × 500 at one time`type:"speaker"` + `usage: []`. `agent_sft` deletes `_split_turns_indexed / _index_steps_by_turn`, a total of 2 shim functions (typed `Result.turns()` can no longer be directly given to `start_offset`, shim loses its meaning of existence). Three projects pytest are all green (agent_engine 42 /evals 456 / agent_sft 87 = 585) + evals smoke `agent_traj` / `nudge_fire_rate` passed.
 
-### 框架变更
+### Framework changes
 
-|变更|目的|
+|Change|Purpose|
 |---|---|
-|6 个 `frozen=True` entry dataclass + `TranscriptEntry` Union|schema 自身 typed 化；与 OpenAI Agents SDK / inspect_ai / LangChain typed message union 同精神|
-|`SpeakerEntry.type: Literal["speaker"]`|修复历史遗漏；transcript 解读 100% 走 type tag 路径|
-|`TokenUsage` frozen + `Result.usage: list[TokenUsage]`|cost / efficiency 度量从 stderr 反推升级到 envelope 字段级|
-|4 LLM client `chat(...)` 签名加 `caller: str` + 返 `(text, TokenUsage)`|跨 OpenAI / Anthropic / Gemini / Ollama 抹平 SDK usage 字段差异|
-|`ConversationMemory.drain_usage()`|SummaryMemory 内部 summarizer 调用产生的 usage 也回收进 envelope|
-|`Result.from_dict` 严格化（缺字段 `KeyError`）|forward-only schema；旧 envelope 一次性迁移脚本处理|
-|删 `agent_sft.data.extractor._split_turns_indexed / _index_steps_by_turn` 共 2 个 shim|`Result.turns()[i].start_offset` 已直接给 turn-indexed 全局 offset|
-|`engine.py` 写盘前 `[dataclasses.asdict(e) for e in history]`|typed entry → JSON 序列化|
+|6 `frozen=True` entry dataclass + `TranscriptEntry` Union|schema itself typed; same spirit as OpenAI Agents SDK / inspect_ai / LangChain typed message union|
+|`SpeakerEntry.type: Literal["speaker"]`|Fix historical omissions; transcript interpretation 100% follows the type tag path|
+|`TokenUsage` frozen + `Result.usage: list[TokenUsage]`|cost/efficiency metric is back-upgraded from stderr to envelope field level|
+|4 LLM client `chat(...)` signature plus `caller: str` + return `(text, TokenUsage)`|Smooth out SDK usage field differences across OpenAI / Anthropic / Gemini / Ollama |
+|`ConversationMemory.drain_usage()`|The usage generated by the summarizer call inside SummaryMemory is also recycled into the envelope|
+|`Result.from_dict` strictified(missing fields `KeyError`)|forward-only schema; old envelope one-time migration script processing|
+|Delete `agent_sft.data.extractor._split_turns_indexed / _index_steps_by_turn` 2 shims in total|`Result.turns()[i].start_offset` has been directly given to turn-indexed global offset|
+|`engine.py` before writing to disk `[dataclasses.asdict(e) for e in history]`|typed entry → JSON serialization|
 
 ```mermaid
 flowchart LR
-    subgraph Schema["agent_engine （schema + 解读 + typed 字段值 SoT）"]
-      RES[Result]
-      RES -->|.transcript| TE["list[TranscriptEntry]<br/>= TopicEntry | TurnEntry |<br/>SpeakerEntry | ToolCallEntry |<br/>ArtifactEventEntry | SummaryEntry"]
-      RES -->|.usage| UU["list[TokenUsage]"]
-      RES -->|.tool_calls| TC["list[ToolCall]"]
-      RES -->|.turns| TV["list[TurnView]"]
-    end
-    CL1[OpenAI client] -->|chat→| TU1[TokenUsage]
-    CL2[Anthropic client] -->|chat→| TU2[TokenUsage]
-    CL3[Gemini client] -->|chat→| TU3[TokenUsage]
-    CL4[Ollama client] -->|chat→| TU4[TokenUsage]
-    TU1 & TU2 & TU3 & TU4 --> AG[Agent.respond] --> DSC[Discussion.usage] --> ENG[Engine.invoke] --> UU
+subgraph Schema["agent_engine (schema + interpretation + typed field value SoT)"]
+RES[Result]
+RES -->|.transcript| TE["list[TranscriptEntry]<br/>= TopicEntry | TurnEntry |<br/>SpeakerEntry | ToolCallEntry |<br/>ArtifactEventEntry | SummaryEntry"]
+RES -->|.usage| UU["list[TokenUsage]"]
+RES -->|.tool_calls| TC["list[ToolCall]"]
+RES -->|.turns| TV["list[TurnView]"]
+end
+CL1[OpenAI client] -->|chat→| TU1[TokenUsage]
+CL2[Anthropic client] -->|chat→| TU2[TokenUsage]
+CL3[Gemini client] -->|chat→| TU3[TokenUsage]
+CL4[Ollama client] -->|chat→| TU4[TokenUsage]
+TU1 & TU2 & TU3 & TU4 --> AG[Agent.respond] --> DSC[Discussion.usage] --> ENG[Engine.invoke] --> UU
 ```
 
-### 新增 scenario
+### New scenarios
 
-|scenario|目的|演示什么|
-|---|---|---|
-|—|沿用既有 7 scenario|schema 升级与场景集合解耦|
+|Scenario|Purpose|Demonstrates|
+|---|---|---||—|Inherit the existing 7 scenarios|schema upgrade and decouple the scenario collection|
 
-### 新增 / 改动工具
+### New / changed tools
 
-|工具|说明|
+|Tool|Notes|
 |---|---|
-|—|本期为 schema typed 化 + token usage envelope 落地，工具集不变|
+|—|This issue is the implementation of schema typed + token usage envelope, and the tool set remains unchanged|

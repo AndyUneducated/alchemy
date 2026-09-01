@@ -1,16 +1,17 @@
-{# 测试方案 markdown 模板 (Jinja2). 由 hooks/render_md.py 渲染.
-   入参:
-     sections      — agent stage 产出的 artifact dict (dict[str, str])
-     requirements  — load_each_prd 返回的 list[dict] (req_id / title / assignee /
+{# Test plan markdown template (Jinja2). Rendered by hooks/render_md.py.
+   Inputs:
+     sections      — artifact dict from agent stage (dict[str, str])
+     requirements  — list[dict] from load_each_prd (req_id / title / assignee /
                      sprint_start / sprint_end / priority / description / prd_md)
 
-   设计原则: 模板**不**改 sections 内容 (specialist agent 已写好 markdown),
-   只在顶部加一份"范围与排期" 元数据表 (sprint / assignee 作为列, plan §8 P5),
-   下面按节按顺序贴 artifact section. Critic 反馈作为附录放最后.
+   Design: template does **not** rewrite section content (specialists already wrote
+   markdown); only adds a scope & schedule metadata table at top (sprint / assignee
+   as columns, plan §8 P5), then pastes artifact sections in order. Critic Feedback
+   goes in an appendix at the end.
 #}
-# 测试方案 - {{ requirements | length }} 项需求
+# Test plan — {{ requirements | length }} requirements
 
-## 范围与排期
+## Scope & schedule
 
 | req_id | title | assignee | priority | sprint |
 |---|---|---|---|---|
@@ -18,24 +19,24 @@
 | {{ r.req_id }} | {{ r.title }} | {{ r.assignee }} | {{ r.priority or '?' }} | {{ r.sprint_start }} ~ {{ r.sprint_end }} |
 {% endfor %}
 
-## 原子需求
+## Atomic Requirements
 
-{{ sections.get('原子需求', '_(decomposer 未产出)_') }}
+{{ sections.get('Atomic Requirements', '_(decomposer did not produce)_') }}
 
-## 风险等级
+## Risk Levels
 
-{{ sections.get('风险等级', '_(risk_grader 未产出)_') }}
+{{ sections.get('Risk Levels', '_(risk_grader did not produce)_') }}
 
-## 测试用例
+## Test Cases
 
-{{ sections.get('测试用例', '_(case_generator 未产出)_') }}
+{{ sections.get('Test Cases', '_(case_generator did not produce)_') }}
 
-## 非功能
+## Non-functional
 
-{{ sections.get('非功能', '_(nfr_planner 未产出)_') }}
+{{ sections.get('Non-functional', '_(nfr_planner did not produce)_') }}
 
 ---
 
-## 附录: Critic 反馈
+## Appendix: Critic Feedback
 
-{{ sections.get('Critic 反馈', '_(critic 未产出)_') }}
+{{ sections.get('Critic Feedback', '_(critic did not produce)_') }}

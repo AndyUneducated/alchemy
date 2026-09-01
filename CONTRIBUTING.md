@@ -1,82 +1,82 @@
-# 贡献指南 / Contributing
+# Contributing
 
-这个仓库主要是个人 vibe-coding 沙盒，但欢迎以下类型的 issue / PR：
+This repo is primarily a personal vibe-coding sandbox, but the following types of issues / PRs are welcome:
 
-- 修 bug，或把子项目之间的契约收紧（`agent_engine` ↔ `rag` ↔ `evals` ↔ `workflow`）。
-- 补可复现的 benchmark（含数据规模、模型版本、参数、随机种子）。
-- 在 `play/` 下新增一个 self-contained 的实验。
+- Bug fixes, or tightening contracts between sub-projects (`agent_engine` ↔ `rag` ↔ `evals` ↔ `workflow`).
+- Reproducible benchmarks (including data scale, model version, parameters, and random seeds).
+- New self-contained experiments under `play/`.
 
-## 1. 仓库布局规则
+## 1. Repository layout rules
 
-- 新实验默认放到 [`play/`](play/) 下；至少自带 README。`requirements.txt`、`tests/` 按项目复杂度添加。
-- 提拔到长期维护的小应用 → [`grow/`](grow/)。
-- 暂停的工作 → [`stash/`](stash/)。
-- 退役实验 → [`_archive/`](_archive/)。
-- 外部参考片段 → [`refs/`](refs/)（不是一等代码）。
+- New experiments default to [`play/`](play/); at minimum include a README. Add `requirements.txt` and `tests/` as project complexity warrants.
+- Promote to longer-lived mini-apps → [`grow/`](grow/).
+- Pause work → [`stash/`](stash/).
+- Retire experiments → [`_archive/`](_archive/).
+- External reference snippets → [`refs/`](refs/) (not first-class code).
 
-仓库**没有 monorepo 级 `pip install`**。每个子项目独立安装、独立跑测试。
+The repo has **no monorepo-level `pip install`**. Each sub-project installs and tests independently.
 
-## 2. 选一个子项目并装好它
+## 2. Pick a sub-project and set it up
 
 ```bash
-# 例：跑 evals 的测试
-cd play/                    # 模块路径都假设 cwd=play/
+# Example: run evals tests
+cd play/                    # module paths assume cwd=play/
 python -m venv .venv && source .venv/bin/activate
 pip install -r evals/requirements.txt
 python -m pytest evals/tests -v
 ```
 
-完整 CLI 表面、环境变量与硬件依赖见每个 `play/<name>/README.md`。
+Full CLI surface, environment variables, and hardware dependencies are in each `play/<name>/README.md`.
 
-## 3. 跑完整 CI 套件（与 GitHub Actions 一致）
+## 3. Run the full CI suite (matches GitHub Actions)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-ci.txt
-# 一次性建 VDB（在 play/rag 下跑）：test_vdb + panel —— 与 CI 同步
+# One-time VDB build (run under play/rag): test_vdb + panel — matches CI
 python -m pytest -v
 ```
 
-依赖：
+Dependencies:
 
-|依赖|用途|备注|
+|Dependency|Purpose|Notes|
 |---|---|---|
-|Python 3.12+|全仓测试运行时|与 GitHub Actions 对齐|
-|[Ollama](https://ollama.com/) `qwen3.5:9b`|默认 live LLM 测试|也可设 `EVALS_TEST_OLLAMA_MODEL` 覆盖|
-|Ollama `qwen3-embedding:8b`|RAG ingest / query|CI 与本地默认 embedding model|
-|`play/rag/vdb/`|RAG live 测试输入|具体 ingest 步骤见 [CI workflow](.github/workflows/ci.yml)|
+|Python 3.12+|Repo-wide test runtime|Aligned with GitHub Actions|
+|[Ollama](https://ollama.com/) `qwen3.5:9b`|Default live LLM tests|Override with `EVALS_TEST_OLLAMA_MODEL`|
+|Ollama `qwen3-embedding:8b`|RAG ingest / query|Default embedding model for CI and local|
+|`play/rag/vdb/`|RAG live test inputs|Ingest steps in [CI workflow](.github/workflows/ci.yml)|
 
-`requirements-ci.txt` 不装 `mlx-lm`（只跑 Apple Silicon）；`play/agent_sft` 的测试不依赖它。
+`requirements-ci.txt` excludes `mlx-lm` (Apple Silicon only); `play/agent_sft` tests don't depend on it.
 
-## 4. 文档约定
+## 4. Documentation conventions
 
-|文档|何时更新|格式|
+|Doc|When to update|Format|
 |---|---|---|
-|`README.md`|读者入口、CLI、架构图、当前状态变化|尽量用表格、短段落和 Mermaid 图|
-|`DECISIONS.md`|重要技术决策、契约变化、依赖选择、显式 non-goal|append-only ADR（architecture decision record）|
-|`JOURNAL.md`|阶段性进展或工作日里程碑|必须含 **功能** / **技术**；必要时加 **取舍**|
+|`README.md`|Reader entry point, CLI, architecture diagrams, current status changes|Prefer tables, short paragraphs, and Mermaid diagrams|
+|`DECISIONS.md`|Important technical decisions, contract changes, dependency choices, explicit non-goals|Append-only ADR (architecture decision record)|
+|`JOURNAL.md`|Milestone progress or per-workday entries|Must include **Functional** / **Technical**; add **Trade-offs** when needed|
 
-仓库级写作约定见 [`AGENTS.md`](AGENTS.md) 和 [`.cursor/rules/workshops.mdc`](.cursor/rules/workshops.mdc)。
+Repo-level writing conventions are in [`AGENTS.md`](AGENTS.md) and [`.cursor/rules/workshops.mdc`](.cursor/rules/workshops.mdc).
 
-## 5. Commit 信息
+## 5. Commit messages
 
-- 用英文简短说明，遵循 conventional commits（`feat(scope):` / `fix(scope):` / `docs(scope):` / `refactor(scope):` / `chore:` / `test:`）。
-- `scope` 用子项目名：`agent_engine` / `rag` / `evals` / `workflow` / `agent_sft` / `qa_assets` / `sft_hello`。
-- 一个 commit 只做一件事；跨子项目的改动尽量拆开。
+- Short English descriptions following conventional commits (`feat(scope):` / `fix(scope):` / `docs(scope):` / `refactor(scope):` / `chore:` / `test:`).
+- Use sub-project names for `scope`: `agent_engine` / `rag` / `evals` / `workflow` / `agent_sft` / `qa_assets` / `sft_hello`.
+- One commit, one thing; split cross-sub-project changes when possible.
 
-## 6. PR 范围
+## 6. PR scope
 
-- 一个 PR 只解决一件事，避免把无关重构混进 feature PR。
-- 改契约（如 `--json` envelope、`api.py` dataclass）时，请同时更新所有上游消费者并加测试。
-- PR 描述里写：**为什么改 / 改了什么 / 怎么测**，必要时贴 eval 前后数字。
+- One PR, one concern — don't mix unrelated refactors into a feature PR.
+- When changing contracts (e.g. `--json` envelope, `api.py` dataclasses), update all upstream consumers and add tests.
+- PR description should cover: **why / what / how to test**, with eval before/after numbers when relevant.
 
-## 7. CI 必须通过
+## 7. CI must pass
 
-仓库 CI 在 push / PR 上跑完整 `pytest` 套件，必须绿。lint / format 是子项目可选的，不强制全仓打开。
+Repo CI runs the full `pytest` suite on push / PR — it must be green. Lint / format are optional per sub-project, not enforced repo-wide.
 
-## 8. 较大的提案
+## 8. Larger proposals
 
-新增 `play/` 子项目、引入新的跨项目契约、或换底层依赖（如 RAG 引擎、训练 backend），
-**先开 issue 讨论**，避免你写完一大块再被劝退。
+For new `play/` sub-projects, new cross-project contracts, or swapping underlying dependencies (e.g. RAG engine, training backend),
+**open an issue first** to avoid writing a large change that gets rejected.
 
-—— 感谢贡献！
+—— Thanks for contributing!

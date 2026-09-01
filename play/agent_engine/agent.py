@@ -45,10 +45,11 @@ class Agent:
         stream: bool = True,
         artifact_view: str | None = None,
     ) -> tuple[str, list[TokenUsage]]:
-        """跑一次 LLM 调用，返 `(reply_text, list[TokenUsage])`.
+        """Run one LLM call; return `(reply_text, list[TokenUsage])`.
 
-        usage 列表通常包含 1 个主调用；若 `SummaryMemory` 在 `build_messages`
-        阶段触发了 summarizer LLM 调用，summarizer usage 排在主调用之前一并返回.
+        The usage list usually has one main call; if `SummaryMemory` triggered a
+        summarizer LLM call during `build_messages`, that usage is prepended before
+        the main call usage.
         """
         messages = self.memory.build_messages(history, self.name)
         usage_list: list[TokenUsage] = list(self.memory.drain_usage())

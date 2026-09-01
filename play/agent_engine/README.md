@@ -1,38 +1,38 @@
 # play/agent_engine
 
-Step-driven 多 agent 讨论引擎：scenario = 一份 markdown，YAML frontmatter 声明参与者 / 流程 / 工具 / memory / artifact，body 即话题。共享 transcript + per-agent 投影，支持 ollama / openai / anthropic / gemini 四个后端，可被 [`play/rag/`](../rag/) 通过 subprocess 喂数据。
+Step-driven multi-agent discussion engine: scenario = one markdown file; YAML frontmatter declares participants / flow / tools / memory / artifact; body is the topic. Shared transcript + per-agent projection; supports ollama / openai / anthropic / gemini backends; [`play/rag/`](../rag/) feeds data via subprocess.
 
-## 特性
+## Features
 
-- **Scenario 即配置**：YAML frontmatter + markdown body，一文件一场景；启动期 schema 校验，作者改场景零代码
-- **扁平 step 列表**：`steps:` 一段顺序声明所有 turn，`who` 用 role/all/name 列表灵活寻址；每 turn 注入 `<turn>turn X of N</turn>` pinned marker，让 agent 自感位置
-- **Shared transcript + per-agent projection**：history 只有一份权威视图，每个 agent 在 `respond()` 时按 `speaker == owner` 投影为 `assistant`，他人投影为 `<message from="X">`，控制流（`topic / turn / artifact_event`）投影为带标签的 user 消息
-- **Per-agent memory**：`full / window / summary` 三策略可换，详见 [§Memory 策略](#memory-策略)
-- **Shared artifact + 结构化投票 + ACL**：sectioned markdown + `replace / append` mode + 投票 + `finalize`，view 带外注入；`tool_owners` 限制每个 artifact 工具的可调用方（取值与 `who` 完全对齐）；详见 [§Artifact 工具](#artifact-工具)
-- **Step assert（require_tool）**：声明 step 必须调用某工具；缺则 nudge 重试，最终落 stderr WARNING——**让沉默违规可见**而非强制
-- **Tool observability**：`ToolTracer` 双 sink——stderr 实时 🔧 emoji + transcript event（`visible=False`，离线回放可用）
-- **Subprocess 隔离工具**：`retrieve_docs` 通过 `subprocess.run(python rag/query.py --json)` 调用，进程边界隔离两个子项目的 `config.py` / 依赖；透传 rag 的 hybrid（dense + BM25 RRF）检索 + 可选 cross-encoder 精排，LLM 可按需选 `mode` / `rerank`
-- **多后端 pluggable**：`config.py` 改一行 `BACKEND` 切换 ollama / openai / anthropic / gemini
+- **Scenario as configuration**: YAML frontmatter + markdown body, one file one scene; startup schema validation; authors change scenes zero code
+- **Flat step list**: `steps:` sequentially declares all turns; `who` flexibly addresses via role/all/name list; each turn injects pinned `<turn>turn X of N</turn>` so agents sense position
+- **Shared transcript + per-agent projection**: one authoritative history; each agent at `respond()` projects `speaker == owner` → `assistant`, others → `<message from="X">`, control flow (`topic / turn / artifact_event`) → tagged user messages
+- **Per-agent memory**: swappable `full / window / summary` strategies — see [§Memory strategies](#memory-strategies)
+- **Shared artifact + structured voting + ACL**: sectioned markdown + `replace / append` mode + voting + `finalize`; view injected out-of-band; `tool_owners` limits artifact tool callers (same syntax as `who`); see [§Artifact tools](#artifact-tools)
+- **Step assert (require_tool)**: step must call a tool; miss → nudge retry, finally stderr WARNING — **makes silent violations visible**, not forced
+- **Tool observability**: `ToolTracer` dual sink — stderr live 🔧 emoji + transcript event (`visible=False`, offline replay)
+- **Subprocess-isolated tools**: `retrieve_docs` via `subprocess.run(python rag/query.py --json)`; process boundary isolates subproject `config.py` / deps; passes rag hybrid (dense + BM25 RRF) + optional cross-encoder rerank; LLM may choose `mode` / `rerank`
+- **Pluggable multi-backend**: change one line `BACKEND` in `config.py` for ollama / openai / anthropic / gemini
 
-## 指导原则
+## Guiding principles
 
-贯穿本项目的 5 条原则：
+Five principles throughout:
 
-|#|原则|说明|
+|#|Principle|Notes|
 |---|---|---|
-|1|**Shared transcript + per-agent projection**|一份权威 history，各 agent 按自身需求投影（详见 [§History 投影规则](#history-投影规则)）|
-|2|**显式优于隐式**|配置能声明的不靠代码推断；LLM 行为能结构化约束的不靠 prompt 约定|
-|3|**承认 LLM 不确定性**|不把 LLM 当确定性函数，容错设计（retry / self-correct / audit）优先于强制|
-|4|**装配点集中**|`Scenario.assemble()` + `Engine.invoke()` 是唯一装配 / 编排入口；`cli.py` 只做 argparse → 同一 API，讨论内核不依赖 CLI|
-|5|**抽象引入滞后于第二个具体案例**|不为未来需求预留抽象，等第二个使用者出现时再抽|
+|1|**Shared transcript + per-agent projection**|one authoritative history, each agent projects per need (see [§History projection rules](#history-projection-rules))|
+|2|**Explicit over implicit**|declare in config what can be declared; structure-constrain LLM behavior where possible|
+|3|**Accept LLM uncertainty**|don't treat LLM as deterministic; tolerance design (retry / self-correct / audit) over force|
+|4|**Assembly points centralized**|`Scenario.assemble()` + `Engine.invoke()` sole assembly/orchestration entry; `cli.py` only argparse → same API; discussion kernel independent of CLI|
+|5|**Abstraction lags second concrete case**|no abstractions for future needs; extract when second consumer appears|
 
-## 架构
+## Architecture
 
-> 业界 5 层模型对应：UI = `cli.py` + scenario `.md`；Orchestration = `scenario.Scenario` / `engine.Engine` / `discussion.Discussion`；Capabilities = `agent.Agent` + `memory.*` + `tools/` + `artifact.ArtifactStore`；LLM Core = 4 个 pluggable backend client；Infrastructure = `play/rag/` subprocess + `tracer.ToolTracer` + JSON 落盘。下面四张图分别是组件视角、scenario→运行时映射、单 turn 时序、history 投影。
+> Industry 5-layer mapping: UI = `cli.py` + scenario `.md`; Orchestration = `scenario.Scenario` / `engine.Engine` / `discussion.Discussion`; Capabilities = `agent.Agent` + `memory.*` + `tools/` + `artifact.ArtifactStore`; LLM Core = 4 pluggable backend clients; Infrastructure = `play/rag/` subprocess + `tracer.ToolTracer` + JSON persistence. Four diagrams below: components, scenario→runtime mapping, single-turn sequence, history projection.
 
-### 组件总览
+### Component overview
 
-`scenario.Scenario` 作为 composition root 把 scenario.md 装配成运行时对象图（`Assembly`），由 `engine.Engine` 串到 `Discussion`；`Discussion` 持有唯一权威 `history`，`Agent` 通过 `Memory` 投影读取它，`ArtifactStore` / `ToolTracer` 各自往 `history` 反向写事件。
+`scenario.Scenario` as composition root assembles scenario.md into runtime object graph (`Assembly`), wired by `engine.Engine` to `Discussion`; `Discussion` holds sole authoritative `history`; `Agent` reads via `Memory` projection; `ArtifactStore` / `ToolTracer` write events back to `history`.
 
 ```mermaid
 flowchart TB
@@ -74,9 +74,9 @@ flowchart TB
     store -. render() out-of-band .-> agent_box
 ```
 
-### Scenario → 运行时装配
+### Scenario → runtime assembly
 
-YAML 字段与 runtime 对象一一对应；`scenario.py` 是唯一知道这些映射的地方。
+YAML fields map 1:1 to runtime objects; `scenario.py` is the only place knowing these mappings.
 
 ```mermaid
 flowchart LR
@@ -93,7 +93,7 @@ flowchart LR
         EX["expanded turns<br/>list[(agent, step)]"]
         ME["ConversationMemory<br/>(per agent, with backend client DI)"]
         TD["TOOL_DEFINITIONS<br/>filter + defaults stripped<br/>+ scenario-pinned values"]
-        AS["ArtifactStore<br/>sections + tool_owners 解析为<br/>{tool: [agent_name…]}"]
+        AS["ArtifactStore<br/>sections + tool_owners →<br/>{tool: [agent_name…]}"]
         TP["history[0]<br/>type=topic"]
     end
     a --> AG
@@ -105,9 +105,9 @@ flowchart LR
     b --> TP
 ```
 
-### 单 turn 数据流
+### Single-turn data flow
 
-每个 turn 内部的执行顺序——尤其是 artifact view 带外注入、tool_call 事件先于发言入 history、`require_tool` nudge 闭环——在这里一图说清。
+Execution order within each turn — especially out-of-band artifact view, tool_call events before speech in history, `require_tool` nudge loop — in one diagram.
 
 ```mermaid
 sequenceDiagram
@@ -125,7 +125,7 @@ sequenceDiagram
     D->>AG: respond(history, instruction, artifact_view)
     AG->>M: build_messages(history, owner)
     M-->>AG: messages (per-agent projection)
-    Note over AG,CL: artifact_view 作为 &lt;artifact&gt; user 消息<br/>带外注入；不进 history
+    Note over AG,CL: artifact_view as &lt;artifact&gt; user message<br/>out-of-band; not in history
     AG->>CL: chat(system, messages + view + instruction, tools)
 
     loop tool-use loop
@@ -141,51 +141,51 @@ sequenceDiagram
     CL-->>AG: final reply text
     AG-->>D: reply
 
-    D->>TR: drain() tool_call 事件
-    D->>H: append tool_call 事件 (visible=false)
+    D->>TR: drain() tool_call events
+    D->>H: append tool_call events (visible=false)
     D->>H: append speaker turn
-    D->>AS: drain_events() artifact 事件
+    D->>AS: drain_events() artifact events
     D->>H: append artifact_event (pinned)
 
-    alt require_tool 未命中 且 attempt &lt; max_retries
-        D->>D: 生成 nudge instruction，重新进入 turn
-    else require_tool 命中 或 重试用尽
-        D-->>D: 进入下一 turn (用尽则 stderr WARNING)
+    alt require_tool miss and attempt &lt; max_retries
+        D->>D: generate nudge instruction, re-enter turn
+    else require_tool hit or retries exhausted
+        D-->>D: next turn (exhausted → stderr WARNING)
     end
 ```
 
-### History 投影规则
+### History projection rules
 
-History 只有一份；每个 agent 在 `Memory.build_messages(history, owner)` 中按下表把它折成自己的 `messages`。
+One history; each agent in `Memory.build_messages(history, owner)` folds it into own `messages`:
 
-|来源 entry|投影规则|
+|Source entry|Projection rule|
 |---|---|
-|`type=topic / turn / artifact_event / summary`|包成 `<tag>...</tag>` 的 user 消息|
-|`speaker == owner`|`assistant` 消息|
-|`speaker != owner`|包成 `<message from="X">...</message>` 的 user 消息|
-|`visible=False`（`tool_call` from `ToolTracer`）|所有 agent 投影时跳过；仅 `--save-transcript` 落盘可见|
+|`type=topic / turn / artifact_event / summary`|wrap as `<tag>...</tag>` user message|
+|`speaker == owner`|`assistant` message|
+|`speaker != owner`|wrap as `<message from="X">...</message>` user message|
+|`visible=False` (`tool_call` from `ToolTracer`)|skipped by all agents in projection; visible only in `--save-transcript` disk export|
 
-> Pinned 类型（`topic / turn / artifact_event`）永不被任何 memory 策略剪掉——会议纪要级信息丢了对话就破。`<artifact>` 视图每 turn 带外注入，不进 history，因此既"总是最新"又不占 memory 配额。
+> Pinned types (`topic / turn / artifact_event`) never trimmed by any memory strategy — meeting-minutes-level info; losing them breaks the session. `<artifact>` view injected out-of-band each turn, not in history — always fresh without memory quota.
 
-## 环境准备
+## Environment setup
 
 - Python 3.12+
-- `pip install -r requirements.txt`（`anthropic / google-genai / openai / pyyaml`）
-- 选一个后端（默认 ollama）：
+- `pip install -r requirements.txt` (`anthropic / google-genai / openai / pyyaml`)
+- Pick a backend (default ollama):
 
 ```bash
-# 本地 ollama（默认）
+# local ollama (default)
 ollama pull qwen3.6:27b
-# 或者改 config.py 的 BACKEND，并填上对应 *_API_KEY
+# or change BACKEND in config.py and set corresponding *_API_KEY
 ```
 
-`retrieve_docs` 需要 [`play/rag/`](../rag/) 已建好 VDB。
+`retrieve_docs` requires [`play/rag/`](../rag/) VDB built.
 
-## 快速开始
+## Quick start
 
-### 作为 Python 库（library, source of truth）
+### As Python library (source of truth)
 
-以下路径假定当前工作目录为 **`play/`**（`import agent_engine` 能解析到本包）。
+Paths below assume cwd **`play/`** (`import agent_engine` resolves).
 
 ```python
 from agent_engine import Engine, Scenario
@@ -193,53 +193,53 @@ from agent_engine import Engine, Scenario
 scenario = Scenario.from_yaml("agent_engine/scenarios/roundtable.md")
 engine = Engine(scenario)
 result = engine.invoke(
-    initial_artifact={"PRD": "..."},          # 可选; 预填 artifact section
-    transcript_path="/tmp/transcript.json",   # 可选; 落盘结构化 history
-    artifact_path="/tmp/artifact.md",         # 可选; 落盘渲染后 markdown
-    print_stream=False,                       # 库默认安静; CLI 默认 True
+    initial_artifact={"PRD": "..."},          # optional; pre-seed artifact section
+    transcript_path="/tmp/transcript.json",   # optional; persist structured history
+    artifact_path="/tmp/artifact.md",         # optional; persist rendered markdown
+    print_stream=False,                       # library default quiet; CLI default True
 )
 result.artifact     # dict[section_name, content]
 result.transcript   # list[Entry]
 result.success      # bool (True iff no warnings)
-result.warnings     # require_tool 用尽等软失败
+result.warnings     # require_tool exhausted etc. soft failures
 ```
 
-#### Result / Scenario typed 视图（DECISIONS §13）
+#### Result / Scenario typed views (DECISIONS §13)
 
-`Result` 既是 `Engine.invoke()` 返回值，又是 `--save-result-json` envelope 的 schema 来源。从 §13 起 transcript / scenario 的解读权也住在 agent_engine——评测 / 训练数据挖掘等消费者不需要再反向工程 transcript 形状或复刻 step 展开逻辑：
+`Result` is both `Engine.invoke()` return value and `--save-result-json` envelope schema source. From §13, transcript/scenario interpretation also lives in agent_engine — eval/training consumers need not reverse-engineer transcript shape or replicate step expansion:
 
 ```python
 from agent_engine import Result, Scenario, ToolCall, TurnView, ExpandedTurn
 
-# 从落盘的 envelope 还原
+# restore from persisted envelope
 result = Result.load_json("/tmp/result.json")
-# 或从 dict（任何来源）
+# or from dict (any source)
 result = Result.from_dict(some_envelope_dict)
 
-# transcript 视图
-calls: list[ToolCall] = result.tool_calls()       # tool_call ∪ artifact_event 合并规约
-turns: list[TurnView] = result.turns()            # 按 <turn> marker 切段，含 start_offset
-result.speakers()                                  # set[str]：实际说过话的 agent
-result.find_finalize_decision()                    # str | None：finalize_artifact 的 decision
+# transcript views
+calls: list[ToolCall] = result.tool_calls()       # tool_call ∪ artifact_event merge convention
+turns: list[TurnView] = result.turns()            # split by <turn> marker; includes start_offset
+result.speakers()                                  # set[str]: agents who actually spoke
+result.find_finalize_decision()                    # str | None: finalize_artifact decision
 
-# 段内进一步切 attempt / 工具调用
+# further split within segment: attempts / tool calls
 for tv in turns:
-    for attempt_events in tv.attempts(agent="主持人"):
+    for attempt_events in tv.attempts(agent="Moderator"):
         ...
-    tv.tool_calls()                                # 段内 ToolCall 列表
+    tv.tool_calls()                                # tool calls within segment
 
-# scenario 静态展开（不实例化 Agent / 不跑 LLM）
+# scenario static expansion (no Agent instantiation / no LLM)
 scn = Scenario.from_yaml("agent_engine/scenarios/panel.md")
 expanded: list[ExpandedTurn] = scn.expanded_turns()
 for e in expanded:
     e.turn_idx, e.agent, e.step_id, e.require_tool, e.max_retries
 ```
 
-`ToolCall` / `TurnView` / `ExpandedTurn` 均是 frozen dataclass；与 OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool` 同精神，但更轻量。
+`ToolCall` / `TurnView` / `ExpandedTurn` are frozen dataclasses; same spirit as OpenAI Agents SDK `RunResult.new_items` / Anthropic `Message.content[ToolUseBlock]` / inspect_ai `ChatMessageTool`, lighter weight.
 
-#### Transcript entry typed union + token usage（DECISIONS §14）
+#### Transcript entry typed union + token usage (DECISIONS §14)
 
-`Result.transcript` 内部本身也是 typed union——6 个 `frozen=True` dataclass 覆盖所有 entry 形态；`Result.usage` 是逐次 LLM 调用的 token 用量列表。**forward-only schema**：`Result.from_dict` 缺字段直接 `KeyError`，老 envelope 不可读。
+`Result.transcript` is internally a typed union — 6 `frozen=True` dataclasses cover all entry shapes; `Result.usage` is per-LLM-call token list. **Forward-only schema**: `Result.from_dict` missing fields → `KeyError`; old envelopes unreadable.
 
 ```python
 from agent_engine import (
@@ -253,7 +253,7 @@ from agent_engine import (
 
 result = Result.load_json("/tmp/result.json")
 
-# typed 派发（IDE 推导 + 静态检查友好）
+# typed dispatch (IDE inference + static check friendly)
 for entry in result.transcript:
     if isinstance(entry, SpeakerEntry):
         # entry.speaker / entry.content / entry.ts / entry.type == "speaker"
@@ -265,10 +265,10 @@ for entry in result.transcript:
         # entry.tool / entry.caller / entry.arguments / entry.content
         ...
 
-# token usage：逐次 LLM 调用的 raw 列表（cost / efficiency 聚合在 evals/metrics/efficiency.py）
+# token usage: raw per-LLM-call list (cost/efficiency aggregation in evals/metrics/efficiency.py)
 for u in result.usage:
     u.model            # "qwen3.5:9b" / "claude-3-5-sonnet-20241022" / ...
-    u.caller           # 调用方 agent 名（含 SummaryMemory 内部 summarizer 的隐性调用）
+    u.caller           # caller agent name (includes SummaryMemory summarizer hidden calls)
     u.input_tokens
     u.output_tokens
     u.cached_tokens    # OpenAI prompt_tokens_details.cached / Anthropic cache_read_input_tokens
@@ -276,151 +276,151 @@ for u in result.usage:
     u.ts
 ```
 
-| Entry 类型 | 何时产生 | 关键字段 |
+| Entry type | When produced | Key fields |
 |---|---|---|
-| `TopicEntry` | 每个 run 起始一次 | `content`（scenario body 即 topic） |
-| `TurnEntry` | 每 turn 起始 | `content`（如 `"turn 5 of 26"`），pinned marker |
-| `SpeakerEntry` | agent reply | `speaker`, `content`；`type` 字段是 §14 引入的强制 tag |
-| `ToolCallEntry` | 非 artifact 工具调用（来自 `ToolTracer`） | `caller`, `tool`, `arguments`, `result`, `ok`, `visible`（默认 False）|
-| `ArtifactEventEntry` | 6 个 artifact 工具的事件 | `caller`, `tool`, `arguments`, `content`（人类可读摘要） |
-| `SummaryEntry` | `SummaryMemory` 折叠产物 | `content` |
+| `TopicEntry` | once at run start | `content` (scenario body = topic) |
+| `TurnEntry` | each turn start | `content` (e.g. `"turn 5 of 26"`), pinned marker |
+| `SpeakerEntry` | agent reply | `speaker`, `content`; `type` mandatory tag since §14 |
+| `ToolCallEntry` | non-artifact tool (from `ToolTracer`) | `caller`, `tool`, `arguments`, `result`, `ok`, `visible` (default False) |
+| `ArtifactEventEntry` | 6 artifact tools | `caller`, `tool`, `arguments`, `content` (human-readable summary) |
+| `SummaryEntry` | `SummaryMemory` fold product | `content` |
 
-`TokenUsage` 在 4 个 backend client 内部抓取（OpenAI `usage.prompt_tokens` / Anthropic `usage.input_tokens` / Gemini `usage_metadata.prompt_token_count` / Ollama `prompt_eval_count`），跨 backend 抹平字段差异；流式调用拿不到 usage 时填 0（不抛异常，evals 端 cost 计算自动降级）。
+`TokenUsage` captured inside 4 backend clients (OpenAI `usage.prompt_tokens` / Anthropic `usage.input_tokens` / Gemini `usage_metadata.prompt_token_count` / Ollama `prompt_eval_count`); cross-backend field normalization; streaming without usage fills 0 (no exception; evals cost auto-degrades).
 
-### 作为 CLI（thin adapter）
+### As CLI (thin adapter)
 
-在 **`play/`** 目录下（`python -m agent_engine` 能解析包名；scenario 路径相对当前工作目录）：
+From **`play/`** (`python -m agent_engine` resolves package; scenario paths relative to cwd):
 
 ```bash
-# 1. 经典圆桌（主持人 + 2 嘉宾）
+# 1. classic roundtable (moderator + 2 guests)
 python -m agent_engine agent_engine/scenarios/roundtable.md
 
-# 2. 决策会议（主持人 + 4 成员，11 步 26 turn，带 artifact + 投票 + finalize）
+# 2. decision meeting (moderator + 4 members, 11 steps 26 turns, artifact + vote + finalize)
 python -m agent_engine agent_engine/scenarios/panel.md --save-artifact /tmp/panel.md
 
-# 3. 集成烟囱 + CI 单文件（who 四种形态 + artifact + retrieve_docs + memory + require_tool）
+# 3. integration smoke + CI single file (who four forms + artifact + retrieve_docs + memory + require_tool)
 python -m agent_engine agent_engine/scenarios/example.md
 ```
 
-预期输出片段：
+Expected output fragment:
 
 ```
 ============================================================
-  Participants: 主持人, 嘉宾A, 嘉宾B
+  Participants: Moderator, Guest A, Guest B
   Steps: 3  |  Total turns: 4
 ============================================================
 
-🗣  [主持人] (step=open): 各位嘉宾好，今天我们讨论 ...
-🗣  [嘉宾A] (step=discuss): 从技术原理 ...
-🔧 [嘉宾A] retrieve_docs(query='AGI 路径', vdb_dir='...') → [3 items, mode=hybrid]
+🗣  [Moderator] (step=open): Hello guests, today we discuss ...
+🗣  [Guest A] (step=discuss): From a technical perspective ...
+🔧 [Guest A] retrieve_docs(query='AGI path', vdb_dir='...') → [3 items, mode=hybrid]
 ...
 ```
 
-## CLI 速查
+## CLI quick reference
 
-> 完整说明见 `python -m agent_engine --help`。
+> Full help: `python -m agent_engine --help`.
 
-|参数|必选|默认|说明|
+|Arg|Required|Default|Description|
 |---|---|---|---|
-|`scenario`|是|—|scenario `.md` 文件路径|
-|`--no-stream`|flag|`False`|关闭流式输出（CLI 默认开；库调用默认关）|
-|`--save-artifact`|否|—|把最终 artifact markdown 落盘（仅 `artifact.enabled` 场景生效）|
-|`--save-transcript`|否|—|落盘结构化 history（topic / turn / speaker / tool_call / artifact_event）JSON|
-|`--save-result-json`|否|—|落盘完整 `Result` envelope（`{transcript, artifact, warnings, success, usage}`，`dataclasses.asdict` 直出，`transcript` 元素为 typed dataclass 序列化后的 dict、`usage` 为 `list[TokenUsage]`）。机器消费格式，与上两个 human format 并列；`play/evals` phase 5 trajectory eval / `play/agent_sft` mining 都走此 flag 接 agent_engine（详见 [`DECISIONS §11`](DECISIONS.md) / [§14](DECISIONS.md)）|
+|`scenario`|yes|—|scenario `.md` path|
+|`--no-stream`|flag|`False`|disable streaming (CLI default on; library default off)|
+|`--save-artifact`|no|—|persist final artifact markdown (only when `artifact.enabled`)|
+|`--save-transcript`|no|—|persist structured history JSON (topic/turn/speaker/tool_call/artifact_event)|
+|`--save-result-json`|no|—|persist full `Result` envelope (`{transcript, artifact, warnings, success, usage}`, `dataclasses.asdict`, typed transcript serialization + `usage: list[TokenUsage]`). Machine format alongside human JSON/markdown exports; `play/evals` phase 5 trajectory eval / `play/agent_sft` mining use this flag (see [`DECISIONS §11`](DECISIONS.md) / [§14](DECISIONS.md))|
 
 ## Scenario schema
 
-YAML frontmatter 字段：
+YAML frontmatter fields:
 
-|字段|类型|说明|
+|Field|Type|Description|
 |---|---|---|
-|`agents`|list|必填，至少 1 项；每项 `{name, role, prompt}`，可选 `model / temperature / max_tokens / memory`；`role` ∈ {moderator, member}|
-|`steps`|list|必填，至少 1 项；每项 `{who, instruction, id?, require_tool?, max_retries?}`；按列表顺序展开成 turn|
-|`memory`|dict|scenario 级默认 memory 配置；agent 级 `memory` 字段可覆盖|
-|`tools`|list|每项 `{name: <tool>, ...defaults}`；scenario 级默认值会从 LLM schema 中隐藏并注入到 dispatch|
-|`artifact`|dict|`{enabled, initial_sections?, tool_owners?}`；section 项可声明 `mode: replace\|append`；`tool_owners` 限制可调用方|
+|`agents`|list|required, ≥1; each `{name, role, prompt}`, optional `model / temperature / max_tokens / memory`; `role` ∈ {moderator, member}|
+|`steps`|list|required, ≥1; each `{who, instruction, id?, require_tool?, max_retries?}`; list order expands to turns|
+|`memory`|dict|scenario-level default memory; agent `memory` overrides|
+|`tools`|list|each `{name: <tool>, ...defaults}`; scenario defaults hidden from LLM schema and injected at dispatch|
+|`artifact`|dict|`{enabled, initial_sections?, tool_owners?}`; sections declare `mode: replace\|append`; `tool_owners` limits callers|
 
-`who` 取值（共四种）：
+`who` forms (four total):
 
-|形态|含义|
+|Form|Meaning|
 |---|---|
-|`moderator`|scalar role：所有 role=moderator 的 agent，按声明顺序|
-|`member`|scalar role：所有 role=member 的 agent，按声明顺序|
-|`all`|scalar 关键字：全员，按声明顺序|
-|`[name1, name2]`|显式名单：按列表顺序，每个 name 必须存在；单点也写成 `[name]`|
+|`moderator`|scalar role: all role=moderator agents, declaration order|
+|`member`|scalar role: all role=member agents, declaration order|
+|`all`|scalar keyword: everyone, declaration order|
+|`[name1, name2]`|explicit list: list order; each name must exist; single name still `[name]`|
 
-`<artifact>` 视图在每次发言前带外注入（不进 history）。`<turn>turn X of N</turn>` 在每 turn 前 pinned 注入，让 agent 自感位置。
+`<artifact>` view injected out-of-band before each speech (not in history). `<turn>turn X of N</turn>` pinned before each turn so agents sense position.
 
-### Memory 策略
+### Memory strategies
 
-|`type`|必填字段|行为|
+|`type`|Required fields|Behavior|
 |---|---|---|
-|`full`|—|默认；保留全量 history|
-|`window`|`max_recent`|保留所有 pinned marker + 最近 N 条发言|
-|`summary`|`max_recent` + 可选 `model / max_tokens / temperature / summarizer_prompt / summarize_instruction`|stale 发言增量折叠进 `<summary>` block；client 由 `Engine.invoke()` 装配时注入|
+|`full`|—|default; keep full history|
+|`window`|`max_recent`|keep all pinned markers + last N speeches|
+|`summary`|`max_recent` + optional `model / max_tokens / temperature / summarizer_prompt / summarize_instruction`|fold stale speech into `<summary>`; client injected at `Engine.invoke()` assembly|
 
-### Artifact 工具
+### Artifact tools
 
-|工具|默认可见性|作用|
+|Tool|Default visibility|Role|
 |---|---|---|
-|`read_artifact`|all（除非 tool_owners 限制）|返回当前 markdown 视图|
-|`write_section`|all（受 mode 限）|覆盖式写 section；`append` 节调用返回 error|
-|`append_section`|all（受 mode 限）|追加 entry；`replace` 节调用返回 error|
-|`propose_vote`|all（除非 tool_owners 限制）|注册结构化投票，返回 `vote_id`|
-|`cast_vote`|all（除非 tool_owners 限制）|记录一票（按 `caller` 覆盖写）|
-|`finalize_artifact`|all（除非 tool_owners 限制）|封板；幂等返回 error 防重入|
+|`read_artifact`|all (unless tool_owners restricts)|return current markdown view|
+|`write_section`|all (mode limited)|overwrite section; `append` sections return error|
+|`append_section`|all (mode limited)|append entry; `replace` sections return error|
+|`propose_vote`|all (unless tool_owners restricts)|register structured vote, return `vote_id`|
+|`cast_vote`|all (unless tool_owners restricts)|record one vote (overwrite by `caller`)|
+|`finalize_artifact`|all (unless tool_owners restricts)|seal; idempotent error on re-entry|
 
-`require_tool: <tool>` 在 step 结束后扫 `artifact.drain_events()` 验证调用是否发生；未命中追加 nudge instruction 重试，重试用尽 stderr WARNING。
+`require_tool: <tool>` after step scans `artifact.drain_events()` for call; miss → nudge instruction retry; exhausted → stderr WARNING.
 
 ## Tests
 
-测试集从 DECISIONS §13 起落地（项目此前无 tests）。当前 36 测试覆盖 `Result` / `Scenario` 视图层 + 7 现网 scenario 上的 `expanded_turns ≡ Discussion._expanded` invariant 锁；不依赖 ollama / VDB / 外部服务，纯函数级测，秒级跑完。
+Test suite landed from DECISIONS §13 (project had no tests before). Current 36 tests cover `Result` / `Scenario` view layer + `expanded_turns ≡ Discussion._expanded` invariant on 7 live scenarios; no ollama/VDB/external services; pure function level, seconds to run.
 
 ```bash
-# 在 play/ 目录下
+# from play/
 python -m pytest agent_engine/tests/ -v
 ```
 
-底层视图行为（tool 调用规约 / turn 切段 / attempt 切分 / decision 抽取 / scenario 静态展开）的契约都在 `tests/test_result_views.py` 与 `tests/test_scenario_static.py`；引擎本身的 e2e live 测试在 [`play/evals`](../evals/)（agent_traj / nudge_fire_rate）。
+View contract behavior in `tests/test_result_views.py` and `tests/test_scenario_static.py`; engine e2e live tests in [`play/evals`](../evals/) (agent_traj / nudge_fire_rate).
 
-## Scenario 库
+## Scenario library
 
-|文件|用途|
+|File|Purpose|
 |---|---|
-|`example.md`|**集成烟囱 + CI**：artifact 六工具 + `retrieve_docs` + window/full/summary + `require_tool` nudge；`ci_who_*` 两步覆盖 `who: member` / `who: all` 标量寻址；字段说明见本 README|
-|`roundtable.md`|主持人 + 2 嘉宾，最简流程烟囱（3 step）|
-|`debate.md`|无主持人，2 立场对辩（2 step）|
-|`brainstorm.md`|无主持人，演示 `who: [name, ...]` 显式列表寻址（2 step）|
-|`panel.md`|决策会议：主持人 + 4 成员，11 step / 26 turn，artifact + 投票 + finalize（最完整）|
+|`example.md`|**integration smoke + CI**: six artifact tools + `retrieve_docs` + window/full/summary + `require_tool` nudge; `ci_who_*` two steps cover `who: member` / `who: all` scalar addressing; field docs in this README|
+|`roundtable.md`|moderator + 2 guests, simplest flow smoke (3 steps)|
+|`debate.md`|no moderator, 2-position debate (2 steps)|
+|`brainstorm.md`|no moderator, demonstrates `who: [name, ...]` explicit list addressing (2 steps)|
+|`panel.md`|decision meeting: moderator + 4 members, 11 steps / 26 turns, artifact + vote + finalize (most complete)|
 
-## 项目结构
+## Project structure
 
 ```
 play/agent_engine/
-├── README.md                   # 本文件
-├── DECISIONS.md                # ADR 归档（每条架构决策一个条目，含 Status / Date / 取舍）
-├── JOURNAL.md                  # 每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
+├── README.md                   # this file
+├── DECISIONS.md                # ADR archive (Status / Date / trade-offs per entry)
+├── JOURNAL.md                  # milestone progress (≤2/day, Functional + Technical, cross-link DECISIONS §N)
 ├── requirements.txt            # anthropic / google-genai / openai / pyyaml
-├── config.py                   # BACKEND + 各家 model/key/默认参数
-├── __init__.py                 # 导出 Engine / Scenario / Result / Callback
-├── __main__.py                 # python -m agent_engine 入口
+├── config.py                   # BACKEND + model/key/defaults per provider
+├── __init__.py                 # exports Engine / Scenario / Result / Callback
+├── __main__.py                 # python -m agent_engine entry
 ├── cli.py                      # zero-logic CLI: argparse → Engine.invoke
 ├── engine.py                   # Engine class (invoke / ainvoke* / stream* / astream*)
-├── result.py                   # Result dataclass (artifact / transcript / success / warnings / usage) + 6 entry dataclass + TokenUsage
-├── events.py                   # Event base + 5 子类（流式占位，今天仅 RunFinished 触发）
-├── callbacks.py                # Callback base（on_xxx 方法）
-├── scenario.py                 # Scenario.from_yaml + 装配 Assembly
-├── tracer.py                   # ToolTracer（非 artifact tool 调用事件 + stderr 🔧）
-├── discussion.py               # Discussion 引擎：扁平 steps -> 线性 turn
-├── agent.py                    # Agent.respond() + memory 投影入口
+├── result.py                   # Result dataclass + 6 entry dataclasses + TokenUsage
+├── events.py                   # Event base + 5 subclasses (streaming placeholder; only RunFinished today)
+├── callbacks.py                # Callback base (on_xxx methods)
+├── scenario.py                 # Scenario.from_yaml + Assembly
+├── tracer.py                   # ToolTracer (non-artifact tool events + stderr 🔧)
+├── discussion.py               # Discussion engine: flat steps → linear turns
+├── agent.py                    # Agent.respond() + memory projection entry
 ├── memory.py                   # FullHistory / WindowMemory / SummaryMemory
-├── artifact.py                 # ArtifactStore + 6 工具 + 投票 + finalize
-├── tools/                      # reasoning tool 包（_envelope / _subprocess / retrieve_docs / __init__）
-├── anthropic_client.py         # 后端 client（含 tool_handler loop）
+├── artifact.py                 # ArtifactStore + 6 tools + voting + finalize
+├── tools/                      # reasoning tool package (_envelope / _subprocess / retrieve_docs / __init__)
+├── anthropic_client.py         # backend client (tool_handler loop)
 ├── openai_client.py            #
 ├── gemini_client.py            #
-├── ollama_client.py            #
-└── scenarios/                  # 场景库（见上表）
+├── ollama_client.py              #
+└── scenarios/                  # scenario library (table above)
 ```
 
-架构决策见 [`DECISIONS.md`](DECISIONS.md)；每日进展（按里程碑）见 [`JOURNAL.md`](JOURNAL.md)。
+Architecture decisions: [`DECISIONS.md`](DECISIONS.md); milestone progress: [`JOURNAL.md`](JOURNAL.md).

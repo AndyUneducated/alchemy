@@ -1,15 +1,14 @@
-"""few-shot 机制三条核心断言.
+"""The few-shot mechanism has three core assertions.
 
-  1. zero-shot prompt 与不传 num_fewshot **字节相同**——保证 Phase 1 的
-     `test_active_gold_equals_offline_perfect` 等 parity test 不被破坏（这是 Runner
-     里 `if num_fewshot <= 0: return task.doc_to_text(doc)` 早 return 的兑现）
-  2. N-shot prompt 包含 N 段 example 且 query 自身**不入选**（否则就成
-     "用答案当 example 答自己"的作弊）
-  3. 同 fewshot_seed 抽相同 example——可复现性的可执行 contract
+  1. Zero-shot prompt is the same as not passing num_fewshot **bytes** - guaranteed for Phase 1
+     `test_active_gold_equals_offline_perfect` etc. parity test is not destroyed (this is Runner
+     In `if num_fewshot <= 0: return task.doc_to_text(doc)` (early return implementation)
+  2. N-shot prompt contains N paragraphs of example and the query itself is not selected (otherwise it becomes
+     "Answer yourself using the answer as an example" cheating)
+  3. Take the same example as fewshot_seed - an executable contract with reproducibility
 
-测试用 sentiment_clf 作宿主，理由：默认 fewshot_docs/format_fewshot_example
-的行为该是任务无关的，sentiment_clf 比 mt 数据轻、跑得快。
-"""
+The test uses sentiment_clf as the host, reason: default fewshot_docs/format_fewshot_example
+The behavior should be task-independent, sentiment_clf is lighter and faster than mt data."""
 
 from __future__ import annotations
 
@@ -24,7 +23,7 @@ def _docs():
 
 
 def test_zero_shot_equals_no_fewshot():
-    """num_fewshot=0 → prompt == task.doc_to_text(doc)，字节级相等."""
+    """num_fewshot=0 → prompt == task.doc_to_text(doc), byte-level equality."""
     task = SentimentClf()
     docs = _docs()
     rng = random.Random(0)
@@ -34,7 +33,7 @@ def test_zero_shot_equals_no_fewshot():
 
 
 def test_n_shot_excludes_self_and_has_n_examples():
-    """num_fewshot=2 → prompt 含恰好 2 段 example，且 query doc 自身不入选."""
+    """num_fewshot=2 → prompt contains exactly 2 examples, and query doc itself is not selected."""
     task = SentimentClf()
     docs = _docs()
     pool = docs
@@ -43,16 +42,16 @@ def test_n_shot_excludes_self_and_has_n_examples():
     query = docs[0]
     prompt = _build_prompt(task, query, num_fewshot=2, pool=pool, rng=rng)
 
-    # 包含 query 自身的 doc_to_text 字符串 1 次（在末尾）
+    # Contains the doc_to_text string of query itself 1 time (at the end)
     query_text = task.doc_to_text(query)
     assert prompt.count(query_text) == 1
 
-    # 拆出 example 部分（在 query 之前），按双换行切
+    # Separate the example part (before query) and press double newline to switch
     example_blob = prompt.rsplit(query_text, 1)[0].rstrip()
     example_chunks = [c for c in example_blob.split("\n\n") if c.strip()]
     assert len(example_chunks) == 2
 
-    # 每一段 example 都对应 pool 里某条 doc（且不是 query 本身）
+    # Each example corresponds to a certain doc in the pool (and not the query itself)
     other_docs = [d for d in pool if d.id != query.id]
     expected_strs = {task.format_fewshot_example(d) for d in other_docs}
     for chunk in example_chunks:
@@ -60,7 +59,7 @@ def test_n_shot_excludes_self_and_has_n_examples():
 
 
 def test_fewshot_seed_determinism():
-    """相同 fewshot_seed → 抽出相同的 example 序列（可复现性 contract）."""
+    """Same fewshot_seed → extract the same example sequence (reproducibility contract)."""
     task = SentimentClf()
     docs = _docs()
     pool = docs
@@ -75,14 +74,14 @@ def test_fewshot_seed_determinism():
 
 
 def test_fewshot_pool_smaller_than_n_does_not_raise():
-    """pool 不够时不抛错，能抽几条算几条（小 dataset 边界保护）."""
+    """No error will be thrown when the pool is not enough, and the number of items that can be extracted will be counted (small dataset boundary protection)."""
     task = SentimentClf()
     docs = _docs()
     query = docs[0]
-    pool = docs[:3]  # 含 query → 排除自身后只剩 2
+    pool = docs[:3]  # with query → excluding itself only 2 remains
 
     prompt = _build_prompt(task, query, num_fewshot=10, pool=pool, rng=random.Random(0))
     query_text = task.doc_to_text(query)
     example_blob = prompt.rsplit(query_text, 1)[0].rstrip()
     example_chunks = [c for c in example_blob.split("\n\n") if c.strip()]
-    assert len(example_chunks) == 2  # 实际能抽到的最大值
+    assert len(example_chunks) == 2  # The maximum value that can actually be drawn

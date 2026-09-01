@@ -1,30 +1,29 @@
-"""Phase 4 vertical slice：族 4 RAG retrieval-only task.
+"""Phase 4 vertical slice: Family 4 RAG retrieval-only task.
 
-8 个针对 `play/rag/docs/panel/` 公司治理叙事 corpus 的检索 query + 4 份 stub
-predictions（perfect / good_rerank / weak / garbage），核心叙事是"在 IR 指标上
-看 retriever 质量阶梯"：
+8 searches for `play/rag/docs/panel/` corporate governance narrative corpus + 4 stubs
+predictions (perfect / good_rerank / weak / garbage), the core narrative is "on IR indicators
+See retriever quality ladder":
 
-  | 预测         | recall@5 | mrr   | ndcg@5 | 故事 |
+  | prediction | recall@5 | mrr | ndcg@5 | story |
   |---|---|---|---|---|
-  | perfect      | 1.0      | 1.0   | 1.0    | 上界 sanity |
-  | good_rerank  | 1.0      | ~0.5  | 中     | recall 满 / rank 不准（rerank 救场场景） |
-  | weak         | ~0.5     | low   | low    | 弱基线 |
-  | garbage      | 0.0      | 0.0   | 0.0    | 下界 sanity |
+  | perfect | 1.0 | 1.0 | 1.0 | upper bound sanity |
+  | good_rerank | 1.0 | ~0.5 | medium | recall full / rank inaccurate (rerank rescue scene) |
+  | weak | ~0.5 | low | low | weak baseline |
+  | garbage | 0.0 | 0.0 | 0.0 | lower bound sanity |
 
-设计要点：
-  - **output_type='none'**（phase 4 引入的 literal）：runner 自动跳 LM 调用，
-    检索一步 task.process_docs 把 retrieved_ids 注入 doc.metadata 即可。
-    替代了"假 LM adapter"这种 anti-pattern.
-  - **process_docs 注入**：run 路径传 retrieve_fn → 在 LM 调用前一次性 retrieve 全部 docs.
-    `retrieve_fn` 由 cli.py 在构造时注入，task 自己不知道是 subprocess 还是 in-process.
-  - **load_prediction 注入**：score 路径，把 row['retrieved_ids'] 翻译进 doc.metadata,
-    Response 给占位（无 LM-side 数据）。这是 path B+C 的 pred-side 体现.
-  - **artifacts 装非标量**：process_results 把 pred_ids/gold_ids 装 artifacts 给 aggregation,
-    metrics 仍只装标量（这里是空 dict——本 task 无 per-sample 标量指标）.
+Design points:
+  - **output_type='none'** (literal introduced in phase 4): runner automatically jumps to LM call,
+    Retrieve step task.process_docs and inject retrieved_ids into doc.metadata.
+    Replaces the "fake LM adapter" anti-pattern.
+  - **process_docs injection**: pass the run path to retrieve_fn → retrieve all docs at once before calling LM.
+    `retrieve_fn` is injected by cli.py during construction, and the task itself does not know whether it is a subprocess or in-process.
+  - **load_prediction injection**: score path, translate row['retrieved_ids'] into doc.metadata,
+    Response is a placeholder (no LM-side data). This is the pred-side embodiment of path B+C.
+  - **artifacts is loaded with non-scalars**: process_results is used to load pred_ids/gold_ids with artifacts to aggregation,
+    metrics still only holds scalars (an empty dict here - this task has no per-sample scalar metrics).
 
-向后兼容：本 task 通过 `retrieve_fn=None` 默认构造也能在 score 路径正常工作（不需要 retrieve_fn），
-run 路径才必须注入.
-"""
+Backward compatibility: This task can also work normally in the score path through the default construction of `retrieve_fn=None` (retrieve_fn is not required),
+The run path must be injected."""
 
 from __future__ import annotations
 
@@ -47,22 +46,21 @@ from .base import Task
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "rag_retrieval" / "gold.jsonl"
 
-# retrieve_fn 协议：query: str -> (doc_ids: list[str], contents: list[str])
+# retrieve_fn protocol: query: str -> (doc_ids: list[str], contents: list[str])
 RetrieveFn = Callable[[str], tuple[list[str], list[str]]]
 
 
 @register_task("rag_retrieval")
 class RagRetrieval(Task):
-    """RAG 检索阶段独立 task：5 个 ranx IR 指标的承载体.
+    """Independent task in RAG retrieval phase: bearer of 5 ranx IR indicators.
 
-    构造：
-      - `retrieve_fn=None`         → 仅 score 路径可用（从 predictions 读 retrieved_ids）
-      - `retrieve_fn=callable`     → run 路径 process_docs hook 注入 retrieved_ids
-      - `top_k`                    → process_docs 截断；score 路径 row 已截过不再处理
-    """
+    Construction:
+      - `retrieve_fn=None` → only score path is available (read retrieved_ids from predictions)
+      - `retrieve_fn=callable` → run path process_docs hook injects retrieved_ids
+      - `top_k` → process_docs truncation; score path row has been truncated and will not be processed anymore"""
 
     name: ClassVar[str] = "rag_retrieval"
-    output_type: ClassVar[str] = "none"  # phase 4 literal：runner 跳 lm.generate_until
+    output_type: ClassVar[str] = "none"  # phase 4 literal: runner jumps lm.generate_until
 
     def __init__(
         self,
@@ -84,24 +82,23 @@ class RagRetrieval(Task):
                 yield Doc(
                     id=row["id"],
                     input=row["input"],
-                    target=None,  # rag_retrieval 无字符串 target——phase 4 widening 后语义诚实
+                    target=None,  # rag_retrieval no string target - semantic honesty after phase 4 widening
                     metadata={"gold_doc_ids": tuple(row["gold_doc_ids"])},
                 )
 
     def doc_to_text(self, doc: Doc) -> str:
-        """output_type='none' 时 runner 不调；保留方法只为满足 ABC."""
+        """The runner is not adjusted when output_type='none'; the method is reserved only to satisfy ABC."""
         return ""
 
     def doc_to_target(self, doc: Doc) -> str:
-        """target 是 None 时 doc_to_target 不应被 fewshot 走到——返回空字符串占位."""
+        """doc_to_target should not be walked by fewshot when target is None - an empty string placeholder is returned."""
         return ""
 
     def process_docs(self, docs: list[Doc]) -> list[Doc]:
-        """run 路径：在 LM 调用前一次性 retrieve 所有 docs；retrieved_ids 注入 metadata.
+        """run path: retrieve all docs at once before calling LM; retrieved_ids injects metadata.
 
-        retrieve_fn 缺失时（如 score 路径走到这里也安全）→ identity 透传，
-        score 路径靠 load_prediction 走另一条注入通路.
-        """
+        When retrieve_fn is missing (for example, the score path is safe here) → identity transparent transmission,
+        The score path relies on load_prediction to take another injection path."""
         if self._retrieve_fn is None:
             return docs
         out: list[Doc] = []
@@ -114,7 +111,7 @@ class RagRetrieval(Task):
         return out
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：row['retrieved_ids'] 进 doc.metadata；Response 占位（无 LM-side 数据）."""
+        """score path: row['retrieved_ids'] into doc.metadata; Response placeholder (no LM-side data)."""
         retrieved = tuple(row.get("retrieved_ids", ()))
         enriched = replace(doc, metadata={**doc.metadata, "retrieved_ids": retrieved})
         return enriched, Response(doc_id=doc.id)
@@ -124,14 +121,14 @@ class RagRetrieval(Task):
         gold_ids = list(doc.metadata.get("gold_doc_ids", ()))
         return SampleResult(
             doc_id=doc.id,
-            prediction="",  # 无字符串 prediction（占位）
-            target="",       # 无字符串 target（占位；真实 gold 在 artifacts.gold_ids）
-            metrics={},      # 严守 scalar，per-sample 无标量指标
+            prediction="",  # No string prediction (placeholder)
+            target="",       # None string target (placeholder; real gold in artifacts.gold_ids)
+            metrics={},      # Strictly adhere to scalar, per-sample scalar-free indicators
             artifacts={"pred_ids": pred_ids, "gold_ids": gold_ids},
         )
 
     def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        # ranx 直调；从 SampleResult.artifacts.{pred_ids, gold_ids} 拉数据
+        # ranx direct adjustment; pull data from SampleResult.artifacts.{pred_ids, gold_ids}
         return {
             "recall@5": recall_at_k(5),
             "precision@5": precision_at_k(5),

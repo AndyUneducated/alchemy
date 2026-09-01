@@ -1,16 +1,15 @@
-"""formatter.py — 1 个完整 chat sample 的字节级 golden snapshot.
+"""formatter.py — A byte-level golden snapshot of a complete chat sample.
 
-test_formatter.py 的 32 个测试覆盖各字段 / 分支，但**没有一个钉死整 dict 的形状**。
-一旦下游（MLX-LM / Ollama chat_template / agent_engine consumer）期望的 wire
-format 漂移（重命名 key / 改嵌套 / 调 role 顺序 / arguments 形态），32 单测可能
-仍全过但 train 数据全废.
+test_formatter.py's 32 tests cover various fields/branches, but none nail the entire dict shape.
+Once the downstream (MLX-LM/Ollama chat_template/agent_engine consumer) expects the wire
+format drift (rename key/change nesting/adjust role order/arguments form), 32 single tests possible
+Still passed but all train data was lost.
 
-本测把 1 个 deterministic triple → format_triple → 完整 `==` 比对 inline golden.
-覆盖 [DECISIONS §4](../DECISIONS.md) 的 schema 决策 (`messages` + `tools` + 顶层
-`assistant.tool_calls` + `arguments` 是 dict, v1.5 起为 Qwen3.5 chat_template strict items 而切).
+This test compares 1 deterministic triple → format_triple → complete `==` to inline golden.
+Override the schema decisions of [DECISIONS §4](../DECISIONS.md) (`messages` + `tools` + top-level
+`assistant.tool_calls` + `arguments` is a dict, changed from v1.5 to Qwen3.5 chat_template strict items).
 
-不依赖真 scenarios/，inline 一份最小 YAML 控制 tools[] 输出确定性.
-"""
+Without relying on true scenarios/, inline a minimal YAML control tools[] output determinism."""
 
 from __future__ import annotations
 
@@ -44,7 +43,7 @@ body
 
 
 def _golden_triple() -> dict:
-    """对应 step s1 的 first-fail + nudge-fire triple（schema 与 extractor 输出对齐）."""
+    """Maps to step s1 first-fail + nudge-fire triple (schema aligned with extractor output)."""
     return {
         "run_id": 0,
         "scenario": "golden",
@@ -53,7 +52,7 @@ def _golden_triple() -> dict:
         "agent": "A",
         "required_tool": "append_section",
         "failure_mode": "missed",
-        "context": [],  # 空 context 简化 user content 渲染
+        "context": [],  # Empty context simplifies user content rendering
         "instruction": 'append_section("调研笔记", "- 一句话要点") 把要点记入。',
         "failed_response": "我先想想",
         "nudge": "你刚才没有调用 `append_section` 工具。请现在补上该调用以完成本轮任务。",
@@ -61,7 +60,7 @@ def _golden_triple() -> dict:
     }
 
 
-def _write_scenario(tmp_path) -> "Path":  # noqa: F821 — Path 由 pytest tmp_path 提供
+def _write_scenario(tmp_path) -> "Path":  # noqa: F821 — Path provided by pytest tmp_path
     p = tmp_path / "golden.md"
     p.write_text(GOLDEN_SCENARIO_YAML, encoding="utf-8")
     return p
@@ -85,10 +84,14 @@ EXPECTED_MESSAGES = [
                 "type": "function",
                 "function": {
                     "name": "append_section",
-                    # v1.5+: arguments 是 dict（v1 是 JSON-string，Qwen3.5 chat_template
-                    # 改用 `tool_call.arguments|items` 严格 mapping 故切）；
-                    # prop 名 = ArtifactStore.append_section schema:
-                    # `name` + `entry`（不是 `section_name` / `content`，那是 write_section）
+# v1.5+: arguments is dict (v1 is JSON-string, Qwen3.5 chat_template
+# v1.5+: arguments is dict (v1 is JSON-string, Qwen3.5 chat_template
+# Use `tool_call.arguments|items` instead (strict mapping);
+# Use `tool_call.arguments|items` instead (strict mapping);
+# prop name = ArtifactStore.append_section schema:
+# prop name = ArtifactStore.append_section schema:
+# `name` + `entry` (not `section_name` / `content`, that is write_section)
+# `name` + `entry` (not `section_name` / `content`, that is write_section)
                     "arguments": {"name": "调研笔记", "entry": "- 一句话要点"},
                 },
             }
@@ -122,22 +125,24 @@ EXPECTED_TOOL_APPEND_SECTION = {
 
 
 def test_formatter_chat_sample_golden_snapshot(tmp_path):
-    """完整 messages dict 等价比对 —— 任意 key 改名 / 嵌套调整 / role 错位都立刻挂.
+    """Full messages dict equality — any key rename / nesting / role mismatch fails immediately.
 
-    `tools[]` 不做整数组 snapshot（artifact 自动注入 6 tool 太冗长），改为：
-    抽 required_tool 对应的 entry 做 dict-equal snapshot —— 同样能 catch schema drift.
-    """
+    `tools[]` is not snapshotted wholesale (artifact injects 6 tools — too verbose); instead
+    snapshot the required_tool entry dict-equal — still catches schema drift."""
     scen = _write_scenario(tmp_path)
     sample = format_triple(_golden_triple(), scen)
     assert sample is not None
 
-    # 顶层 2 键固定
+# Top level 2 key fixed
+# Top level 2 key fixed
     assert set(sample.keys()) == {"messages", "tools"}
 
-    # messages 整段冻结
+# messages freeze the entire section
+# messages freeze the entire section
     assert sample["messages"] == EXPECTED_MESSAGES
 
-    # tools: 抽 required_tool 单条做 schema snapshot
+# tools: Use required_tool to make a schema snapshot individually
+# tools: Use required_tool to make a schema snapshot individually
     by_name = {t["function"]["name"]: t for t in sample["tools"]}
     assert "append_section" in by_name, f"tools must expose required_tool; got {list(by_name)}"
     assert by_name["append_section"] == EXPECTED_TOOL_APPEND_SECTION, (
@@ -146,10 +151,10 @@ def test_formatter_chat_sample_golden_snapshot(tmp_path):
 
 
 def test_formatter_arguments_is_dict_not_json_string(tmp_path):
-    """v1.5+: arguments 必须是 dict（不是 JSON-string）—— Qwen3.5 chat_template
-    用 `tool_call.arguments|items` 严格要求 mapping；string 触发
-    `TypeError: Can only get item pairs from a mapping.`。详见 [DECISIONS §11](../DECISIONS.md)。
-    v1 时代是 JSON-string（兼容 Qwen2.5），supersede 为 dict at v1.5."""
+    """v1.5+: arguments must be dict (not JSON-string) - Qwen3.5 chat_template
+    Use `tool_call.arguments|items` to strictly require mapping; string trigger
+    `TypeError: Can only get item pairs from a mapping.`. See [DECISIONS §11](../DECISIONS.md).
+    The v1 era is JSON-string (compatible with Qwen2.5), supersede is dict at v1.5."""
     scen = _write_scenario(tmp_path)
     sample = format_triple(_golden_triple(), scen)
     args = sample["messages"][-1]["tool_calls"][0]["function"]["arguments"]
@@ -157,8 +162,8 @@ def test_formatter_arguments_is_dict_not_json_string(tmp_path):
 
 
 def test_formatter_assistant_content_is_empty_string_not_none(tmp_path):
-    """assistant.content 必须是 '' 而非 None / 不存在 —— Qwen2.5 chat template
-    碰 None 会渲染成字面量 `None`，污染训练数据."""
+    """assistant.content must be '' not None / missing — Qwen2.5 chat template
+    renders None as literal `None`, polluting training data."""
     scen = _write_scenario(tmp_path)
     sample = format_triple(_golden_triple(), scen)
     asst = sample["messages"][-1]

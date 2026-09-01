@@ -1,31 +1,31 @@
 # Journal — play/sft_hello
 
-## 2026-05-09 — 立项 + 脚手架就绪
+## 2026-05-09 — Project approved + scaffolding ready
 
-### 功能
+### Functional
 
-新开 `play/sft_hello/` 子项目，作为一次性 hello-world 微调实验。目标：在 M4 Pro 48GB 上把 Qwen2.5-0.5B-Instruct 用 MLX-LM LoRA 训成"每答末尾加 🦊"，验证微调全管线在本机能跑通。**与 `play/agent_sft` 严格分开**——后者是真做项目，本项目只为试通流程。
+Create a new `play/sft_hello/` sub-project as a one-time hello-world fine-tuning experiment. Goal: Use MLX-LM LoRA to train Qwen2.5-0.5B-Instruct to "add 🦊 at the end of each answer" on M4 Pro 48GB, and verify that the entire fine-tuning pipeline can run smoothly on this machine. **Strictly separate from `play/agent_sft`** - the latter is a real project, this project is just to test the process.
 
-脚手架交付：README（4 步指南）、`data/train.jsonl` + `data/valid.jsonl`（手写 30 + 10 静态 chat 记录）、`lora_config.yaml`（LoRA 结构旋钮 rank / scale / dropout / keys 的显式声明）、`infer_compare.py`（训前 / 训后并列）。一行 `mlx_lm.lora --config ./lora_config.yaml ...` 即可启动训练。
+Scaffolding delivered: README (4-step guide), `data/train.jsonl` + `data/valid.jsonl` (handwritten 30 + 10 static chat records), `lora_config.yaml` (explicit declaration of LoRA structural knobs rank/scale/dropout/keys), `infer_compare.py` (pre-training/post-training juxtaposition). One line `mlx_lm.lora --config ./lora_config.yaml ...` can start training.
 
-### 技术
+### Technical
 
-- 底座：Qwen2.5-0.5B-Instruct（反馈循环 < 一杯咖啡）。
-- 数据：30 条 toy chat 格式手写直接 commit，assistant 每条回答末尾固定加 ` 🦊`（肉眼信号 = `grep 🦊` 即可判断）。
-- 训练：MLX-LM LoRA，CLI 走 `--num-layers 8 --iters 200 --batch-size 4 --learning-rate 1e-4`，LoRA 结构（`rank=8` / `scale=20.0` / `dropout=0.0` / `keys=[q_proj, v_proj]`）走 `lora_config.yaml`。0.5B 全精度训练，不引入 4-bit 量化复杂度。
-- 推理对比：`infer_compare.py` 用 `mlx_lm.load(adapter_path=...)` 切换有 / 无 adapter，同 5 个 prompt 双跑，stdout 并列打印。
-- 部署边界：不做 fuse / GGUF / ollama，留给 `play/agent_sft` Phase 4。
-- 配置形态：CLI 与 YAML 分工——CLI 暴露日常调的旋钮，YAML 封装 LoRA 结构骨架。MLX-LM 的设计本身就把 `rank/scale/dropout/keys` 限定到 config file，本项目顺势让"rank=8 这个核心旋钮"从隐式默认变成版本控制内的显式声明。
-- 学习工具：新增 `sweep.py`，控制变量法（controlled-variable）扫描 `iters / lr / num-layers / batch-size / rank` 5 个旋钮各 3-4 个数量级取值，自动生成 `runs/sweeps/REPORT.md`——表格 + 逐值浅显语言解读 + 专有名词附英文。**这不是架构变更，是认知工具**：让"超参实际影响什么"从文档里的一句话变成肉眼可见的实测对比。全跑约 30-40 分钟。
+- Base: Qwen2.5-0.5B-Instruct (feedback loop < cup of coffee).
+- Data: 30 items in toy chat format are handwritten and submitted directly. Assistant always adds ` 🦊` at the end of each answer (the naked eye signal = `grep 🦊` can be judged).
+- Training: MLX-LM LoRA, CLI go `--num-layers 8 --iters 200 --batch-size 4 --learning-rate 1e-4`, LoRA structure (`rank=8` / `scale=20.0` / `dropout=0.0` / `keys=[q_proj, v_proj]`) go `lora_config.yaml`. 0.5B full-precision training without introducing 4-bit quantization complexity.
+- Reasoning comparison: `infer_compare.py` uses `mlx_lm.load(adapter_path=...)` to switch with/without adapter, run the same 5 prompts in double, and stdout is printed in parallel.
+- Deployment boundary: Don't do fuse/GGUF/ollama, leave it to `play/agent_sft` Phase 4.
+- Configuration form: Division of labor between CLI and YAML - CLI exposes the knobs for daily adjustments, and YAML encapsulates the LoRA structural skeleton. The design of MLX-LM itself limits `rank/scale/dropout/keys` to the config file. This project takes advantage of the opportunity to change the "rank=8 core knob" from an implicit default to an explicit statement in version control.
+- Learning tools: Added `sweep.py`, controlled-variable method to scan `iters / lr / num-layers / batch-size / rank` 5 knobs each with 3-4 orders of magnitude values, automatically generate `runs/sweeps/REPORT.md` - table + value-by-value simple language interpretation + proper nouns with English. **This is not an architecture change, it is a cognitive tool**: Let "what the actual impact of super parameters" is from a sentence in the document to an actual measurement comparison visible to the naked eye. The full run takes about 30-40 minutes.
 
-## 2026-05-10 — 控制变量 sweep 跑通，全 18 组结果落盘
+## 2026-05-10 — The control variable sweep runs through, and all 18 sets of results are placed on the market.
 
-### 功能
+### Functional
 
-`python sweep.py all` 一把跑完 5 个轴 × 共 18 组 (sweep, value) 配置，产物落在 `runs/sweeps/`：每组一个子目录装 adapter + `train.log` + `eval.json`，顶层 `REPORT.md` 自动汇总表格 + 逐值解读 + 通用结论。实测 M4 Pro 48GB 上**全跑约 9 分钟**（远低于 README 标注的 30-40 min 估计），后续可以放心当回归脚本反复跑。**5 轴结论与教科书叙事一致**：iters=200 / lr=1e-4 / layers=8 / batch=4 / rank=8 都落在甜点位，🦊 命中 5/5；lr=1e-6 步长不足 0/5，是唯一"训练完成但没学会"的 cell。
+`python sweep.py all` runs through 5 axes × a total of 18 groups of (sweep, value) configurations. The products fall into `runs/sweeps/`: a subdirectory for each group contains adapter + `train.log` + `eval.json`, and the top-level `REPORT.md` automatically summarizes the table + Per-value notes + general conclusions. The actual measured **full run time on M4 Pro 48GB is about 9 minutes** (much lower than the 30-40 minute estimate marked in the README). You can rest assured that you can run the regression script repeatedly in the future. **The 5-axis conclusion is consistent with the textbook narrative**: iters=200 / lr=1e-4 / layers=8 / batch=4 / rank=8 all fall in the Sweet spot, 🦊 hit 5/5; lr=1e-6 has a step size of less than 0/5, and is the only cell that has been "trained but not learned".
 
-### 技术
+### Technical
 
-- 实测耗时：单个 200-iter 训练 ~16s，5 prompt eval ~3s，整轮 ≈ 9 min。瓶颈在 `mlx_lm.load` 反复加载基座，可在后续优化里改成跨 (sweep, value) 复用模型句柄；当前 toy 规模不优化。
-- 数值观察：iters 从 200→1000 末 loss 都停在 0.07，说明 30 条数据 + r=8 已经把"末尾加 🦊"几乎压到容量上限；rank 从 8→32 同样无收益，再次印证 LoRA 论文「ΔW 低秩」假设——本项目这个 toy 任务的"有效秩"远低于 2。
-- **`batch=16` 不是发散而是 mlx-lm 数据集校验报错**：`valid.jsonl` 只有 10 条样本，trainer 在做第一次 val 时 `raise ValueError("Dataset must have at least batch_size=16 examples but only has 10.")` 直接退出，耗时 1.4s。当前 `sweep.py` 用 `returncode != 0` 一刀切归为"diverged"，导致 `REPORT.md` 里的解读说"学习率过大、NaN、量化精度不足"——其实是数据集大小约束。这是脚本的认知偏差，不是 mlx-lm 的问题；要么调小 batch 范围，要么扩 `valid.jsonl`，要么在脚本里区分"data error" vs "真发散"。本轮先记账，不就地改。
+- Actual measurement time: single 200-iter training ~16s, 5 prompt eval ~3s, whole round ≈ 9 minutes. The bottleneck is that `mlx_lm.load` repeatedly loads the base, which can be changed to reuse model handles across (sweep, value) in subsequent optimizations; the current toy scale is not optimized.
+- Numerical observation: Last loss of iters from 200→1000 stops at 0.07, indicating that 30 pieces of data + r=8 has almost pushed the "add 🦊 at the end" to the upper capacity limit; rank also has no gain from 8→32, once again confirming the "ΔW low rank" hypothesis of the LoRA paper - the "effective rank" of the toy task in this project is far lower than 2.
+- **`batch=16` is not diverged but mlx-lm data set verification error**: `valid.jsonl` has only 10 samples. When the trainer does the first val, it `raises ValueError("Dataset must have at least batch_size=16 examples but only has 10.")` and exits directly, which takes 1.4s. Currently, `sweep.py` uses `returncode != 0` to classify it as "diverged" across the board, causing the interpretation in `REPORT.md` to say "the learning rate is too large, NaN, and the quantization accuracy is insufficient" - which is actually a data set size constraint. This is a cognitive bias in the script, not a problem with mlx-lm; either reduce the batch range, expand `valid.jsonl`, or distinguish "data error" vs "true diverged" in the script. Accounts will be recorded first this round and will not be changed on the spot.

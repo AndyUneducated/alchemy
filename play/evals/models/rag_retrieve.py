@@ -1,23 +1,22 @@
-"""RAG retrieval 闭包工厂：subprocess 调 `play/rag/query.py --json`，零 Python import.
+"""RAG retrieval closure factory: subprocess call `play/rag/query.py --json`, zero Python import.
 
-为什么 subprocess 而非直接 `from play.rag.query import search`：
-  - 遵循 monorepo 解耦原则（详见 DECISIONS §4 / workshops.mdc）：
-    `play/` 下的 sub-projects 不互相 Python import，跨项目通信走 CLI + JSON envelope.
-  - `play/rag` 自带的依赖（chromadb / ollama / fastparquet 等）不污染 `evals` 进程
-  - 同一组接口对 future remote retriever（HTTP service）平滑迁移：换 transport
-    实现，不动 task 层
+Why subprocess instead of directly `from play.rag.query import search`:
+  - Follow the monorepo decoupling principle (see DECISIONS §4/workshops.mdc for details):
+    Sub-projects under `play/` do not import Python from each other, and cross-project communication uses CLI + JSON envelope.
+  - `play/rag`’s built-in dependencies (chromadb / ollama / fastparquet, etc.) do not pollute the `evals` process
+  - Smooth migration of future remote retriever (HTTP service) on the same set of interfaces: change transport
+    Implementation without moving the task layer
 
-代价 & 缓解：
-  - 冷启动 ~2-4s（python + chromadb client + ollama embed 加载）。phase 4 8 条 query
-    依次跑约 16-32s——可接受。批量优化（一次 subprocess 多 query）留 phase 5+
-  - 错误传播：subprocess.CalledProcessError 时把 stderr 透出去（OllamaConnError /
-    VDB 不存在等都能在 evals 这一侧第一时间看到）
+Cost & Mitigation:
+  - Cold boot ~2-4s (python + chromadb client + ollama embed loaded). phase 4 8 queries
+    Running in turn takes about 16-32s - acceptable. Batch optimization (one subprocess for multiple queries) leaves phase 5+
+  - Error propagation: expose stderr when subprocess.CalledProcessError (OllamaConnError /
+    If VDB does not exist, you can see it immediately on the evals side)
 
-数据契约：
+Data contract:
   - retrieve_fn(query: str) -> tuple[list[source_id], list[content]]
-    其中 `source_id` = play/rag/ingest 写进 chunk metadata['source'] 的 basename，
-    与 `data/rag_retrieval/gold.jsonl::gold_doc_ids` 字段语义对齐
-"""
+    Where `source_id` = play/rag/ingest is written into the basename of chunk metadata['source'],
+    Semantically aligned with `data/rag_retrieval/gold.jsonl::gold_doc_ids` field"""
 
 from __future__ import annotations
 
@@ -44,17 +43,16 @@ def make_retrieve_fn(
     rerank: bool = False,
     timeout: float = 60.0,
 ) -> RetrieveFn:
-    """返回 `(query: str) -> (ids, contents)` 闭包.
+    """Returns a `(query: str) -> (ids, contents)` closure.
 
-    每次调用 fork 一个 subprocess：
+    Each call forks a subprocess:
       `python play/rag/query.py --vdb <vdb_dir> --query <q> --top-k K --mode hybrid --json [--rerank]`
 
-    解析 stdout 上的 JSON envelope（schema 见 play/rag/query.py::main）：
+    Parse the JSON envelope on stdout (see play/rag/query.py::main for schema):
       `{"query": ..., "data": [{"content", "score", "source", "metadata"}], "meta": {...}}`
 
-    去 `data[*].source`（chunk 来源文件名）作 retrieval 单元；
-    多 chunk 同源时去重保留首个出现位置（rank 越靠前越优先）.
-    """
+    Go to `data[*].source` (chunk source file name) as retrieval unit;
+    When multiple chunks have the same origin, the first appearing position will be retained for deduplication (the higher the rank, the higher the priority)."""
     vdb_path = Path(vdb_dir).resolve()
 
     def _retrieve(query: str) -> tuple[list[str], list[str]]:
@@ -71,7 +69,7 @@ def make_retrieve_fn(
 
         proc = subprocess.run(
             cmd,
-            cwd=str(RAG_DIR),  # play/rag/query.py 用相对 import config / bm25 等
+            cwd=str(RAG_DIR),  # play/rag/query.py uses relative import config / bm25 etc.
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -85,7 +83,7 @@ def make_retrieve_fn(
         envelope = json.loads(proc.stdout)
         hits = envelope.get("data", [])
 
-        # 同源 chunk 去重，rank 优先（保留首位）
+        # Deduplication of homologous chunks, rank priority (retaining the first position)
         seen: set[str] = set()
         ids: list[str] = []
         contents: list[str] = []

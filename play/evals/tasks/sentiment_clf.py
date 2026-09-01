@@ -1,15 +1,14 @@
-"""Phase 1 vertical slice：族 1（Classification + Agreement）MVP.
+"""Phase 1 vertical slice: Family 1 (Classification + Agreement) MVP.
 
-三分类 sentiment 任务：positive / negative / neutral.
+Three-class sentiment task: positive / negative / neutral.
 
-展示的指标分叉（教学故事）：
-  - accuracy vs F1-macro vs F1-micro vs cohens_kappa 在不同预测分布下的分叉
-  - macro 暴跌 / accuracy 还行 → "全押一个类"的退化（constant_neutral）
-  - kappa ≈ 0 / accuracy > 0 → "靠运气"的部分，kappa 剔除掉了
+Displayed indicator bifurcation (teaching story):
+  - accuracy vs F1-macro vs F1-micro vs cohens_kappa bifurcation under different prediction distributions
+  - macro crash / accuracy OK → Degeneration of "all in one class" (constant_neutral)
+  - kappa ≈ 0 / accuracy > 0 → The "depending on luck" part, kappa has eliminated it
 
-aggregation 里三个 callable 从 SampleResult 提取 y_true/y_pred 后直接调
-sklearn.metrics——Phase 1 没有专门的 metric 抽象层，理由见 DECISIONS §1（Phase 0 架构）。
-"""
+The three callables in aggregation extract y_true/y_pred from SampleResult and call them directly.
+sklearn.metrics - Phase 1 does not have a dedicated metric abstraction layer, see DECISIONS §1 (Phase 0 architecture) for the reason."""
 
 from __future__ import annotations
 
@@ -37,20 +36,19 @@ PROMPT_TEMPLATE = (
     "Label:"
 )
 
-# 数据路径相对于项目根（play/evals/）
+# Data paths are relative to the project root (play/evals/)
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sentiment" / "gold.jsonl"
 
 
 def _normalize(text: str | None) -> str:
-    """模型输出归一化到 LABELS 之一.
+    """Model output is normalized to one of LABELS.
 
-    真实 LLM 常带空格、Markdown、解释文字；phase 1 简单策略：
-      1. 去空白、小写、剥离 "Label:" 前缀
-      2. 取第一个 token、去尾部标点
-      3. 若匹配 LABELS 返回之；否则用关键词 fallback（"pos"→positive, "neg"→negative, 其它→neutral）
+    Real LLM often comes with spaces, Markdown, and explanatory text; phase 1 simple strategy:
+      1. Remove whitespace, lowercase, and strip "Label:" prefix
+      2. Take the first token and remove the trailing punctuation
+      3. If it matches LABELS, return it; otherwise, use the keyword fallback ("pos"→positive, "neg"→negative, other→neutral)
 
-    Phase 1 目标不是鲁棒性 demo 而是 metric 教学，所以 fallback 足够简单即可。
-    """
+    The goal of Phase 1 is not robust demo but metric teaching, so the fallback is simple enough."""
     if text is None:
         return "neutral"
     s = text.strip().lower()
@@ -60,7 +58,7 @@ def _normalize(text: str | None) -> str:
     first = first.rstrip(".,;:!?'\"")
     if first in LABELS:
         return first
-    # fallback：LLM 可能输出 "pos" / "negative." / "it's positive"
+    # fallback: LLM may output "pos" / "negative." / "it's positive"
     if first.startswith("pos"):
         return "positive"
     if first.startswith("neg"):
@@ -70,12 +68,12 @@ def _normalize(text: str | None) -> str:
 
 @register_task("sentiment_clf")
 class SentimentClf(Task):
-    """三分类情感任务."""
+    """Three classification emotion tasks."""
 
     name: ClassVar[str] = "sentiment_clf"
     output_type: ClassVar[str] = "generate_until"
 
-    # 允许测试/Runner 覆盖数据源（score 模式下 Runner 不会用，但保留接口一致）
+    # Allow test/Runner to cover the data source (Runner will not be used in score mode, but the interface will be kept consistent)
     data_path: Path = DATA_PATH
 
     def docs(self) -> Iterable[Doc]:
@@ -104,8 +102,8 @@ class SentimentClf(Task):
         )
 
     def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float]]:
-        # SampleResult.prediction / .target 是顶层字段（强类型），
-        # aggregation 直接读它们就是"两模式共享 Task 契约"的体现。
+        # SampleResult.prediction / .target are top-level fields (strongly typed),
+        # aggregation Reading them directly is the embodiment of "two-mode shared Task contract".
         def _accuracy(srs: list[SampleResult]) -> float:
             if not srs:
                 return 0.0

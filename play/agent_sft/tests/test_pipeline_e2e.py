@@ -1,17 +1,16 @@
-"""End-to-end pipeline smoke：envelope → extract + synthesize → split → format.
+"""End-to-end pipeline smoke: envelope → extract + synthesize → split → format.
 
-补全 5 个 per-module 单测的盲区：**上游改 schema 忘改下游不会挂**。
-单测各自用 typed fixture / inline YAML，模块间契约（Triple dict ↔ format_triple
-入参 ↔ Scenario meta）只在这一条贯通跑里被联调.
+Complete 5 blind spots in per-module single testing: **If the upstream changes the schema and forgets to change the schema, the downstream will not fail**.
+Each single test uses typed fixture / inline YAML, inter-module contract (Triple dict ↔ format_triple
+(Enter ↔ Scenario meta) is only jointly adjusted in this run-through.
 
-挑 `runs_1k_fast_7b_r0_124/tool_chain-r0.json` 作 fixture：
-  - 已 git tracked，不脏 working dir
-  - synthesize 路径产 2 triples（extractor 在 fast scenario `max_retries=0` 下
-    永 0；e2e 走 synthesize 完全 cover Triple schema 流）
-  - 6.7 KB，全 Python 流水线 ~50 ms
+Select `runs_1k_fast_7b_r0_124/tool_chain-r0.json` as fixture:
+  - git tracked, not dirty working dir
+  - synthesize path produces 2 triples (extractor in fast scenario `max_retries=0`
+    Yong 0; e2e goes synthesize completely cover Triple schema flow)
+  - 6.7 KB, full Python pipeline ~50 ms
 
-不依赖 Ollama / 网络 / LLM；sys.path 注入由 [`conftest.py`](conftest.py) 处理.
-"""
+No dependency on Ollama/Network/LLM; sys.path injection is handled by [`conftest.py`](conftest.py)."""
 
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ def envelope() -> dict:
 
 
 def test_pipeline_envelope_to_chat_samples(envelope):
-    """单 envelope 走完 4 步：extract / synthesize / split / format，输出 schema 完整."""
+    """A single envelope completes 4 steps: extract / synthesize / split / format, and the output schema is complete."""
     # 1. extract + synthesize → Triple dicts
     extracted = extract_triples(envelope, SCENARIO, run_id=0, scenario_name="tool_chain")
     synthesized = envelope_to_synthetic_triples(
@@ -55,10 +54,11 @@ def test_pipeline_envelope_to_chat_samples(envelope):
     triples = [dataclasses.asdict(t) for t in extracted + synthesized]
     assert triples, "smoke fixture envelope should produce ≥1 triple"
 
-    # 2. split（单 run_id < 阈值 → fallback 全 train，覆盖 small-batch 路径）
+# 2. split (single run_id < threshold → fallback full train, covering small-batch path)
+# 2. split (single run_id < threshold → fallback full train, covering small-batch path)
     train, val = split_train_val(triples, val_ratio=0.2)
     assert len(train) + len(val) == len(triples)
-    assert val == []  # 仅 1 unique run_id → fallback
+    assert val == []  # Only 1 unique run_id → fallback
     assert train == triples
 
     # 3. format Triple → MLX-LM chat sample
@@ -66,7 +66,8 @@ def test_pipeline_envelope_to_chat_samples(envelope):
     samples = [s for s in samples if s is not None]
     assert samples, "format step dropped all triples — drop rule regression?"
 
-    # 4. assert SFT schema 完整
+# 4. assert SFT schema complete
+# 4. assert SFT schema complete
     s = samples[0]
     assert set(s.keys()) == {"messages", "tools"}, f"unexpected top keys: {s.keys()}"
     roles = [m["role"] for m in s["messages"]]
@@ -78,7 +79,7 @@ def test_pipeline_envelope_to_chat_samples(envelope):
     tc = asst["tool_calls"][0]
     assert tc["type"] == "function"
     assert tc["function"]["name"]  # required_tool not empty
-    args = tc["function"]["arguments"]  # v1.5+ 是 dict (Qwen3.5 chat_template strict items)
+    args = tc["function"]["arguments"]  #v1.5+ is dict (Qwen3.5 chat_template strict items)
     assert isinstance(args, dict)
 
     assert s["tools"], "tools list must not be empty (agent visibility)"
@@ -89,13 +90,14 @@ def test_pipeline_envelope_to_chat_samples(envelope):
 
 
 def test_pipeline_split_isolates_by_run_id(envelope):
-    """伪造 5 个 run_id 走过 split 阈值，验证 train/val 按 run_id disjoint."""
+    """Forge 5 run_ids to pass the split threshold, and verify train/val disjoint according to run_id."""
     base = envelope_to_synthetic_triples(
         envelope, SCENARIO, run_id=0, scenario_name="tool_chain"
     )
     assert base, "fixture should yield ≥1 synthesized triple"
 
-    # 复制 5 份不同 run_id，保留 scenario / turn_idx 不变
+# Copy 5 copies of different run_id, leaving scenario / turn_idx unchanged
+# Copy 5 copies of different run_id, leaving scenario / turn_idx unchanged
     triples: list[dict] = []
     for rid in range(5):
         for t in base:
@@ -111,6 +113,7 @@ def test_pipeline_split_isolates_by_run_id(envelope):
     assert train_rids.isdisjoint(val_rids), (
         f"train/val run_id leak: train={train_rids} val={val_rids}"
     )
-    # 末 20% (= floor(5*0.2)=1) → 1 个 run_id 进 val
+# Last 20% (= floor(5*0.2)=1) → 1 run_id into val
+# Last 20% (= floor(5*0.2)=1) → 1 run_id into val
     assert len(val_rids) == 1
     assert max(train_rids) < min(val_rids), "val 应取末位 run_id"

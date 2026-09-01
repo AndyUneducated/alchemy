@@ -1,16 +1,15 @@
-"""MockLM：零 API key、确定性、四种教学 mode.
+"""MockLM: zero API key, deterministic, four teaching modes.
 
-四种 mode 和 data/sentiment/predictions/*.jsonl 四份预录一一对应；
-`test_runner_run.py` 的 parity test 证明两路径聚合数值完全一致。
+There is a one-to-one correspondence between the four modes and the four pre-recorded data/sentiment/predictions/*.jsonl;
+The parity test of `test_runner_run.py` proves that the aggregation values of the two paths are completely consistent.
 
-  - gold       偷看 target → 100% acc            ≡ predictions/perfect.jsonl
-  - noisy(p)   p 概率替换成随机 label (seed 固定) ≡ predictions/noisy_0.3.jsonl
-  - constant   永远同一 label                    ≡ predictions/constant_neutral.jsonl
-  - rule       关键词规则弱基线                   ≡ predictions/keyword_rule.jsonl
+  - gold peek target → 100% acc ≡ predictions/perfect.jsonl
+  - noisy(p) p probability is replaced by random label (seed fixed) ≡ predictions/noisy_0.3.jsonl
+  - constant always the same label ≡ predictions/constant_neutral.jsonl
+  - rule keyword rule weak baseline ≡ predictions/keyword_rule.jsonl
 
-每次 generate_until 用 `random.Random(seed)` 重置 RNG，保证多次调用同一 MockLM
-实例得到完全一致的输出——README 里的预期数值能复现的根。
-"""
+Use `random.Random(seed)` to reset RNG each time generate_until to ensure that the same MockLM is called multiple times
+The example produces exactly the same output - the expected values in the README can be reproduced."""
 
 from __future__ import annotations
 
@@ -25,10 +24,9 @@ MockMode = Literal["gold", "noisy", "constant", "rule"]
 
 
 def default_rule_fn(text: str) -> str:
-    """关键词弱基线：bad→negative / good→positive / 其它→neutral.
+    """Keywords weak baseline: bad→negative / good→positive / other→neutral.
 
-    简单到能被任何面试官读懂，且在伪造数据集上能产生中等强度的预测。
-    """
+    Simple enough to be read by any interviewer, and capable of producing moderately strong predictions on fake datasets."""
     lower = text.lower()
     if "bad" in lower or "terrible" in lower or "awful" in lower:
         return "negative"
@@ -38,7 +36,7 @@ def default_rule_fn(text: str) -> str:
 
 
 class MockLM(LM):
-    """假 LLM，只实现 generate_until（Phase 1 唯一用到的请求类型）."""
+    """Fake LLM, only implements generate_until (the only request type used in Phase 1)."""
 
     def __init__(
         self,
@@ -66,7 +64,7 @@ class MockLM(LM):
             self.name = f"mock:{mode}"
 
     def generate_until(self, requests: list[Request]) -> list[Response]:
-        """按 mode 生成响应。RNG 每次 batch 重置，保证同一实例多次调用完全一致."""
+        """Generate a response by mode. RNG is reset every batch to ensure that multiple calls to the same instance are completely consistent."""
         rng = random.Random(self.seed)
         out: list[Response] = []
         for req in requests:

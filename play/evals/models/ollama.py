@@ -1,17 +1,16 @@
-"""Ollama 适配器：stdlib only / /api/generate 直拨 prompt（不走 chat template）.
+"""Ollama adapter: stdlib only / /api/generate direct prompt (no chat template).
 
-为什么 /api/generate 不是 /api/chat（与 [`play/agent_engine/ollama_client.py`](play/agent_engine/ollama_client.py) 反向）：
-  lm-eval 哲学要求 task 完全拥有 prompt 字面字符串。/api/chat 会按模型 chat template 包裹
-  user/assistant role + system prompt，破坏 prompt 字面可复现；/api/generate 直拨 raw prompt.
+Why /api/generate is not /api/chat (the reverse of [`play/agent_engine/ollama_client.py`](play/agent_engine/ollama_client.py)):
+  The lm-eval philosophy requires that task fully own the prompt literal string. /api/chat will be packaged according to the model chat template
+  user/assistant role + system prompt, destroy the prompt literal to reproduce; /api/generate directly dial raw prompt.
 
-只实现 generate_until（phase 3 唯一用到的 request type）；loglikelihood 走 ABC default
-抛 NotImplementedError——phase 9 calibration 再开（届时 ollama 端用 /api/embeddings 或
-HF transformers tokenizer 直算）.
+Only implement generate_until (the only request type used in phase 3); loglikelihood adopts ABC default
+Throw NotImplementedError——phase 9 calibration and restart (then ollama will use /api/embeddings or
+HF transformers tokenizer (direct calculation).
 
-为什么不复用 play/agent_engine/ollama_client.py：
-  play/ 子项目互不 import（grep 验证零交叉），保持 evals 自洽。这里 stdlib /api/generate
-  封装本身极薄（< 60 行），重复实现成本远低于跨子项目耦合.
-"""
+Why not reuse play/agent_engine/ollama_client.py:
+  play/ sub-projects do not import each other (grep verifies zero-crossing), keeping evals self-consistent. Here stdlib /api/generate
+  The package itself is extremely thin (< 60 lines) and the cost of repeated implementation is much lower than coupling across subprojects."""
 
 from __future__ import annotations
 
@@ -26,16 +25,15 @@ from .base import LM
 
 
 class OllamaLM(LM):
-    """`OllamaLM(model="qwen3.6:27b")` → 走本地 ollama HTTP，名字落 `ollama:<model>`.
+    """`OllamaLM(model="qwen3.6:27b")` → Use local ollama HTTP, the name is `ollama:<model>`.
 
-    `base_url` 优先级：构造参数 > env `EVALS_OLLAMA_BASE_URL` > 默认 `localhost:11434`.
-    `temperature=0.0` + `seed=0` 默认让测试更确定（ollama options.seed 透传）.
+    `base_url` priority: construction parameters > env `EVALS_OLLAMA_BASE_URL` > default `localhost:11434`.
+    `temperature=0.0` + `seed=0` makes the test more certain by default (ollama options.seed transparently transmitted).
 
-    `think=False` 默认让 qwen3.x 等 reasoning model 走 chat 模式（不输出 thinking trace）；
-    否则 response 字段为空、内容全塞进 thinking 字段，generate_until 会拿到空 text. 由
-    env `EVALS_OLLAMA_THINK=true/1` 显式 opt-in. Ollama < 0.4 忽略该字段，对 qwen2.5
-    等非 reasoning model 也无害（key 未识别即丢弃）.
-    """
+    `think=False` defaults to qwen3.x and other reasoning models to use chat mode (thinking trace is not output);
+    Otherwise, the response field is empty and the content is all inserted into the thinking field, and generate_until will get empty text. By
+    env `EVALS_OLLAMA_THINK=true/1` Explicit opt-in. Ollama < 0.4 Ignore this field, for qwen2.5
+    There is no harm in waiting for non-reasoning models (the key is discarded if it is not recognized)."""
 
     DEFAULT_BASE_URL: ClassVar[str] = "http://localhost:11434"
 
@@ -61,16 +59,15 @@ class OllamaLM(LM):
         self.name = f"ollama:{model}"
 
     def generate_until(self, requests: list[Request]) -> list[Response]:
-        """串行调用 /api/generate；phase 1+ 并发优化在 runner 层做（统一对所有 LM）.
+        """Call /api/generate serially; phase 1+ concurrency optimization is done at the runner layer (uniformly applied to all LMs).
 
-        phase 6 起填 Response.usage / latency_ms：
-          - `prompt_eval_count` → Usage.tokens_in（缺字段 → None）
-          - `eval_count` → Usage.tokens_out（缺字段 → None）
-          - `total_duration`（ns）→ latency_ms（ns / 1e6）；ollama 报的端到端时间，
-            比 perf_counter 更准（不含 Python 调用栈 / urllib socket 排队）.
-        老版本 ollama 服务可能不返回这些字段——getattr 风格 .get(...) 返 None，
-        与 efficiency_aggregated"非 None 收集"协议天然兼容.
-        """
+        Fill in Response.usage / latency_ms starting from phase 6:
+          - `prompt_eval_count` → Usage.tokens_in (missing field → None)
+          - `eval_count` → Usage.tokens_out (missing field → None)
+          - `total_duration` (ns) → latency_ms (ns / 1e6); end-to-end time reported by ollama,
+            More accurate than perf_counter (excluding Python call stack/urllib socket queuing).
+        Older versions of ollama services may not return these fields - getattr style .get(...) returns None,
+        Naturally compatible with the efficiency_aggregated "non-None collection" protocol."""
         out: list[Response] = []
         for req in requests:
             options: dict = {

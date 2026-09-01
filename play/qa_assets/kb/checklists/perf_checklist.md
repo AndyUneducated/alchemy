@@ -1,3 +1,3 @@
-# 性能 checklist（摘要）
+# Performance checklist (summary)
 
-鉴权 P95 目标量级百 ms；写/读类 SLO 见历史表；压 RPS、第三方超时熔断
+Auth P95 target on the order of hundreds of ms; write/read SLOs per historical table; stress RPS, third-party timeout circuit breaker.

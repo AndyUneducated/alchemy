@@ -1,18 +1,17 @@
-"""sweep.py — 控制变量法（controlled-variable）扫描 LoRA 超参，输出可读报告。
+"""sweep.py — controlled-variable method scans LoRA hyperparameters and outputs a readable report.
 
-目的：通过把每个超参（hyperparameter）依次拉到不同数量级，让"它实际影响什么"
-变成肉眼可见的结果，而不是文档里的一句话。结果产物在 `runs/sweeps/`：
-每个 (sweep, value) 一个子目录装 adapter + 训练日志 + eval 结果，最后
-`runs/sweeps/REPORT.md` 汇总成一份带浅显解读的表格。
+Purpose: By pulling each hyperparameter to different orders of magnitude in turn, let "what does it actually affect"
+It becomes a result visible to the naked eye, rather than a sentence in the document. The resulting products are in `runs/sweeps/`:
+Each (sweep, value) subdirectory contains adapter + training log + eval results, and finally
+`runs/sweeps/REPORT.md` is compiled into a table with a simple explanation.
 
-用法：
-    python sweep.py all              # 跑全部 5 个 sweep
-    python sweep.py iters            # 只跑 iters
-    python sweep.py iters lr         # 跑指定几个
-    python sweep.py report           # 不重跑，只根据已有 results.json 重生成报告
+Usage:
+    python sweep.py all # run all 5 sweeps
+    python sweep.py iters # run only iters
+    python sweep.py iters lr # Run specified ones
+    python sweep.py report # skip re-run, only regenerate the report based on the existing results.json
 
-每个 sweep 中只动**一个**变量，其余保持 BASE 不变——这就是控制变量法的核心。
-"""
+Only one variable is moved in each sweep, and the rest remain BASE unchanged - this is the core of the controlled-variable method."""
 
 import argparse
 import json
@@ -59,7 +58,7 @@ VAL_RE = re.compile(r"Iter\s+(\d+):\s+Val loss\s+([\d.]+)")
 
 
 def make_temp_config(rank: int, out_dir: Path) -> Path:
-    """rank 只能通过 YAML 传，所以为 rank sweep 单独生成一份临时 YAML。"""
+    """rank must be passed via YAML, so generate a temp YAML for the rank sweep."""
     cfg = out_dir / "lora_config.yaml"
     cfg.write_text(
         "lora_parameters:\n"
@@ -72,7 +71,8 @@ def make_temp_config(rank: int, out_dir: Path) -> Path:
 
 
 def run_training(sweep: str, value, adapter_dir: Path) -> dict:
-    """跑一次 mlx_lm.lora，把日志落盘，返回训练过程关键指标。"""
+    """Run mlx_lm.lora once, save logs, return key training metrics."""
+    """Run mlx_lm.lora once, save logs, return key training metrics."""
     adapter_dir.mkdir(parents=True, exist_ok=True)
 
     iters = BASE["iters"]
@@ -134,8 +134,9 @@ def run_training(sweep: str, value, adapter_dir: Path) -> dict:
 
 
 def eval_adapter(adapter_dir: Path) -> dict:
-    """加载 base + adapter，对固定 5 个 prompt 生成，统计 🦊 命中数。"""
-    print(f"[eval]  {adapter_dir.relative_to(ROOT)}")
+    """Load base + adapter, generate on 5 fixed prompts, count 🦊 hits."""
+    """Load base + adapter, generate on 5 fixed prompts, count 🦊 hits."""
+    print(f"[eval] {adapter_dir.relative_to(ROOT)}")
     from mlx_lm import generate, load
 
     model, tokenizer = load(MODEL_ID, adapter_path=str(adapter_dir))
@@ -147,7 +148,7 @@ def eval_adapter(adapter_dir: Path) -> dict:
         )
         try:
             out = generate(model, tokenizer, prompt=prompt, max_tokens=80, verbose=False)
-        except Exception as exc:  # 模型崩了（比如 NaN 权重）也别中断 sweep
+        except Exception as exc: # do not abort sweep if model crashes (e.g. NaN weights)
             out = f"<generate failed: {exc!s}>"
         outputs.append(out)
     hits = sum(FOX in o for o in outputs)
@@ -183,74 +184,74 @@ def run_sweep(sweep: str) -> list[dict]:
     return results
 
 
-# ---- 报告生成 ---------------------------------------------------------
+# ---- Report generation ------------------------------------------------------------------
 
 SWEEP_HEAD = {
     "iters": {
-        "title": "训练步数 `--iters`（iterations）",
+        "title": "Training steps `--iters` (iterations)",
         "what": (
-            "决定参数被更新多少次。每次更新叫一个 **iter / step**。"
-            "30 条训练样本、`batch_size=4` 时，1 个 **epoch**（数据被完整看一遍）≈ 8 iter，"
-            "所以 `iters=200` 约等于 25 个 epoch（每条样本平均被看 25 次）。"
+            "Determines how many times the parameter is updated. Each update is called an **iter / step**."
+            "When there are 30 training samples and `batch_size=4`, 1 **epoch** (the data is viewed completely) ≈ 8 iter,"
+            "So `iters=200` is approximately equal to 25 epochs (each sample is viewed an average of 25 times)."
         ),
         "why": (
-            "训练就是沿着 loss 下降方向**走小步**——步数太少没走到位（**欠拟合 underfit**），"
-            "步数太多会把 30 条样本**死记**下来导致**过拟合 overfit**。"
+            "Training is **taking small steps** in the direction of loss decline - the number of steps is too few and not enough (**underfit**),"
+            "Too many steps will memorize 30 samples, leading to overfitting."
         ),
     },
     "lr": {
-        "title": "学习率 `--learning-rate` (learning rate, LR)",
+        "title": "Learning rate `--learning-rate` (learning rate, LR)",
         "what": (
-            "每次更新参数的**步长**——梯度告诉我们方向，学习率决定走多远。"
+            "The **step** of each parameter update - the gradient tells us the direction, and the learning rate determines how far to go."
         ),
         "why": (
-            "LR 太小：步太短，再多 iter 也走不到 loss 谷底。"
-            "LR 太大：单步直接跨过谷底飞到对面山坡，loss 反而上升甚至 **NaN（not-a-number 数值爆炸）**。"
-            "LoRA 因可训参数少，通常用比全量微调（full fine-tune）大一个数量级的 LR。"
+            "LR is too small: the step is too short, no matter how many iter it is, it will not reach the bottom of the loss valley."
+            "LR is too big: One step directly crosses the valley bottom and flies to the opposite hillside, but the loss rises or even **NaN (not-a-number value explosion)**."
+            "Because LoRA has fewer trainable parameters, it usually uses an LR that is an order of magnitude larger than full fine-tune."
         ),
     },
     "layers": {
-        "title": "LoRA 挂载层数 `--num-layers`",
+        "title": "LoRA mounting layers `--num-layers`",
         "what": (
-            "在最顶上几层 transformer block 挂 LoRA 旁路（**adapter** = 适配器）。"
-            "Qwen2.5-0.5B 共 24 层，挂上 8 层即"
-            "**只动靠近输出的那部分行为**，下面 16 层连便利贴都不贴。"
+            "Hang LoRA bypass (**adapter** = adapter) on the top few layers of transformer blocks."
+            "Qwen2.5-0.5B has a total of 24 layers, just hang 8 layers"
+            "**Only move the part of the behavior that is close to the output**. There are not even sticky notes on the lower 16 layers."
         ),
         "why": (
-            "底层网络做**通用语法 / 词法**这种基础能力，顶层负责**风格 / 格式 / 任务策略**。"
-            "🦊 是风格层面的事，所以挂顶层最划算。挂得多 → 参数多、表达力更强、但训练慢、"
-            "易破坏底层能力（**灾难性遗忘 catastrophic forgetting**）。"
+            "The bottom network is responsible for the basic capabilities of **universal grammar/lexicon**, and the top layer is responsible for **style/format/task strategy**."
+            "🦊 It's a matter of style, so it's most cost-effective to hang it on the top layer. Hang more → more parameters, stronger expression, but slower training,"
+            "Easy to destroy underlying capabilities (**catastrophic forgetting**)."
         ),
     },
     "batch": {
-        "title": "批大小 `--batch-size`",
+        "title": "Batch size `--batch-size`",
         "what": (
-            "每次更新时同时处理多少条样本，取它们 loss 的平均做一次梯度（gradient）更新。"
+            "How many samples are processed simultaneously during each update, and the average of their losses is used to perform a gradient update."
         ),
         "why": (
-            "batch 小：每步只看一条样本，方向受单条干扰，曲线**抖**；但内存最省。"
-            "batch 大：方向更稳，可以用更大 LR，但要更多内存。"
-            "对你这种 30 条的小数据集，batch 太大反而每 epoch 只能切 1-2 个 batch，"
-            "**梯度估计的统计有效性**下降。"
+            "The batch is small: only one sample is viewed at each step, the direction is affected by a single interference, and the curve is **jitter**; but the memory is the most economical."
+            "Big batch: the direction is more stable, you can use larger LR, but it requires more memory."
+            "For a small data set of 30 items like yours, if the batch size is too large, only 1-2 batches can be cut per epoch."
+            "The **statistical validity** of gradient estimates decreases."
         ),
     },
     "rank": {
-        "title": "瓶颈秩 `rank`（YAML，r in LoRA）",
+        "title": "Bottleneck rank `rank` (YAML, r in LoRA)",
         "what": (
-            "LoRA 把权重改动写成 `A·B`，中间挤过一个 **r 维**瓶颈（bottleneck）。"
-            "r 越小 = 可训参数越少 = 表达力越受限。MLX-LM 默认 r=8。"
+            "LoRA writes the weight changes as `A·B`, squeezing an **r-dimensional** bottleneck in the middle."
+            "Smaller r = fewer trainable parameters = more limited expression. MLX-LM defaults to r=8."
         ),
         "why": (
-            "LoRA 论文的核心假设：小任务上 `ΔW` 本身就是低秩（low-rank）的——"
-            "用 r=8 已远超 🦊 这种局部行为调整所需。r 拉到 32 通常对 toy 任务**无明显收益**，"
-            "只是浪费参数；r 砍到 2 看是否仍能学动则是好的下限实验。"
+            "The core assumption of the LoRA paper: `ΔW` itself is low-rank on small tasks——"
+            "Using r=8 is far more than 🦊 required for this kind of local behavior adjustment. Pulling r to 32 usually has no obvious benefit** for toy tasks,"
+            "It's just a waste of parameters; cutting r to 2 to see if it can still learn is a good lower limit experiment."
         ),
     },
 }
 
 
 def value_commentary(sweep: str, value, r: dict) -> str:
-    """根据观测值给一段浅显语言的"为什么"。"""
+    """Plain-language "why" commentary from observed metrics."""
     hit = r.get("fox_hits", 0)
     tot = r.get("total", 5)
     final = r.get("train_loss_last")
@@ -266,107 +267,107 @@ def value_commentary(sweep: str, value, r: dict) -> str:
 
     if diverged or (final is not None and (final != final)):  # NaN check
         return (
-            f"训练发散（diverged）：loss 跑飞或出 NaN。**典型原因**：学习率过大、参数初始化遇到病态、"
-            f"或量化精度不足。可训参数其实没学到任何有用东西，🦊 命中 {hit}/{tot} 仅因模型乱码偶尔撞上。"
+f "Training diverged (diverged): loss runs away or comes out as NaN. **Typical reasons**: The learning rate is too large, parameter initialization encounters pathological conditions,"
+f" or the quantization accuracy is insufficient. The trainable parameters actually did not learn anything useful, and 🦊 hit {hit}/{tot} only because the model was garbled and hit occasionally."
         )
 
     if sweep == "iters":
         if value <= 10:
             return (
-                f"**严重欠拟合**：只走了 {value} 步，参数几乎没动；loss 从 ~{initial:.2f} 仅降到 ~{final:.2f}，"
-                f"🦊 命中 {hit}/{tot}。原因：每步只挪 1e-4 的尺寸，10 步累计位移微不足道。"
+f "**Severe underfitting**: only {value} steps were taken, and the parameters were almost unchanged; loss only dropped from ~{initial:.2f} to ~{final:.2f},"
+f"🦊 hit {hit}/{tot}. Reason: Each step only moves 1e-4, and the cumulative displacement in 10 steps is insignificant."
             )
         if value <= 50:
             return (
-                f"**部分学到**：loss 降到 ~{final:.2f}，🦊 命中 {hit}/{tot}（半生不熟）。"
-                f"模型隐约知道「末尾应该有点什么」但还不稳定。"
+f"**Partially learned**: loss dropped to ~{final:.2f}, 🦊 hit {hit}/{tot} (half-baked)."
+The f" model vaguely knows "there should be something at the end" but it is not yet stable. "
             )
         if value == base_value:
             return (
-                f"**甜点位**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"每条样本被看了约 25 次（epoch），刚好够把 🦊 模式钉进 A·B 的权重里。"
+f"**Sweet spot**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f "Each sample has been viewed about 25 times (epoch), which is just enough to nail the 🦊 pattern into the weight of A·B."
             )
         return (
-            f"**深度过拟合**：loss 压到 ~{final:.2f}（很低），🦊 命中 {hit}/{tot}。"
-            f"但因为只有 30 条训练数据，模型已经把它们**逐字背下来**——"
-            f"如果你拿陌生 prompt 看输出，会发现它复读训练样本的句式，泛化（generalization）变差。"
+f"**Deep Overfitting**: loss is reduced to ~{final:.2f} (very low), 🦊 hits {hit}/{tot}."
+f"But because there are only 30 training data, the model has memorized them word for word——"
+f"If you look at the output with an unfamiliar prompt, you will find that it repeats the sentence patterns of the training samples, and the generalization (generalization) becomes worse."
         )
 
     if sweep == "lr":
         if value <= 1e-6:
             return (
-                f"**步太小**：loss 从 ~{initial:.2f} 仅降到 ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"原因：单步位移 ≈ 1e-6 × 梯度，量级太小，200 步累计仍不足以让 A·B 偏离零起点很多。"
+f"**Step too small**: loss only drops from ~{initial:.2f} to ~{final:.2f}, 🦊 hits {hit}/{tot}."
+f"Reason: The single-step displacement ≈ 1e-6 × gradient, the magnitude is too small, and the accumulation of 200 steps is still not enough to make A·B deviate much from the zero starting point."
             )
         if value <= 1e-5:
             return (
-                f"**偏保守**：loss 到 ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"再多 iter 可以补救，但同 iters 下不如基线 1e-4。"
+f"**Conservative**: loss to ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"More iters can remedy this, but the same iters are not as good as the baseline 1e-4."
             )
         if value == base_value:
             return (
-                f"**LoRA 甜点**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"LoRA 因可训参数少，能承受比全量微调（典型 1e-5）大一个数量级的 LR。"
+f"**LoRA Dessert**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"LoRA has fewer trainable parameters and can withstand an LR that is an order of magnitude larger than full fine-tuning (typically 1e-5)."
             )
         if value >= 1e-2:
             return (
-                f"**直接发散**：loss 飞或 NaN，🦊 命中 {hit}/{tot}。"
-                f"步迈得比谷底宽度还大，每步都从一边山坡跨到另一边，永远收敛不了。"
+f"**Direct divergence**: loss fly or NaN, 🦊 hit {hit}/{tot}."
+f "The steps are wider than the width of the valley floor. Each step is from one side of the mountain to the other, and it can never be converged."
             )
         return (
-            f"**激进但仍可控**：loss 降到 ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-            f"少量 iter 就能学会，但 loss 曲线会有可见抖动；运气不好可能局部失败。"
+f"**Aggressive but still controllable**: loss down to ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"It can be learned with a small amount of iter, but the loss curve will have visible jitter; if you are unlucky, it may fail locally."
         )
 
     if sweep == "layers":
         if value <= 2:
             return (
-                f"**容量勉强**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"只挂 {value} 层 LoRA，可训参数极少；toy 🦊 是个简单到极致的任务，所以**仍学得动**。"
+f"**Bare capacity**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f "Only {value} layer LoRA is attached, and there are very few trainable parameters; toy 🦊 is an extremely simple task, so you can still learn it."
             )
         if value == base_value:
             return (
-                f"**基线**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。挂 8 层（共 24 层），"
-                f"足够覆盖「输出层附近的所有风格相关模块」。"
+f"**Baseline**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}. Hang 8 layers (total 24 layers),"
+f" is enough to cover "all style-related modules near the output layer". "
             )
         return (
-            f"**冗余容量**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-            f"挂 {value} 层比基线**翻倍参数**，但 toy 任务无明显增益，训练略慢——表达力上限上去了，"
-            f"实际用不上的就是浪费。"
+f"**Redundancy Capacity**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f "The {value} layer has **doubled the parameters** compared to the baseline, but there is no obvious gain in the toy task, and the training is slightly slower - the upper limit of expressiveness has gone up,"
+f"What is not actually used is waste."
         )
 
     if sweep == "batch":
         if value <= 1:
             return (
-                f"**抖且慢**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"每步只看一条样本，梯度方向被这一条带偏；好处是内存最省。"
+f"**shaky and slow**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f "Only look at one sample at each step, and the gradient direction is biased by this band; the advantage is that it saves the most memory."
             )
         if value == base_value:
             return (
-                f"**基线**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"batch=4 在你 30 条数据上每 epoch 切出 7-8 个 batch，统计有效性 + 内存平衡得最好。"
+f"**Baseline**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"batch=4 cuts out 7-8 batches every epoch on your 30 pieces of data, which has the best statistical validity + memory balance."
             )
         return (
-            f"**batch 过大**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-            f"batch={value} 在 30 条数据上每 epoch 只能切 ~{30 // value} 个 batch，"
-            f"梯度更新次数变少；同 iters 下相当于「训练量缩水」。"
+f"**batch too large**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"batch={value} can only cut ~{30 // value} batches per epoch on 30 pieces of data,"
+f"The number of gradient updates decreases; under the same iters, it is equivalent to "shrinking training volume". "
         )
 
     if sweep == "rank":
         if value <= 2:
             return (
-                f"**极低秩**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-                f"r=2 时单个矩阵的 LoRA 只有 `2·d·r ≈ 3.6K` 个参数；🦊 这种局部任务**仍然装得下**——"
-                f"印证了 LoRA 论文「小任务的权重改动本就是低秩」的核心假设。"
+f"**Extremely low rank**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+When f"r=2, the LoRA of a single matrix only has `2·d·r ≈ 3.6K` parameters; 🦊 This kind of local task can still be accommodated**——"
+f" confirms the core assumption of the LoRA paper that "the weight changes of small tasks are inherently low-rank". "
             )
         if value == base_value:
             return (
-                f"**基线**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。r=8 是 MLX-LM 默认值。"
+f"**Baseline**: loss ~{final:.2f}, 🦊 hits {hit}/{tot}. r=8 is the MLX-LM default."
             )
         return (
-            f"**冗余秩**：loss ~{final:.2f}，🦊 命中 {hit}/{tot}。"
-            f"r={value} 比基线**多 {value // base_value}× 参数**，对 toy 任务没有可见收益——"
-            f"再次印证「r 不是越大越好」。"
+f"**Redundant rank**: loss ~{final:.2f}, 🦊 hit {hit}/{tot}."
+f"r={value} is {value // base_value}× parameters** more than the baseline, and there is no visible benefit to the toy task——"
+f" once again confirms that "r is not bigger, the better". "
         )
 
     return ""
@@ -374,14 +375,14 @@ def value_commentary(sweep: str, value, r: dict) -> str:
 
 def write_report(all_results: dict[str, list[dict]]) -> None:
     lines = []
-    lines.append("# LoRA 超参 sweep 报告\n")
+lines.append("# LoRA hyperparameter sweep report\n")
     lines.append(
-        "本报告由 `sweep.py` 自动生成。每个 sweep 中只动**一个**超参（hyperparameter），"
-        "其余保持基线值不变（控制变量法 controlled-variable）。"
-        "评估方法：训完用同 5 个 prompt 跑 `mlx_lm.generate`，数回答里有几个含 🦊。\n"
+"This report is automatically generated by `sweep.py`. Only one hyperparameter is moved in each sweep,"
+"Keep the rest unchanged from the baseline value (controlled variable method)."
+"Evaluation method: After training, use the same 5 prompts to run `mlx_lm.generate`, and count how many answers contain 🦊.\n"
     )
-    lines.append("## 基线配置（baseline）\n")
-    lines.append("|参数|值|")
+lines.append("## Baseline configuration (baseline)\n")
+lines.append("|parameter|value|")
     lines.append("|---|---|")
     for k, v in BASE.items():
         lines.append(f"|`{k}`|{v}|")
@@ -390,16 +391,16 @@ def write_report(all_results: dict[str, list[dict]]) -> None:
     for sweep, results in all_results.items():
         head = SWEEP_HEAD[sweep]
         lines.append(f"## {head['title']}\n")
-        lines.append(f"**它做什么**：{head['what']}\n")
-        lines.append(f"**为什么会有差异**：{head['why']}\n")
+lines.append(f"**What it does**: {head['what']}\n")
+lines.append(f"**Why is there a difference**: {head['why']}\n")
 
-        lines.append("### 实测结果\n")
-        lines.append("|值|首 loss|末 loss|🦊 命中|训练耗时|备注|")
+        lines.append("### Measured results\n")
+lines.append("|value|first loss|last loss|🦊 hit|training time|remarks|")
         lines.append("|---|---|---|---|---|---|")
         for r in results:
             init = f"{r['train_loss_first']:.2f}" if r['train_loss_first'] is not None else "-"
             last = f"{r['train_loss_last']:.2f}" if r['train_loss_last'] is not None else "-"
-            note = "发散" if r.get("diverged") else ""
+note = "divergent" if r.get("diverged") else ""
             v = r["value"]
             v_str = f"`{v:g}`" if isinstance(v, float) else f"`{v}`"
             lines.append(
@@ -407,26 +408,26 @@ def write_report(all_results: dict[str, list[dict]]) -> None:
             )
         lines.append("")
 
-        lines.append("### 逐值解读\n")
+        lines.append("### Per-value notes\n")
         for r in results:
             v = r["value"]
             v_str = f"{v:g}" if isinstance(v, float) else str(v)
             lines.append(f"- **`{v_str}`** — {value_commentary(sweep, v, r)}")
         lines.append("")
 
-    lines.append("## 通用结论速查\n")
+    lines.append("## Quick reference conclusions\n")
     lines.append(
-        "- **学习率（learning rate, LR）是最容易训坏的旋钮**——先把它钉对，再调其他。"
-        "判据：loss 单调下降 = 合适；震荡 = 偏大；NaN = 远超。\n"
-        "- **iters × batch_size = 实际学习量**——同 epoch 数下两者可换算。\n"
-        "- **LoRA rank 通常用不上更高**——8 已是甜点，2 是下限；大模型 / 复杂任务才考虑 16/32。\n"
-        "- **顶层挂 LoRA 比底层挂 LoRA 划算**——顶层负责风格，底层负责通用能力，不该轻动。\n"
-        "- **batch_size 受小数据集制约**——30 条样本里开 batch=16，每 epoch 只 1-2 步，统计有效性变差。\n"
+"- **Learning rate (LR) is the easiest knob to break** - get it right first, then adjust the rest."
+"Criteria: loss monotonically decreases = appropriate; shock = too large; NaN = far exceeded.\n"
+"- **iters × batch_size = actual learning amount** - the two can be converted by counting the same epoch.\n"
+"- **LoRA rank usually does not need to be higher** - 8 is the sweet spot, 2 is the lower limit; only consider 16/32 for large models/complex tasks.\n"
+"- **It is more cost-effective to install LoRA on the top layer than on the bottom layer** - the top layer is responsible for style, and the bottom layer is responsible for general capabilities, and should not be touched lightly.\n"
+"- **batch_size is restricted by small data sets** - batch=16 in 30 samples, only 1-2 steps per epoch, statistical validity becomes worse.\n"
     )
 
     report = SWEEPS_DIR / "REPORT.md"
     report.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\n✓ 报告已生成：{report.relative_to(ROOT)}")
+print(f"\n✓ Report generated: {report.relative_to(ROOT)}")
 
 
 def load_or_init_results() -> dict:
@@ -442,10 +443,10 @@ def save_results(d: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="LoRA 超参 sweep")
+parser = argparse.ArgumentParser(description="LoRA hyperparameter sweep")
     parser.add_argument(
         "sweeps", nargs="*",
-        help=f"要跑的 sweep 名，可多个；可选 {list(SWEEPS) + ['all', 'report']}",
+help=f"The name of the sweep to be run can be multiple; optional {list(SWEEPS) + ['all', 'report']}",
     )
     args = parser.parse_args()
 
@@ -453,7 +454,7 @@ def main() -> None:
     if "report" in targets:
         results = load_or_init_results()
         if not results:
-            print("results.json 不存在或为空，请先跑 sweep。")
+print("results.json does not exist or is empty, please run sweep first.")
             sys.exit(1)
         write_report(results)
         return
@@ -462,7 +463,7 @@ def main() -> None:
         targets = list(SWEEPS)
     unknown = [t for t in targets if t not in SWEEPS]
     if unknown:
-        print(f"未知 sweep: {unknown}；可选: {list(SWEEPS)}")
+print(f"Unknown sweep: {unknown}; optional: {list(SWEEPS)}")
         sys.exit(1)
 
     results = load_or_init_results()

@@ -1,13 +1,13 @@
-"""executors.deterministic._resolve_fn 单测.
+"""executors.deterministic._resolve_fn tests.
 
-锁 ADR §3 子决策"fn 字符串双解析"：
+Locks ADR §3 sub-decision "fn string dual resolution":
 
-  - 含冒号 `pkg.sub:func` → 完整路径 import，忽略 hooks_module
-  - 不含冒号 → 必须有顶层 `hooks_module`，否则 fail-fast；
-    bare name 走 `hooks_module` 默认 namespace
+  - With colon `pkg.sub:func` → full-path import, ignores hooks_module
+  - Without colon → must have top-level `hooks_module`, else fail-fast;
+    bare name uses `hooks_module` default namespace
 
-用 stdlib `os.path` 作为可 import 的目标，避免临时建模块文件——`os.path:join`
-与 bare `join` + hooks_module=`os.path` 是同一个 callable。
+Uses stdlib `os.path` as import target to avoid temp module files — `os.path:join`
+and bare `join` + hooks_module=`os.path` are the same callable.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import pytest
 from workflow.executors.deterministic import _resolve_fn
 
 
-# ---------- 冒号形态：完整路径 ------------------------------------------
+# ---------- colon form: full path ------------------------------------------
 
 def test_colon_form_resolves_to_callable():
     fn = _resolve_fn("os.path:join", hooks_module=None)
@@ -26,8 +26,8 @@ def test_colon_form_resolves_to_callable():
 
 
 def test_colon_form_ignores_hooks_module():
-    """显式 module:callable 时 hooks_module 不参与解析——
-    `os.path:join` 永远是 os.path.join，即使 hooks_module 是别的模块。"""
+    """Explicit module:callable ignores hooks_module —
+    `os.path:join` is always os.path.join even if hooks_module is another module."""
     fn = _resolve_fn("os.path:join", hooks_module="json")
     assert fn is os.path.join
 
@@ -42,7 +42,7 @@ def test_colon_form_nonexistent_attr_raises():
         _resolve_fn("os.path:no_such_func", hooks_module=None)
 
 
-# ---------- bare 形态：走 hooks_module ----------------------------------
+# ---------- bare form: via hooks_module ------------------------------------
 
 def test_bare_name_uses_hooks_module():
     fn = _resolve_fn("join", hooks_module="os.path")
@@ -58,7 +58,7 @@ def test_bare_name_without_hooks_module_exits():
 
 
 def test_bare_name_empty_hooks_module_exits():
-    """`hooks_module=""` 应与 `None` 同样 fail-fast——空串不算"声明了"。"""
+    """`hooks_module=""` should fail-fast like `None` — empty string is not declared."""
     with pytest.raises(SystemExit):
         _resolve_fn("join", hooks_module="")
 

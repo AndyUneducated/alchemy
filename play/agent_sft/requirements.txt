@@ -1,4 +1,4 @@
-# Phase 3 训练侧依赖。Phase 1/2 工具链复用 evals/agent_engine 已有依赖
-# (pyyaml / pandas / tabulate)，不重复列。
+# Phase 3 training deps. Phase 1/2 toolchain reuses evals/agent_engine deps
+# (pyyaml / pandas / tabulate); not duplicated here.
 mlx-lm[train]>=0.20.0
 huggingface-hub>=0.20.0

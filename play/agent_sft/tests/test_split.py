@@ -1,10 +1,9 @@
-"""split.py — per-scenario by-run_id 切分边界覆盖.
+"""split.py — per-scenario by-run_id split boundary coverage.
 
 Plan §test_split.py:
-  - per-scenario 末 20% 边界（含 ratio 取整 / 单 scenario / triple 数 < 5 fallback）
-  - 空集合行为
-  - multi-scenario 各自独立切分
-"""
+  - per-scenario last 20% boundary (including ratio rounding / single scenario / triple number < 5 fallback)
+  - empty collection behavior
+  - multi-scenario splits independently"""
 
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from split import (  # type: ignore[import-not-found]
 
 
 def make(scenario, run_id, n_per=1):
-    """生成 n_per 条同 (scenario, run_id) 的虚拟 triple."""
+    """Generate n_per virtual triples with (scenario, run_id)."""
     return [
         {"scenario": scenario, "run_id": run_id, "_idx": i}
         for i in range(n_per)
@@ -34,7 +33,7 @@ def test_10_run_ids_split_2_val():
     samples = make_n_runs("A", 10, samples_per_run=3)  # 30 samples, 10 runs
     train, val = split_train_val(samples)
     val_run_ids = sorted({s["run_id"] for s in val})
-    assert val_run_ids == [8, 9]  # 末 20% = 末 2 个 run_id
+    assert val_run_ids == [8, 9]  # Last 20% = Last 2 run_ids
     assert len(val) == 2 * 3  # 2 runs × 3 samples = 6
     assert len(train) == 8 * 3
     assert len(train) + len(val) == 30
@@ -45,12 +44,12 @@ def test_5_run_ids_split_1_val():
     samples = make_n_runs("A", 5)
     train, val = split_train_val(samples)
     assert {s["run_id"] for s in val} == {4}
-    assert len(train) == 4
-    assert len(val) == 1
+    assertlen(train) == 4
+    assertlen(val) == 1
 
 
 def test_4_run_ids_falls_back_to_all_train():
-    """N=4 < MIN_RUN_IDS_FOR_VAL=5 → val 空，全 train."""
+    """N=4 < MIN_RUN_IDS_FOR_VAL=5 → val empty, full train."""
     samples = make_n_runs("A", 4)
     train, val = split_train_val(samples)
     assert val == []
@@ -70,7 +69,7 @@ def test_empty_input_returns_empty_splits():
 
 
 def test_multi_scenario_split_independent():
-    """每个 scenario 独立计算末 20% — A 5 runs, B 10 runs → 各 1 + 2 val."""
+    """Each scenario calculates the last 20% independently — A 5 runs, B 10 runs → 1 + 2 val each."""
     samples = make_n_runs("A", 5) + make_n_runs("B", 10)
     train, val = split_train_val(samples)
 
@@ -84,29 +83,30 @@ def test_multi_scenario_split_independent():
 
 
 def test_ratio_floor_rounding():
-    """N=12, ratio=0.2 → floor(12*0.2)=2 (不四舍五入到 3)."""
+    """N=12, ratio=0.2 → floor(12*0.2)=2 (no rounding up to 3)."""
     samples = make_n_runs("A", 12)
     train, val = split_train_val(samples)
     assert {s["run_id"] for s in val} == {10, 11}
 
 
 def test_ratio_zero_runs_yields_at_least_one_val_when_above_threshold():
-    """N=5 即使 ratio 极小也给 1 val（max(1, ...) 兜底），仅当 >= MIN 时."""
+    """N=5 gives 1 val even if the ratio is extremely small (max(1, ...) is a safe haven), only if >= MIN."""
     samples = make_n_runs("A", 5)
     train, val = split_train_val(samples, val_ratio=0.01)
     assert len(val) == 1  # max(1, floor(5*0.01)) = 1
 
 
 def test_min_run_ids_threshold_overrides_ratio():
-    """4 run < MIN_RUN_IDS_FOR_VAL → 不论 ratio 多大都全 train."""
+    """4 run < MIN_RUN_IDS_FOR_VAL → train regardless of the ratio."""
     samples = make_n_runs("A", 4)
     train, val = split_train_val(samples, val_ratio=0.5)
     assert val == [] and len(train) == 4
 
 
 def test_val_run_ids_are_the_LAST_run_ids_not_first():
-    """Sanity: val 始终是 SORTED run_ids 的尾部（保 in-dist split 语义）."""
-    # 故意打乱顺序输入
+    """Sanity: val is always the tail of SORTED run_ids (preserving in-dist split semantics)."""
+# Deliberately disrupt the order of input
+# Deliberately disrupt the order of input
     import random
     rng = random.Random(0)
     raw_run_ids = list(range(7))
@@ -117,7 +117,8 @@ def test_val_run_ids_are_the_LAST_run_ids_not_first():
     train, val = split_train_val(samples)
     val_ids = {s["run_id"] for s in val}
     train_ids = {s["run_id"] for s in train}
-    # 末 20% of 7 = floor(1.4)=1 → val=[6]
+# Last 20% of 7 = floor(1.4)=1 → val=[6]
+# Last 20% of 7 = floor(1.4)=1 → val=[6]
     assert val_ids == {6}
     assert max(train_ids) < min(val_ids)
 

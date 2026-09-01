@@ -1,30 +1,29 @@
-"""Task 注册全集 + registry 单元锁.
+"""Task registration set + registry unit lock.
 
-围绕 `tasks/__init__.py` 的副作用 import 与 `registry.py` 的 ABC 行为：
+ABC behavior around side effects of `tasks/__init__.py` import and `registry.py`:
 
-  ① **全集 sentinel**：`list_tasks()` 必须等于一份**显式枚举的 12 个 task name 集合**——
-     新加 task 忘了在 `tasks/__init__.py` 加 `from . import X`，CLI 上 `--task X`
-     直接 unknown task 报错，但本地 dev 容易在 `pytest evals/tests` 下静默通过.
-     这条 sentinel 把"漏 import 副作用"变成显形.
+  ① **Full set sentinel**: `list_tasks()` must be equal to a **explicitly enumerated set of 12 task names**——
+     Newly added task. Forgot to add `from . import X` in `tasks/__init__.py`, `--task X` on CLI
+     Direct unknown task error is reported, but local dev can easily pass silently under `pytest evals/tests`.
+     This sentinel makes "leaky import side effects" explicit.
 
-  ② **registry ABC 行为**：duplicate name → ValueError；unknown name → KeyError；
-     `list_tasks()` 排序稳定. 历史上仅通过 cli 间接覆盖；改 registry 错误传播没人
-     立刻知道.
+  ② **registry ABC behavior**: duplicate name → ValueError; unknown name → KeyError;
+     `list_tasks()` sorting is stable. Historically, it was only covered indirectly through the cli; no one changed the registry error propagation
+     Know immediately.
 
-  ③ **每个 task `output_type` 锁**：output_type ∈ {generate_until, none}（loglikelihood
-     phase 9+ 启用），漂移会破坏 runner output_type='none' 跳 LM 分支的契约.
-"""
+  ③ **Each task `output_type` lock**: output_type ∈ {generate_until, none} (loglikelihood
+     phase 9+ enabled), drift will break the contract of runner output_type='none' jumping the LM branch."""
 
 from __future__ import annotations
 
 import pytest
 
-from evals import tasks  # noqa: F401  — 触发 @register_task 副作用
+from evals import tasks  # noqa: F401 — Trigger @register_task side effect
 from evals.registry import _TASKS, get_task, list_tasks, register_task
 from evals.tasks.base import Task
 
-# 当前 registered tasks 的全集（按 list_tasks 字典序）.
-# 加新 task 时同步更新此集合 + `tasks/__init__.py`；二者必须同源.
+# The complete set of currently registered tasks (in lexicographic order by list_tasks).
+# When adding a new task, update this collection + `tasks/__init__.py` synchronously; both must have the same source.
 _EXPECTED_TASK_NAMES: frozenset[str] = frozenset({
     "agent_traj",
     "bfcl_slice",
@@ -40,9 +39,9 @@ _EXPECTED_TASK_NAMES: frozenset[str] = frozenset({
     "sentiment_clf",
 })
 
-# 每个 task 的 output_type，runner._build_request / runner.evaluate_run 的 dispatch 据此.
-# 漂移会让 output_type='none' 的 task 反而真的去调 LM（或反之），破坏 phase 4 RAG /
-# phase 5 agent_traj / phase 8 IAA run 路径的核心契约.
+# The output_type of each task, the dispatch of runner._build_request / runner.evaluate_run is based on this.
+# Drift will cause the task with output_type='none' to actually adjust LM (or vice versa), destroying phase 4 RAG /
+# Core contract for phase 5 agent_traj / phase 8 IAA run path.
 _EXPECTED_OUTPUT_TYPES: dict[str, str] = {
     "agent_traj": "none",
     "bfcl_slice": "generate_until",
@@ -59,15 +58,14 @@ _EXPECTED_OUTPUT_TYPES: dict[str, str] = {
 }
 
 
-# ---------- ① 全集 sentinel ------------------------------------------------
+# ---------- ① Complete works sentinel ------------------------------------------------
 
 def test_list_tasks_matches_expected_set():
-    """`tasks/__init__.py` 副作用 import 完整：注册的 task 集合 == 显式枚举集合.
+    """`tasks/__init__.py` Side effects import complete: registered task collection == explicit enumeration collection.
 
-    新加 task 同时漏 `from . import X` → CLI 真实场景下 `--task X` unknown，
-    但本地 evals/tests 全集 import 链能命中（其它测试文件可能直接 `from evals.tasks.X import X`），
-    导致"看似全绿但 CLI 不可用". 本条 sentinel 直接断这条链.
-    """
+    Adding a new task also leaks `from . import X` → CLI `--task X` unknown in real scenarios,
+    But the local evals/tests complete set import chain can hit (other test files may directly `from evals.tasks.X import X`),
+    This leads to "It looks completely green but the CLI is unavailable". This article of sentinel directly breaks this link."""
     assert set(list_tasks()) == set(_EXPECTED_TASK_NAMES), (
         f"task 注册集合漂移：\n"
         f"  expected: {sorted(_EXPECTED_TASK_NAMES)}\n"
@@ -78,18 +76,17 @@ def test_list_tasks_matches_expected_set():
 
 
 def test_list_tasks_is_sorted():
-    """list_tasks() 返字典序——CLI `python -m evals list-tasks` 用户体验依赖此契约."""
+    """list_tasks() returns lexicographic order - CLI `python -m evals list-tasks` User experience depends on this contract."""
     names = list_tasks()
     assert names == sorted(names), f"list_tasks() 不再字典序：{names}"
 
 
 def test_each_registered_task_has_expected_output_type():
-    """每个 task 的 output_type 不能漂移；漂移破坏 runner dispatch 契约.
+    """The output_type of each task cannot drift; drift breaks the runner dispatch contract.
 
-    runner.evaluate_run 用 task.output_type == 'none' 跳 LM 调用（phase 4 RAG /
-    phase 5 agent_traj 关键不变量）；改成 'generate_until' 会触发不必要的 LM 调用 +
-    可能让 mock LM 因没有对应 doc 抛 KeyError.
-    """
+    runner.evaluate_run uses task.output_type == 'none' to jump to LM call (phase 4 RAG/
+    phase 5 agent_traj key invariant); changing to 'generate_until' will trigger unnecessary LM calls +
+    It is possible for mock LM to throw KeyError because there is no corresponding doc."""
     actual = {name: _TASKS[name].output_type for name in list_tasks()}
     assert actual == _EXPECTED_OUTPUT_TYPES, (
         f"output_type 漂移：\n  expected: {_EXPECTED_OUTPUT_TYPES}\n  actual:   {actual}"
@@ -97,27 +94,25 @@ def test_each_registered_task_has_expected_output_type():
 
 
 def test_each_registered_task_subclasses_task_abc():
-    """每个 task class 必须 Task ABC 子类——@register_task 不强制此约束，但 runner
-    依赖 ABC 接口（process_results / aggregation / docs / doc_to_text 等）.
-    """
+    """Every task class must subclass Task ABC - @register_task does not enforce this constraint, but runner
+    Depends on ABC interface (process_results / aggregation / docs / doc_to_text, etc.)."""
     for name, cls in _TASKS.items():
         assert issubclass(cls, Task), f"{name} 注册的 {cls!r} 不是 Task 子类"
 
 
-# ---------- ② registry ABC 行为 -------------------------------------------
+# ---------- ② registry ABC behavior -----------------------------------------------
 
 def test_get_task_unknown_name_raises_keyerror():
-    """unknown name → KeyError，errmsg 含已注册集合（debugging 友好）."""
+    """unknown name → KeyError, errmsg contains registered collections (debugging friendly)."""
     with pytest.raises(KeyError, match="unknown task"):
         get_task("totally_not_a_task")
 
 
 def test_register_task_duplicate_name_raises_valueerror():
-    """duplicate 注册 → ValueError，禁止覆盖已注册 class（避免静默替换）.
+    """Duplicate registration → ValueError, prohibiting overwriting registered classes (avoiding silent replacement).
 
-    用一个临时 name + 临时 Task 子类做注册，验证再注册同名时 fail-loud；
-    finally 块清理 _TASKS dict 避免污染后续测试.
-    """
+    Use a temporary name + temporary Task subclass to register, and fail-loud when verifying and then registering with the same name;
+    The finally block cleans the _TASKS dict to avoid polluting subsequent tests."""
     name = "_test_dup_registration"
     assert name not in _TASKS  # sanity
 
@@ -139,17 +134,16 @@ def test_register_task_duplicate_name_raises_valueerror():
         assert _TASKS[name] is _T1
         with pytest.raises(ValueError, match="already registered"):
             register_task(name)(_T2)
-        # 老 class 未被替换
+        # The old class has not been replaced
         assert _TASKS[name] is _T1
     finally:
         _TASKS.pop(name, None)
 
 
 def test_get_task_returns_fresh_instance_each_call():
-    """get_task('X') 每次返回 new instance（而不是缓存）——让 task 携带 stateful
-    judge_lm / retrieve_fn 不会污染下一次 get_task. CLI `_build_task_with_optional_deps`
-    依赖此行为：第一次拿 base_task 探类型 + 第二次按 flag 重新构造.
-    """
+    """get_task('X') returns new instance each time (instead of cache) - let the task carry stateful
+    judge_lm / retrieve_fn will not pollute the next get_task. CLI `_build_task_with_optional_deps`
+    Rely on this behavior: first use base_task to detect the type + second time press flag to reconstruct."""
     a = get_task("sentiment_clf")
     b = get_task("sentiment_clf")
     assert a is not b

@@ -1,22 +1,21 @@
-"""Phase 3 vertical slice：族 3（LLM-as-judge）开放式中文 QA task.
+"""Phase 3 vertical slice: Family 3 (LLM-as-judge) open Chinese QA task.
 
-10 条事实型 QA + 4 份 stub predictions（perfect / paraphrase / wrong_fact / garbage），
-设计宗旨是"在 lexical 失效或误判时让 judge 救场或抓错"——pointwise 在 task 层
-有强故事点（plan §六）：
+10 factual QA + 4 stub predictions (perfect / paraphrase / wrong_fact / garbage),
+The design purpose is to "let the judge come to the rescue or catch the mistake when lexical fails or misjudges" - pointwise at the task layer
+Have strong story points (plan §6):
 
-  | 预测       | exact_match | rouge_l | judge_pointwise | 故事 |
+  | prediction | exact_match | rouge_l | judge_pointwise | story |
   |---|---|---|---|---|
-  | perfect    | 1.0         | ~1.0    | ~5              | 上界 sanity |
-  | paraphrase | 0.0         | ~0.4    | ~4              | lexical 低 / judge 高（**核心叙事**） |
-  | wrong_fact | 0.0         | ~0.9    | ~1-2            | lexical 高 / judge 低（**反向叙事**） |
-  | garbage    | 0.0         | ~0.1    | ~1              | 下界 sanity |
+  | perfect | 1.0 | ~1.0 | ~5 | upper bound sanity |
+  | paraphrase | 0.0 | ~0.4 | ~4 | lexical low / judge high (**core narrative**) |
+  | wrong_fact | 0.0 | ~0.9 | ~1-2 | lexical high / judge low (**reverse narrative**) |
+  | garbage | 0.0 | ~0.1 | ~1 | lower bound sanity |
 
-设计：判 judge 调用发生在 process_results（per-sample），aggregation 仅 mean——
-这样 score / run 两路径都自动获得 judge 评分能力，符合 lm-eval 的"process_results 不区分来源"原则.
+Design: judge call occurs in process_results (per-sample), aggregation only means——
+In this way, both score / run paths will automatically obtain the judge scoring ability, which is in line with lm-eval's "process_results does not distinguish between sources" principle.
 
-构造：QAOpen(judge_lm=None) → 仅 lexical baseline（用于无网络 / parity test 对照支）.
-       QAOpen(judge_lm=lm)  → 加 judge_pointwise key.
-"""
+Construction: QAOpen(judge_lm=None) → lexical baseline only (for no network / parity test control branch).
+       QAOpen(judge_lm=lm) → add judge_pointwise key."""
 
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ from ..metrics.judge_core import (
 from ..models.base import LM
 from ..registry import register_task
 from .base import Task
-from .mt import _rouge_scorer  # 复用 mt 的中文 char-level rouge tokenizer
+from .mt import _rouge_scorer  # Chinese char-level rouge tokenizer that reuses mt
 
 PROMPT_TEMPLATE = (
     "用一句话回答下列问题。\n"
@@ -49,16 +48,16 @@ QA_OPEN_JUDGE_TEMPLATE = (
     "Response: {response}\n"
     "Score (1-5):"
 )
-# 中英 mixed template 是有意为之：FakeJudgeLM 的 Jaccard 规则按 "Reference answer: " /
-# "Response: " 字面切割 prompt（与 metrics/judge_core.DEFAULT_POINTWISE_TEMPLATE 同 anchor），
-# 真 LLM judge 看中文部分即可正常打分。两路径 anchor 都齐.
+# The Chinese-English mixed template is intentional: FakeJudgeLM's Jaccard rules follow "Reference answer: " /
+# "Response: "Literal cutting prompt (same anchor as metrics/judge_core.DEFAULT_POINTWISE_TEMPLATE),
+# A real LLM judge can score normally just by looking at the Chinese part. The anchors of both paths are aligned.
 
 DATA_PATH = __import__("pathlib").Path(__file__).resolve().parent.parent / "data" / "qa_open" / "gold.jsonl"
 
 
 @register_task("qa_open")
 class QAOpen(Task):
-    """开放式中文 QA。judge_lm 可选——None 时退回 lexical baseline."""
+    """Open Chinese QA. judge_lm optional - returns to lexical baseline when None."""
 
     name: ClassVar[str] = "qa_open"
     output_type: ClassVar[str] = "generate_until"
@@ -70,7 +69,7 @@ class QAOpen(Task):
         judge_template: str = QA_OPEN_JUDGE_TEMPLATE,
         judge_n_samples: int = 1,
     ) -> None:
-        """`judge_n_samples > 1` 时自动套 self_consistency 多采样取众数 wrapper."""
+        """When `judge_n_samples > 1`, the self_consistency multi-sampling mode wrapper is automatically applied."""
         self.data_path = DATA_PATH
         self._judge_lm = judge_lm
         if judge_lm is not None:
@@ -102,8 +101,8 @@ class QAOpen(Task):
         metrics: dict[str, float | None] = {"em": float(pred == target)}
         if self._judge_pointwise_fn is not None:
             v = self._judge_pointwise_fn(doc, response)
-            # DECISIONS §X wave 4：parse 失败 → 不写键（aggregator 自然过滤），
-            # 与 phase 7 P2 "未测得占位 None" 同形.
+            # DECISIONS §X wave 4: parse failed → do not write keys (aggregator natural filtering),
+            # Same shape as phase 7 P2 "None measured occupancy".
             if v is not None:
                 metrics["judge_pointwise"] = float(v)
         return SampleResult(doc_id=doc.id, prediction=pred, target=target, metrics=metrics)
@@ -124,7 +123,7 @@ class QAOpen(Task):
         return out
 
     def collect_judge_responses(self) -> tuple[list[Response], str | None]:
-        """DECISIONS §7.3：从 judge closure 的 _recorder 拉 LM 调用记录."""
+        """DECISIONS §7.3: Pull the LM call record from the judge closure's _recorder."""
         if self._judge_pointwise_fn is None:
             return [], None
         rec = getattr(self._judge_pointwise_fn, "_recorder", None)
@@ -148,9 +147,8 @@ def _rouge_l(srs: list[SampleResult]) -> float:
 
 
 def _judge_pointwise_mean(srs: list[SampleResult]) -> float | None:
-    """DECISIONS §X wave 4：全 sample parse 失败（key 缺）→ None"未测得"，
-    与 safety.judge_safety_score / phase 7 P2 体例一致；非空时算 mean.
-    """
+    """DECISIONS §X wave 4: All sample parse failed (key missing) → None "not measured",
+    Same as safety.judge_safety_score / phase 7 P2 method; mean is calculated when non-empty."""
     if not srs:
         return None
     vals = [

@@ -1,25 +1,24 @@
-"""Task ABC：lm-evaluation-harness 原版语义.
+"""Task ABC: lm-evaluation-harness original semantics.
 
-一个 Task = 一个可复现的评测单元，把 dataset + prompt template + 答案解析 + 聚合方式 绑在一起。
+A Task = a reproducible evaluation unit that binds dataset + prompt template + answer analysis + aggregation method.
 
-六个抽象方法的职责分界线：
-  - docs                 数据源（lazy iterator）
-  - doc_to_text          构造 prompt（只在 run 模式被调用）
-  - doc_to_target        gold 答案（和 doc_to_text 对称，few-shot 场景留口子）
-  - doc_to_choice        MCQ 专用，默认 None
-  - process_results      per-sample 评分（统一吃 Response，score/run 共用）
-  - aggregation          per-sample → 全局聚合的函数字典，延迟求值
-  - higher_is_better     指标方向（show UI / 多 run 排序用）
+Responsibility demarcation lines for six abstract methods:
+  - docs data source (lazy iterator)
+  - doc_to_text constructs prompt (only called in run mode)
+  - doc_to_target gold answer (symmetrical to doc_to_text, leaving holes for few-shot scenarios)
+  - doc_to_choice MCQ-specific, default None
+  - process_results per-sample score (unify Response, shared by score/run)
+  - aggregation per-sample → global aggregation function dictionary, delayed evaluation
+  - higher_is_better indicator direction (for show UI/multi-run sorting)
 
-两个 few-shot 默认方法（Phase 2 加入）：
-  - fewshot_docs              example 池，默认 = self.docs()，子类可指 held-out split
-  - format_fewshot_example    一条 example 的字符串形式，默认 doc_to_text + doc_to_target
+Two few-shot default methods (added in Phase 2):
+  - fewshot_docs example pool, default = self.docs(), subclasses can refer to held-out split
+  - format_fewshot_example The string form of an example, the default is doc_to_text + doc_to_target
 
-三个 Phase 4 引入的"对齐 lm-eval"hook（全 default 实现，不破老 task）：
-  - load_prediction(doc, row)  score 路径自定 JSONL row → (Doc, Response) 翻译
-  - process_docs(docs)         run 路径 LM 调用前的 docs 前置加工（RAG retrieve / column rename）
-  - output_type = "none"       新增 literal，告诉 Runner 跳过 LM 调用（rag_retrieval 用）
-"""
+Three "aligned lm-eval" hooks introduced in Phase 4 (fully implemented by default, without breaking old tasks):
+  - load_prediction(doc, row) score path customization JSONL row → (Doc, Response) translation
+  - process_docs(docs) run path docs pre-processing before LM call (RAG retrieve / column rename)
+  - output_type = "none" adds literal to tell Runner to skip LM calls (used by rag_retrieval)"""
 
 from __future__ import annotations
 
@@ -33,129 +32,122 @@ OutputType = Literal[
     "generate_until",
     "multiple_choice",
     "loglikelihood",
-    "none",  # phase 4：声明该 task 不需要 LM 调用（runner 跳 lm.generate_until）
+    "none",  # Phase 4: Declare that the task does not require LM call (runner jumps to lm.generate_until)
 ]
 
 
 class Task(ABC):
-    """所有 task 的基类。子类用 @register_task 装饰自己."""
+    """Base class for all tasks. Subclasses decorate themselves with @register_task."""
 
     name: ClassVar[str]
     output_type: ClassVar[OutputType]
 
     @abstractmethod
     def docs(self) -> Iterable[Doc]:
-        """数据集，允许流式."""
+        """Dataset, allowing streaming."""
         ...
 
     @abstractmethod
     def doc_to_text(self, doc: Doc) -> str:
-        """构造 prompt（run 模式用）。字面字符串，不要被 provider 的 system prompt 改写."""
+        """Construct prompt (for run mode). Literal string, do not be overwritten by the provider's system prompt."""
         ...
 
     @abstractmethod
     def doc_to_target(self, doc: Doc) -> str:
-        """gold 答案。和 doc_to_text 对称，Runner 自己不碰 target，只有 process_results 碰."""
+        """gold answer. Symmetrical with doc_to_text, the Runner itself does not touch the target, only process_results."""
         ...
 
     def doc_to_choice(self, doc: Doc) -> tuple[str, ...] | None:
-        """MCQ 专用，默认 None."""
+        """MCQ-specific, default None."""
         return None
 
     def fewshot_docs(self) -> Iterable[Doc]:
-        """few-shot example 池。默认就是 self.docs()——抽样时由 Runner 排除当前 query.
+        """few-shot example pool. The default is self.docs() - the Runner excludes the current query when sampling.
 
-        子类如果有独立 held-out split（HF dataset 的 train/dev/test 风格），
-        override 此方法返回另一份 Iterable[Doc] 即可。
-        """
+        If the subclass has an independent held-out split (train/dev/test style of HF dataset),
+        override This method returns another Iterable[Doc]."""
         return self.docs()
 
     def format_fewshot_example(self, doc: Doc) -> str:
-        """单条 example 拼成 prompt 前缀的字符串。默认 = doc_to_text + ' ' + doc_to_target.
+        """A single example is spelled into a string prefixed by prompt. Default = doc_to_text + ' ' + doc_to_target.
 
-        与 lm-eval 的默认 `target_delimiter=' '` 一致；任务可 override 改分隔符
-        / 多段结构 / 删指令保留 input→output 短形式。
-        """
+        Consistent with lm-eval's default `target_delimiter=' '`; tasks can override the delimiter.
+        /Multi-segment structure/Delete instructions to retain input→output short form."""
         return f"{self.doc_to_text(doc)} {self.doc_to_target(doc)}"
 
     @abstractmethod
     def process_results(self, doc: Doc, response: Response) -> SampleResult:
-        """per-sample 评分：
-        ① normalize 模型输出（大小写、trim、截断）
-        ② 比对 target
-        ③ 产 per-sample metrics
+        """per-sample rating:
+        ① normalize model output (case, trim, truncation)
+        ② Compare target
+        ③Produce per-sample metrics
 
-        关键约束：需要全集统计的（F1、kappa）**不要**在这里 approximate，
-        把原始 pred/target 塞 `metrics` 的私有键（`_pred` / `_target`），交给 aggregation。
-        """
+        Key constraints: Those that require full set statistics (F1, kappa) **don’t** approximate here,
+        Stuff the original pred/target with the private keys of `metrics` (`_pred` / `_target`) and give it to aggregation."""
         ...
 
     @abstractmethod
     def aggregation(self) -> dict[str, Callable[[list[SampleResult]], float | None]]:
-        """{metric_name: fn(list[SampleResult]) -> float | None} 延迟求值.
+        """{metric_name: fn(list[SampleResult]) -> float | None} Lazy evaluation.
 
-        为什么返回字典而非数值：
-        - 同一批 per-sample 可以喂多个聚合函数
-        - 测试时可单独替换某个聚合
-        - key 就是最终指标名，Storage 直接用
+        Why returns a dictionary instead of a number:
+        - The same batch of per-sample can be fed to multiple aggregate functions
+        - You can replace an aggregate individually during testing
+        - key is the final indicator name, Storage uses it directly
 
-        DECISIONS §X wave 4：返回 `float | None`——None 表"未测得"（与 phase 7 P2
-        safety.judge_safety_score 同形）；下游 CLI 渲染 `<n/a>`、JSON 落 `null`.
-        子类返回纯 float（无未测得场景）也合法——Optional 只是放宽，不强制.
-        """
+        DECISIONS §X wave 4: Returns `float | None` - None means "not measured" (same as phase 7 P2
+        safety.judge_safety_score (isomorphic); downstream CLI rendering `<n/a>`, JSON falls into `null`.
+        It is also legal for subclasses to return a pure float (no unmeasured scenarios) - Optional is only relaxed, not enforced."""
         ...
 
     @abstractmethod
     def higher_is_better(self) -> dict[str, bool]:
-        """{metric_name: True 表示越大越好}. show UI 和多 run 对比排序用."""
+        """{metric_name: True means bigger is better}. Used for show UI and multi-run comparison and sorting."""
         ...
 
-    # ---- Phase 4 新增 hooks ----------------------------------------------
+    # ---- Phase 4 new hooks --------------------------------------------------
 
     def load_prediction(self, doc: Doc, row: dict) -> tuple[Doc, Response]:
-        """score 路径：把 predictions JSONL 一行翻译成 `(enriched_doc, response)`.
+        """score path: translate predictions JSONL line into `(enriched_doc, response)`.
 
-        默认实现：仅取 `row['prediction']` 作 Response.text，doc 不动——与 Phase 1
-        旧 `_load_predictions` 行为字节相同。
+        Default implementation: only take `row['prediction']` as Response.text, doc remains unchanged - same as Phase 1
+        The old `_load_predictions` behavior is byte identical.
 
-        子类 override 时把 row 里的 pipeline 数据（如 retrieved_ids / contexts）注入
-        `doc.metadata`，把 LM-side 数据装 `Response`——遵循 path B+C：Response 只
-        装 LM-side，pipeline 产物住 doc 一侧.
-        """
+        When overriding the subclass, inject the pipeline data in the row (such as retrieved_ids / contexts)
+        `doc.metadata`, install LM-side data into `Response` - follow path B+C: Response only
+        Install the LM-side, and the pipeline product lives on the doc side."""
         from dataclasses import replace as _replace
 
-        # 默认 doc 不动；子类如需注入 metadata 应在 override 内自行 _replace.
+        # By default, doc is left unchanged; if subclasses need to inject metadata, they should _replace themselves in override.
         _ = _replace  # silence vulture
         return doc, Response(doc_id=doc.id, text=row.get("prediction"))
 
     def process_docs(self, docs: list[Doc]) -> list[Doc]:
-        """run 路径：LM 调用前对 docs 做前置加工（对齐 lm-eval 同名 hook）.
+        """Run path: Do pre-processing of docs before calling LM (align with lm-eval hook of the same name).
 
-        典型用法：
-        - RAG task 在此调 retrieve_fn，把 retrieved_ids/contexts 注入 doc.metadata
-        - 任意 task 做 batch tokenize / 字段映射 / column rename / normalize
+        Typical usage:
+        - RAG task calls retrieve_fn here and injects retrieved_ids/contexts into doc.metadata
+        - Any task to do batch tokenize/field mapping/column rename/normalize
 
-        默认实现：identity 透传——老 task 不受影响.
+        Default implementation: identity transparent transmission - old tasks are not affected.
 
-        ⚠️ 纯加工纪律（防垃圾桶）：
-        - 签名约束：必须 `list[Doc] -> list[Doc]`，**不许带"任务执行"语义**
-        - 副作用（日志 / metric 上报 / 状态写入）应放在 metric 闭包或 process_results 内
-        - 与 doc 加工无关的初始化（资源准备 / 缓存预热）应放在 task __init__
-        """
+        ⚠️Pure processing discipline (anti-trash can):
+        - Signature constraints: Must be `list[Doc] -> list[Doc]`, **not allowed to have "task execution" semantics**
+        - Side effects (logging/metric reporting/status writing) should be placed within the metric closure or process_results
+        - Initialization unrelated to doc processing (resource preparation/cache warm-up) should be placed in task __init__"""
         return docs
 
     def collect_judge_responses(self) -> tuple[list[Response], str | None]:
-        """run / score 双路径都调，返回 (judge_responses, judge_model_label).
+        """Both run / score paths are adjusted and return (judge_responses, judge_model_label).
 
-        默认 ([], None)——无 judge 的 task / 未注入 judge_lm 的 task 都返空.
-        持有 judge closure 的 task 在此 override，从 closure._recorder 拉响应列表.
+        Default ([], None)——Tasks without judge/tasks without judge_lm injected will return empty.
+        The task holding the judge closure overrides here, pulling the response list from closure._recorder.
 
-        DECISIONS §7.3 evaluation tool call class：runner 双路径都收集 judge 调用记录，
-        挂到 `aggregated["efficiency"]["judge"]` 子组（与被测物 task LM 的
-        `aggregated["efficiency"].{latency_ms, tokens_in, tokens_out, cost_usd}` 同形 4 子组）.
+        DECISIONS §7.3 Evaluation tool call class: runner collects judge call records in both paths.
+        Hang to the `aggregated["efficiency"]["judge"]` subgroup (with the object under test task LM
+        `aggregated["efficiency"].{latency_ms, tokens_in, tokens_out, cost_usd}` homogeneous 4 subgroups).
 
-        实现指引：closure 工厂（judge_pointwise / g_eval / self_consistency / judge_rag.* 5
-        factory）都暴露 `closure._recorder.responses + .model_label`；task 把所有 judge closure
-        的 responses 合并、取统一 model_label 即可.
-        """
+        Implementation guidelines: closure factory (judge_pointwise / g_eval / self_consistency / judge_rag.* 5
+        factory) are exposed `closure._recorder.responses + .model_label`; task closes all judges
+        The responses can be merged and unified model_label can be obtained."""
         return [], None

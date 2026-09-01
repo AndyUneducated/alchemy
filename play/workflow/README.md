@@ -1,30 +1,30 @@
 # play/workflow
 
-声明式 pipeline runner——按 YAML 顺序串接**确定性 stage**（Python 函数）与 **agent stage**（调用 [play/agent_engine/](../agent_engine/) 的 `Engine.invoke()`）。workflow 自身**不内嵌 LLM 逻辑**；agent stage 通过 `executors/agent.py` 是它**唯一**的 LLM 耦合点（见 [`DECISIONS §2`](DECISIONS.md)）。
+Declarative pipeline runner — sequentially chains **deterministic stages** (Python functions) and **agent stages** (calling [play/agent_engine/](../agent_engine/) `Engine.invoke()`). workflow embeds **no LLM logic** itself; `executors/agent.py` is its **only** LLM coupling point (see [`DECISIONS §2`](DECISIONS.md)).
 
-## 边界（持续有效）
+## Boundaries (still in effect)
 
-> **有意为之**——本 play 保持几百行级别；要 retry / UI / durability 等成熟能力，直接迁 Prefect / Temporal / Argo（[`DECISIONS §1`](DECISIONS.md) 说明迁移策略）。
+> **Intentional** — this play stays at a few hundred lines; for retry / UI / durability and other mature capabilities, migrate to Prefect / Temporal / Argo ([`DECISIONS §1`](DECISIONS.md) describes migration strategy).
 
-|维度|不做什么|替代办法|
+|Dimension|We do not|Instead|
 |---|---|---|
-|可靠性|retry / timeout / circuit-breaker|hook 自己用 `tenacity` / `signal`|
-|流控|DAG / 条件 / 循环 / 并行|stages 是线性列表；分支需求拆 hook 或多份 yaml|
-|生命周期|cron / 调度 / 持久化 / resume|runner 是 one-shot；调度交给外层（cron / GitHub Actions）|
-|模板|过滤器 / 表达式 / inline Python (`code:` 块)|`{{ x.y.z }}` 路径访问；数据转换写 hook（参考 kitchen_sink 的 `to_yaml` stage）|
-|插件|stdlib / 自动注册装饰器|显式 `import`，调试可见；只有 1 个真消费者前 YAGNI|
-|CLI|多子命令 (`validate` / `list` / `inspect`)|只 `run`，避免 scope creep|
-|trace_id|不实现|保留 W3C `traceparent` env 变量名 + JSON 字段名以待未来零成本接入（见 [`DECISIONS §1`](DECISIONS.md)）|
+|Reliability|retry / timeout / circuit-breaker|hooks use `tenacity` / `signal` themselves|
+|Flow control|DAG / conditionals / loops / parallelism|stages are a linear list; branch needs hook or multiple yaml files|
+|Lifecycle|cron / scheduling / persistence / resume|runner is one-shot; scheduling is outer layer (cron / GitHub Actions)|
+|Templating|filters / expressions / inline Python (`code:` blocks)|`{{ x.y.z }}` path access; data transforms go in hooks (see kitchen_sink `to_yaml` stage)|
+|Plugins|stdlib / auto-register decorators|explicit `import`, visible in debugging; YAGNI until a second real consumer|
+|CLI|multiple subcommands (`validate` / `list` / `inspect`)|only `run`, to avoid scope creep|
+|trace_id|not implemented|reserve W3C `traceparent` env var name + JSON field name for future zero-cost adoption (see [`DECISIONS §1`](DECISIONS.md))|
 
-报错哲学（[`DECISIONS §3`](DECISIONS.md)）：必填字段缺失 → `sys.exit("Error: ...")`，**不**给"你大概想用 X"提示；引用不存在的 stage / 错误类型 → 模板插值期 `KeyError`，让 traceback 直说；runtime 错误（hook raise / scenario 装配失败）→ 直接传上去，不二次包装；没有"老用户引导"，没有"schema migration"。
+Error philosophy ([`DECISIONS §3`](DECISIONS.md)): missing required fields → `sys.exit("Error: ...")`, **no** "you probably meant X" hints; referencing nonexistent stage / wrong type → `KeyError` at template interpolation, traceback speaks directly; runtime errors (hook raise / scenario assembly failure) → propagate unwrapped; no "legacy user guidance", no "schema migration".
 
-新需求出现时：先看是否能由 hook 函数内部解决（用 `tenacity` 包重试、用 `subprocess` 包外部调用、用 `Path.read_text()` 读文件…），再考虑改 workflow 库本身。
+When new needs arise: first see if a hook function can solve it internally (`tenacity` for retry, `subprocess` for external calls, `Path.read_text()` for files…), then consider changing the workflow library itself.
 
-## 公开 API
+## Public API
 
 ### Python
 
-以下路径假定当前工作目录为 **`play/`**（与 `python -m workflow run ...` 一致）。
+Paths below assume current working directory is **`play/`** (same as `python -m workflow run ...`).
 
 ```python
 from workflow import Workflow
@@ -36,7 +36,7 @@ state = wf.run(
         "output_dir": "/tmp/qa_out",
     }
 )
-# state["stages"]["render_csv"]["output"]  # 末段 stage 输出
+# state["stages"]["render_csv"]["output"]  # last stage output
 ```
 
 ### CLI
@@ -48,30 +48,30 @@ python -m workflow run workflow/examples/kitchen_sink.yaml \
     --vars n_lines=3
 ```
 
-## 字段速查（规范 SoT）
+## Field quick reference (normative SoT)
 
-> [examples/kitchen_sink.yaml](examples/kitchen_sink.yaml) 是字段速查 + 心智模型的**唯一权威**——每个字段用一次 + 行内 `#` 注释 + 末尾"运行时心智模型"段。新作者从这里开始；本 README 只做总览。
+> [examples/kitchen_sink.yaml](examples/kitchen_sink.yaml) is the **sole authority** for field quick reference + mental model — each field used once + inline `#` comments + trailing "runtime mental model" section. New authors start here; this README is overview only.
 
 ```text
 play/workflow/
-├── runner.py             Workflow.from_yaml + .run；每 stage start/done + duration_ms
-├── schema.py             最小校验 (必填字段缺失 sys.exit；不做向后兼容/友好提示)
-├── state.py              路径访问插值 (~50 行；整字符串保类型, 内嵌强制 str)
+├── runner.py             Workflow.from_yaml + .run; per-stage start/done + duration_ms
+├── schema.py             minimal validation (missing required → sys.exit; no backward compat/friendly hints)
+├── state.py              path interpolation (~50 lines; whole string preserves type, inline forces str)
 ├── executors/
-│   ├── deterministic.py  fn 字符串 → callable, 调用并返回值
+│   ├── deterministic.py  fn string → callable, invoke and return value
 │   └── agent.py          Engine(scenario).invoke(**config) → Result.artifact
 ├── cli.py                argparse + --vars k=v + Workflow.run
 ├── examples/
-│   ├── kitchen_sink.yaml + kitchen_sink_hooks.py    字段速查 (可运行)
-│   └── chat.yaml                                     纯 agent 单 stage
-├── __init__.py           导出 Workflow
+│   ├── kitchen_sink.yaml + kitchen_sink_hooks.py    field reference (runnable)
+│   └── chat.yaml                                     pure agent single stage
+├── __init__.py           exports Workflow
 ├── __main__.py           python -m workflow
-├── DECISIONS.md          ADR 归档（每条架构决策一个条目，仿 evals 风格：Date / Context / Options / Decision / Consequences / 示例 / 面试官可能问）
-├── JOURNAL.md            每日进展（按里程碑，≤2 条/天，含功能 + 技术，必要时反链 DECISIONS §N）
-└── README.md             本文件
+├── DECISIONS.md          ADR archive (one entry per architecture decision; evals-style: Date / Context / Options / Decision / Consequences / Examples / Interview Q&A)
+├── JOURNAL.md            milestone progress (≤2/day, Functional + Technical, cross-link DECISIONS §N when needed)
+└── README.md             this file
 ```
 
-## 运行时心智模型
+## Runtime mental model
 
 ```mermaid
 flowchart TB
@@ -87,11 +87,10 @@ flowchart TB
     agt -->|"Result.artifact"| state
 ```
 
-## 示例怎么选
+## Which example to use
 
-|示例|用途|何时看|
+|Example|Purpose|When to read|
 |---|---|---|
-|`workflow/examples/kitchen_sink.yaml`|字段速查（schema reference）+ 心智模型|想写新 workflow 时先看它|
-|`workflow/examples/chat.yaml`|最小 agent stage|只想确认 workflow 能调用 agent_engine|
-|`qa_assets/workflows/qa_supervisor.yaml`|真实垂直切片|想看 deterministic hook + agent + render 输出如何串起来|
-
+|`workflow/examples/kitchen_sink.yaml`|field reference (schema reference) + mental model|writing a new workflow|
+|`workflow/examples/chat.yaml`|minimal agent stage|confirm workflow can call agent_engine|
+|`qa_assets/workflows/qa_supervisor.yaml`|real vertical slice|deterministic hook + agent + render output chained|

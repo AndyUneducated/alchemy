@@ -3,8 +3,8 @@ flat markdown test plan via a Jinja2 template.
 
 The template (``templates/test_plan.md.j2``) controls layout; this hook is
 zero-logic past Jinja loading + writing. Sprint / assignee columns live in
-the per-requirement table at the top of the document (plan §8 P5: "sprint /
-assignee 作为列").
+the per-requirement table at the top of the document (plan §8 P5: sprint /
+assignee as columns).
 """
 
 from __future__ import annotations
